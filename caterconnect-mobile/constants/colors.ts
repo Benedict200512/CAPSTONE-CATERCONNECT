@@ -1,0 +1,17 @@
+export const Colors = {
+  bg: '#FAF8F5',
+  bgCard: '#FFFFFF',
+  bgInput: '#F5F3F0',
+  border: '#E8E4DE',
+  orange: '#F97316',
+  orangeDark: '#EA6C0A',
+  orangeLight: '#FEF3E8',
+  black: '#111111',
+  textPrimary: '#1A1A1A',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  white: '#FFFFFF',
+  success: '#16A34A',
+  error: '#DC2626',
+  divider: '#E5E7EB',
+};
