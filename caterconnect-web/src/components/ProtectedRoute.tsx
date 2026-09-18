@@ -1,4 +1,5 @@
 import { Navigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 type Props = {
@@ -13,7 +14,7 @@ export default function ProtectedRoute({ children, allowedRoles }: Props) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#FAF8F5' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+          <Loader2 size={28} className="spin" style={{ color: '#F97316', marginBottom: 10 }} />
           <div style={{ color: '#6B7280', fontSize: 14 }}>Loading...</div>
         </div>
       </div>

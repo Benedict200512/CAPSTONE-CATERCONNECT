@@ -7,6 +7,9 @@ import { Colors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import ChatScreen from './ChatScreen';
+import {
+  MessageSquare, ArrowLeft, Inbox, ChevronRight, Sparkles
+} from 'lucide-react-native';
 
 type Conversation = {
   bookingId: string;
@@ -63,11 +66,11 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
 
     const profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
 
-    // Batch fetch bookings
+    // Batch fetch bookings with caterer business info
     const bookingIds = [...seenBookings];
     const { data: bookings } = await supabase
       .from('bookings')
-      .select('id, event_date, event_type')
+      .select('id, event_date, event_type, caterers(business_name, logo_url, user_id)')
       .in('id', bookingIds);
 
     const bookingMap = Object.fromEntries((bookings ?? []).map(b => [b.id, b]));
@@ -94,19 +97,35 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
         const other = profileMap[otherId];
         const booking = bookingMap[msg.booking_id];
 
+        let otherPersonName = other?.full_name ?? 'Unknown';
+        let otherPersonAvatar = other?.avatar_url ?? null;
+
+        // If the other person is a caterer associated with this booking, use their business name and logo
+        if (booking?.caterers) {
+          const catererData = Array.isArray(booking.caterers) ? booking.caterers[0] : booking.caterers;
+          if (catererData && catererData.user_id !== myId) {
+            if (catererData.business_name) {
+              otherPersonName = catererData.business_name;
+            }
+            if (catererData.logo_url) {
+              otherPersonAvatar = catererData.logo_url;
+            }
+          }
+        }
+
         const bookingInfo = booking
           ? `${booking.event_type ?? 'Event'} · ${new Date(booking.event_date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}`
           : '';
 
         return {
-          bookingId:         msg.booking_id,
+          bookingId:        msg.booking_id,
           bookingInfo,
-          otherPersonId:     otherId,
-          otherPersonName:   other?.full_name ?? 'Unknown',
-          otherPersonAvatar: other?.avatar_url ?? null,
-          lastMessage:       msg.content,
-          lastMessageTime:   msg.created_at,
-          unreadCount:       unreadMap[msg.booking_id] ?? 0,
+          otherPersonId:    otherId,
+          otherPersonName,
+          otherPersonAvatar,
+          lastMessage:      msg.content,
+          lastMessageTime:  msg.created_at,
+          unreadCount:      unreadMap[msg.booking_id] ?? 0,
           isMine,
         };
       });
@@ -144,14 +163,22 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
       </Modal>
 
       {/* Header */}
-      <View style={[s.header, { paddingTop: Platform.OS === 'ios' ? 52 : 16 }]}>
-        {onClose && (
-          <TouchableOpacity onPress={onClose} style={s.headerBack}>
-            <Text style={s.headerBackText}>←</Text>
-          </TouchableOpacity>
-        )}
-        <Text style={s.headerTitle}>Messages</Text>
-        <View style={{ width: 36 }} />
+      <View style={[s.header, { paddingTop: Platform.OS === 'ios' ? 56 : 44 }]}>
+        <View style={s.headerLeftGroup}>
+          {onClose ? (
+            <TouchableOpacity onPress={onClose} style={s.headerBack} activeOpacity={0.7}>
+              <ArrowLeft size={20} color={Colors.black} />
+            </TouchableOpacity>
+          ) : (
+            <View style={s.headerIconWrap}>
+              <MessageSquare size={22} color={Colors.orange} />
+            </View>
+          )}
+          <View>
+            <Text style={s.headerTitle}>Messages</Text>
+            <Text style={s.headerSub}>Chat with your confirmed caterers</Text>
+          </View>
+        </View>
       </View>
 
       {loading ? (
@@ -160,20 +187,22 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
         </View>
       ) : conversations.length === 0 ? (
         <View style={s.center}>
-          <Text style={s.emptyIcon}>💬</Text>
+          <View style={s.emptyIconWrap}>
+            <Inbox size={36} color={Colors.orange} />
+          </View>
           <Text style={s.emptyTitle}>No messages yet</Text>
           <Text style={s.emptySub}>
-            Once you have a confirmed booking, you can chat with your caterer here.
+            Once you have a confirmed booking, you can directly chat with your caterer here.
           </Text>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16 }}>
           {conversations.map(conv => (
             <TouchableOpacity
               key={conv.bookingId}
-              style={[s.convRow, conv.unreadCount > 0 && s.convRowUnread]}
+              style={[s.convCard, conv.unreadCount > 0 && s.convCardUnread]}
               onPress={() => setOpenChat(conv)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               {/* Avatar */}
               <View style={s.convAvatarWrap}>
@@ -196,13 +225,16 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
               {/* Info */}
               <View style={s.convInfo}>
                 <View style={s.convTopRow}>
-                  <Text style={[s.convName, conv.unreadCount > 0 && s.convNameBold]}>
+                  <Text style={[s.convName, conv.unreadCount > 0 && s.convNameBold]} numberOfLines={1}>
                     {conv.otherPersonName}
                   </Text>
                   <Text style={s.convTime}>{timeAgo(conv.lastMessageTime)}</Text>
                 </View>
                 {conv.bookingInfo && (
-                  <Text style={s.convBookingInfo}>{conv.bookingInfo}</Text>
+                  <View style={s.bookingInfoBadge}>
+                    <Sparkles size={11} color={Colors.orange} />
+                    <Text style={s.convBookingInfo} numberOfLines={1}>{conv.bookingInfo}</Text>
+                  </View>
                 )}
                 <Text
                   style={[s.convLastMsg, conv.unreadCount > 0 && s.convLastMsgBold]}
@@ -211,6 +243,8 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
                   {conv.isMine ? 'You: ' : ''}{conv.lastMessage}
                 </Text>
               </View>
+
+              <ChevronRight size={18} color={Colors.textMuted} style={{ marginLeft: 4 }} />
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -220,38 +254,46 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, gap: 10 },
+  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 14,
+    paddingHorizontal: 20, paddingBottom: 16,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 4,
+    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerIconWrap: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: '#FED7AA',
   },
   headerBack: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.bgInput,
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center', alignItems: 'center',
   },
-  headerBackText: { fontSize: 18, fontWeight: '700', color: Colors.black },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: Colors.black },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  headerSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
 
-  convRow: {
+  convCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.divider,
+    padding: 16, borderRadius: 18,
+    marginBottom: 12,
     backgroundColor: Colors.white,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03, shadowRadius: 10, elevation: 2,
   },
-  convRowUnread: { backgroundColor: '#FFFBF5' },
+  convCardUnread: { backgroundColor: '#FFFDFB', borderColor: '#FED7AA', borderWidth: 1.5 },
   convAvatarWrap: { position: 'relative' },
-  convAvatar: { width: 52, height: 52, borderRadius: 26 },
+  convAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#F3F4F6' },
   convAvatarPlaceholder: {
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: Colors.orange,
     justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: '#FED7AA',
   },
   convAvatarText: { color: Colors.white, fontSize: 20, fontWeight: '900' },
   convUnreadDot: {
@@ -265,15 +307,27 @@ const s = StyleSheet.create({
   convUnreadNum: { color: Colors.white, fontSize: 10, fontWeight: '900' },
 
   convInfo: { flex: 1, minWidth: 0 },
-  convTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  convName: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  convTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
+  convName: { fontSize: 15, fontWeight: '800', color: Colors.black, flex: 1, marginRight: 8 },
   convNameBold: { fontWeight: '900' },
-  convTime: { fontSize: 11, color: Colors.textMuted },
-  convBookingInfo: { fontSize: 11, color: Colors.orange, fontWeight: '700', marginBottom: 2 },
-  convLastMsg: { fontSize: 13, color: Colors.textSecondary },
-  convLastMsgBold: { color: Colors.black, fontWeight: '700' },
+  convTime: { fontSize: 11, color: Colors.textMuted, fontWeight: '600' },
+  
+  bookingInfoBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFF7ED', alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
+    marginBottom: 5, borderWidth: 1, borderColor: '#FED7AA',
+  },
+  convBookingInfo: { fontSize: 11, color: Colors.orange, fontWeight: '800' },
+  
+  convLastMsg: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  convLastMsgBold: { color: Colors.black, fontWeight: '800' },
 
-  emptyIcon: { fontSize: 52 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: Colors.black },
-  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  emptyIconWrap: {
+    width: 72, height: 72, borderRadius: 24,
+    backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center',
+    marginBottom: 16, borderWidth: 1, borderColor: '#FED7AA',
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19, fontWeight: '500' },
 });

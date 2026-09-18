@@ -2,20 +2,21 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 
-import StaffLayout      from './pages/staff/StaffLayout';
-import StaffDashboard   from './pages/staff/Dashboard';
+import StaffLayout from './pages/staff/StaffLayout';
+import StaffDashboard from './pages/staff/Dashboard';
 import CatererVerification from './pages/staff/CatererVerification';
 import SubscriptionManager from './pages/staff/SubscriptionManager';
-import Consultations    from './pages/staff/Consultations';
-import Complaints       from './pages/staff/Complaints';
-import BookingMonitor   from './pages/staff/BookingMonitor';
+import Consultations from './pages/staff/Consultations';
+import Complaints from './pages/staff/Complaints';
+import BookingMonitor from './pages/staff/BookingMonitor';
+import RefundManagement from './pages/staff/RefundManagement';
 
-import AdminLayout      from './pages/admin/AdminLayout';
-import AdminDashboard   from './pages/admin/Dashboard';
-import UserManagement   from './pages/admin/UserManagement';
-import Revenue          from './pages/admin/Revenue';
-import Reports          from './pages/admin/Reports';
-import ActivityLogs     from './pages/admin/ActivityLogs';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/Dashboard';
+import UserManagement from './pages/admin/UserManagement';
+import Revenue from './pages/admin/Revenue';
+import Reports from './pages/admin/Reports';
+import ActivityLogs from './pages/admin/ActivityLogs';
 import PlatformSettings from './pages/admin/PlatformSettings';
 
 function ProtectedRoute({ children, allow }: { children: React.ReactNode; allow: string[] }) {
@@ -50,19 +51,20 @@ export default function App() {
           {/* Staff */}
           <Route path="/staff" element={<ProtectedRoute allow={['staff', 'admin']}><StaffLayout /></ProtectedRoute>}>
             <Route index element={<StaffDashboard />} />
-            <Route path="verification"  element={<CatererVerification />} />
+            <Route path="verification" element={<CatererVerification />} />
             <Route path="subscriptions" element={<SubscriptionManager />} />
             <Route path="consultations" element={<Consultations />} />
-            <Route path="complaints"    element={<Complaints />} />
-            <Route path="bookings"      element={<BookingMonitor />} />
+            <Route path="complaints" element={<Complaints />} />
+            <Route path="bookings" element={<BookingMonitor />} />
+            <Route path="refunds" element={<RefundManagement />} />
           </Route>
 
           {/* Admin */}
           <Route path="/admin" element={<ProtectedRoute allow={['admin']}><AdminLayout /></ProtectedRoute>}>
             <Route index element={<AdminDashboard />} />
-            <Route path="users"    element={<UserManagement />} />
-            <Route path="revenue"  element={<Revenue />} />
-            <Route path="reports"  element={<Reports />} />
+            <Route path="users" element={<UserManagement />} />
+            <Route path="revenue" element={<Revenue />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="activity" element={<ActivityLogs />} />
             <Route path="settings" element={<PlatformSettings />} />
           </Route>

@@ -1,41 +1,55 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
   ActivityIndicator, Alert, Image, Platform,
   ScrollView, StyleSheet, Text, TextInput,
-  TouchableOpacity, View, Modal, Dimensions,
+  TouchableOpacity, View, Dimensions, Modal, Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import { useAuth } from '../../../context/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import { sendNotification } from '../../../lib/notifications';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import MapView, { Marker, MapPressEvent } from 'react-native-maps';
+import * as Location from 'expo-location';
 
-const { width } = Dimensions.get('window');
+// ── Lucide React Native Icons ──
+import {
+  ArrowLeft,
+  Medal,
+  Check,
+  Package as PackageIcon,
+  UtensilsCrossed,
+  Soup,
+  Cake,
+  Wine,
+  Scale,
+  MapPin,
+  ClipboardList,
+  Sparkles,
+  CreditCard,
+  Info,
+  PartyPopper,
+  SearchX,
+  CalendarDays,
+  Clock,
+  Plus,
+  Minus,
+  Navigation,
+  X,
+  CheckCircle2,
+  Search,
+  AlertTriangle
+} from 'lucide-react-native';
 
-const ICONS = {
-  arrowLeft: require('../../../assets/icons/arrow_left.png'),
-  medal: require('../../../assets/icons/medal.png'),
-  checkOutline: require('../../../assets/icons/check_outline.png'),
-  package: require('../../../assets/icons/package.png'),
-  plate: require('../../../assets/icons/plate.png'),
-  mainCourse: require('../../../assets/icons/main_course.png'),
-  appetizer: require('../../../assets/icons/appetizer.png'),
-  dessert: require('../../../assets/icons/dessert.png'),
-  drink: require('../../../assets/icons/drink.png'),
-  scale: require('../../../assets/icons/scale.png'),
-  pin: require('../../../assets/icons/pin.png'),
-  clipboard: require('../../../assets/icons/clipboard.png'),
-  sparkles: require('../../../assets/icons/sparkles.png'),
-  card: require('../../../assets/icons/card.png'),
-  info: require('../../../assets/icons/info.png'),
-  confetti: require('../../../assets/icons/confetti.png'),
-  searchEmpty: require('../../../assets/icons/search_empty.png'),
-};
+const { width, height } = Dimensions.get('window');
 
 type Package = {
   id: string; name: string; tier: string; description: string | null;
-  price: number; guest_capacity: number; image_url: string | null;
-  includes: string[]; event_types: string[];
+  price: number; min_guests: number; image_url: string | null;
+  includes: string[] | null;
+  food_inclusions: string[] | null;
+  event_types: string[];
   menu_items?: MenuItem[];
 };
 
@@ -55,23 +69,23 @@ type CustomItem = { menuItem: MenuItem; quantity: number };
 
 const TIER_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   bronze:  { color: '#B45309', bg: '#FEF3C7', label: 'Bronze'  },
-  silver:  { color: '#6B7280', bg: '#F3F4F6', label: 'Silver'  },
-  gold:    { color: '#D97706', bg: '#FFFBEB', label: 'Gold'    },
-  premium: { color: '#7C3AED', bg: '#F5F3FF', label: 'Premium' },
+  silver:  { color: '#4B5563', bg: '#F3F4F6', label: 'Silver'  },
+  gold:    { color: '#D97706', bg: '#FEF08A', label: 'Gold'    },
+  premium: { color: '#6D28D9', bg: '#EDE9FE', label: 'Premium' },
 };
 
 const EVENT_TYPES = ['Wedding', 'Birthday', 'Debut', 'Corporate', 'Anniversary', 'Party', 'Other'];
 
 const CATEGORY_CONFIG: Record<string, { icon: any; color: string }> = {
-  main_course: { icon: ICONS.mainCourse, color: Colors.orange },
-  appetizer:   { icon: ICONS.appetizer,  color: '#16A34A' },
-  dessert:     { icon: ICONS.dessert,    color: '#EC4899' },
-  drink:       { icon: ICONS.drink,      color: '#2563EB' },
+  main_course: { icon: UtensilsCrossed, color: Colors.orange },
+  appetizer:   { icon: Soup,  color: '#10B981' },
+  dessert:     { icon: Cake,    color: '#EC4899' },
+  drink:       { icon: Wine,      color: '#3B82F6' },
 };
 
 const categoryOrder = ['main_course', 'appetizer', 'dessert', 'drink'];
 
-function StepBar({ step, total }: { step: number; total: number }) {
+function StepBar({ step }: { step: number }) {
   const steps = ['Package', 'Details', 'Customize', 'Review'];
   return (
     <View style={sb.wrap}>
@@ -82,7 +96,7 @@ function StepBar({ step, total }: { step: number; total: number }) {
           <View key={label} style={sb.stepWrap}>
             <View style={[sb.circle, active && sb.circleActive, done && sb.circleDone]}>
               {done ? (
-                <Image source={ICONS.checkOutline} style={[sb.circleCheckIcon, { tintColor: Colors.white }]} />
+                <Check size={14} color={Colors.white} strokeWidth={3} />
               ) : (
                 <Text style={[sb.circleText, active && sb.circleTextActive]}>{String(i + 1)}</Text>
               )}
@@ -99,18 +113,17 @@ function StepBar({ step, total }: { step: number; total: number }) {
 }
 
 const sb = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 16 },
+  wrap: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 16, backgroundColor: Colors.white },
   stepWrap: { alignItems: 'center', flex: 1, position: 'relative' },
-  circle: { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.bgInput, borderWidth: 2, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  circle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', borderWidth: 2, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
   circleActive: { borderColor: Colors.orange, backgroundColor: Colors.orange },
-  circleDone: { borderColor: Colors.success, backgroundColor: Colors.success },
-  circleText: { fontSize: 12, fontWeight: '800', color: Colors.textMuted },
+  circleDone: { borderColor: '#10B981', backgroundColor: '#10B981' },
+  circleText: { fontSize: 12, fontWeight: '800', color: '#9CA3AF' },
   circleTextActive: { color: Colors.white },
-  circleCheckIcon: { width: 14, height: 14 },
-  label: { fontSize: 10, fontWeight: '600', color: Colors.textMuted, textAlign: 'center' },
+  label: { fontSize: 11, fontWeight: '600', color: '#9CA3AF', textAlign: 'center' },
   labelActive: { color: Colors.orange, fontWeight: '800' },
-  line: { position: 'absolute', top: 15, left: '50%', right: '-50%', height: 2, backgroundColor: Colors.border, zIndex: -1 },
-  lineDone: { backgroundColor: Colors.success },
+  line: { position: 'absolute', top: 16, left: '50%', right: '-50%', height: 2, backgroundColor: '#E5E7EB', zIndex: -1 },
+  lineDone: { backgroundColor: '#10B981' },
 });
 
 export default function BookingWizard() {
@@ -121,43 +134,71 @@ export default function BookingWizard() {
   const { session, profile } = useAuth();
   const router = useRouter();
 
-  const [caterer, setCaterer]         = useState<Caterer | null>(null);
-  const [packages, setPackages]       = useState<Package[]>([]);
-  const [menuItems, setMenuItems]     = useState<MenuItem[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [submitting, setSubmitting]   = useState(false);
-  const [step, setStep]               = useState(0);
+  const [caterer, setCaterer]        = useState<Caterer | null>(null);
+  const [packages, setPackages]      = useState<Package[]>([]);
+  const [menuItems, setMenuItems]    = useState<MenuItem[]>([]);
+  const [fullyBookedDates, setFullyBookedDates] = useState<string[]>([]);
+  const [loading, setLoading]        = useState(true);
+  const [submitting, setSubmitting]  = useState(false);
+  const [step, setStep]              = useState(0);
 
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
 
-  const [eventDate, setEventDate]     = useState('');
+  // Date & Time states
+  const [eventDate, setEventDate]     = useState<Date>(new Date());
+  const [eventTime, setEventTime]     = useState<Date>(new Date());
+  const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [isTimePickerVisible, setTimePickerVisible] = useState(false);
+
   const [guestCount, setGuestCount]   = useState('');
   const [eventType, setEventType]     = useState('');
   const [venue, setVenue]             = useState('');
   const [specialReqs, setSpecialReqs] = useState('');
 
+  // Map & Search states
+  const [isMapModalVisible, setMapModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchingLocation, setSearchingLocation] = useState(false);
+  const mapRef = useRef<MapView>(null);
+  
+  const [selectedCoordinates, setSelectedCoordinates] = useState({
+    latitude: 10.2081,
+    longitude: 123.7547,
+  });
+
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
 
   useEffect(() => {
     const load = async () => {
-      const [catererRes, packagesRes, menuRes] = await Promise.all([
+      const [catererRes, packagesRes, menuRes, bookingsRes] = await Promise.all([
         supabase.from('caterers')
           .select('id, business_name, business_description, logo_url, cover_photo_url, city, contact_phone, downpayment_percent')
           .eq('id', catererId)
           .single(),
         supabase.from('packages')
-          .select('*, package_menu_items(menu_items(*))')
+          .select('*')
           .eq('caterer_id', catererId)
           .order('price', { ascending: true }),
         supabase.from('menu_items')
           .select('*')
           .eq('caterer_id', catererId)
           .order('category'),
+        supabase.from('bookings')
+          .select('event_date')
+          .eq('caterer_id', catererId)
+          .in('status', ['confirmed', 'paid', 'ongoing']),
       ]);
 
       if (catererRes.data) setCaterer(catererRes.data);
       if (packagesRes.data) setPackages(packagesRes.data as any);
       if (menuRes.data) setMenuItems(menuRes.data);
+      if (bookingsRes.data) {
+        // Normalize dates to YYYY-MM-DD format regardless of whether DB returns timestamp or date
+        const normalizedDates = bookingsRes.data
+          .map(b => b.event_date ? String(b.event_date).split('T')[0] : '')
+          .filter(Boolean);
+        setFullyBookedDates(normalizedDates);
+      }
       setLoading(false);
     };
     if (catererId) load();
@@ -168,7 +209,7 @@ export default function BookingWizard() {
       const pkg = packages.find(p => p.id === preSelectedPackageId);
       if (pkg) {
         setSelectedPkg(pkg);
-        setStep(1); // skip straight to event details
+        setStep(1);
       }
     }
   }, [packages, preSelectedPackageId]);
@@ -180,7 +221,7 @@ export default function BookingWizard() {
     [customItems, guests]
   );
 
-  const baseTotal = selectedPkg ? selectedPkg.price * Math.ceil(guests / selectedPkg.guest_capacity) : 0;
+  const baseTotal = selectedPkg ? selectedPkg.price * Math.ceil(guests / selectedPkg.min_guests) : 0;
   const totalCost = baseTotal + customizationTotal;
   const downpayment = caterer ? totalCost * (caterer.downpayment_percent / 100) : 0;
 
@@ -204,22 +245,44 @@ export default function BookingWizard() {
   const getQty = (itemId: string) =>
     customItems.find(c => c.menuItem.id === itemId)?.quantity ?? 0;
 
+  // Local date formatting
+  const formattedDateString = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`;
+  const formattedTimeString = eventTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
   const validateStep = (): boolean => {
     if (step === 0 && !selectedPkg) {
       Alert.alert('Select a Package', 'Please choose a catering package to continue.'); return false;
     }
     if (step === 1) {
-      if (!eventDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.'); return false;
+      if (!eventDate) {
+        Alert.alert('Invalid Date', 'Please select a valid event date.'); return false;
+      }
+      // Check if selected date is fully booked
+      if (fullyBookedDates.includes(formattedDateString)) {
+        Alert.alert(
+          'Date Unavailable',
+          'Sorry, but this date is fully booked. Please select another day for your event.'
+        );
+        return false;
+      }
+      if (!eventTime) {
+        Alert.alert('Invalid Time', 'Please select a valid event time.'); return false;
       }
       if (guests <= 0) {
         Alert.alert('Guest Count', 'Please enter a valid number of guests.'); return false;
+      }
+      if (selectedPkg && guests < selectedPkg.min_guests) {
+        Alert.alert(
+          'Minimum Guest Requirement',
+          `This package requires a minimum of ${selectedPkg.min_guests} guests. Please adjust your guest count.`
+        );
+        return false;
       }
       if (!eventType) {
         Alert.alert('Event Type', 'Please select an event type.'); return false;
       }
       if (!venue.trim()) {
-        Alert.alert('Venue Required', 'Please enter the event venue.'); return false;
+        Alert.alert('Venue Required', 'Please enter or pin your event venue location on the map.'); return false;
       }
     }
     return true;
@@ -231,17 +294,102 @@ export default function BookingWizard() {
 
   const prevStep = () => setStep(s => s - 1);
 
+  const handleConfirmDate = (date: Date) => {
+    setEventDate(date);
+    setDatePickerVisible(false);
+  };
+
+  const handleConfirmTime = (time: Date) => {
+    setEventTime(time);
+    setTimePickerVisible(false);
+  };
+
+  const handleMapPress = (e: MapPressEvent) => {
+    const coords = e.nativeEvent.coordinate;
+    setSelectedCoordinates(coords);
+  };
+
+  const handleSearchLocation = async () => {
+    if (!searchQuery.trim()) return;
+    try {
+      setSearchingLocation(true);
+      Keyboard.dismiss();
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to search addresses.');
+        return;
+      }
+
+      const geocodedLocations = await Location.geocodeAsync(searchQuery);
+      if (geocodedLocations && geocodedLocations.length > 0) {
+        const { latitude, longitude } = geocodedLocations[0];
+        const newCoords = { latitude, longitude };
+        
+        setSelectedCoordinates(newCoords);
+        
+        mapRef.current?.animateToRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.0121,
+        }, 1000);
+      } else {
+        Alert.alert('Location Not Found', 'Could not find coordinates for that place. Try typing a more specific landmark or barangay.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to search location: ' + error.message);
+    } finally {
+      setSearchingLocation(false);
+    }
+  };
+
+  const confirmPinnedLocation = () => {
+    const isEnanChiong = 
+      Math.abs(selectedCoordinates.latitude - 10.2081) < 0.001 && 
+      Math.abs(selectedCoordinates.longitude - 123.7547) < 0.001;
+
+    const pinnedText = isEnanChiong 
+      ? `Enan Chiong Activity Center, Naga City (${selectedCoordinates.latitude.toFixed(4)}, ${selectedCoordinates.longitude.toFixed(4)})`
+      : searchQuery.trim() 
+        ? `${searchQuery.trim()} (${selectedCoordinates.latitude.toFixed(4)}, ${selectedCoordinates.longitude.toFixed(4)})`
+        : `Pinned Location (${selectedCoordinates.latitude.toFixed(4)}, ${selectedCoordinates.longitude.toFixed(4)})`;
+
+    setVenue(pinnedText);
+    setMapModalVisible(false);
+  };
+
   const handleSubmit = async () => {
     if (!session?.user?.id || !selectedPkg || !caterer) return;
 
+    // Final database check right before saving to prevent race conditions
     setSubmitting(true);
     try {
+      const { data: conflicting, error: checkError } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('caterer_id', caterer.id)
+        .eq('event_date', formattedDateString)
+        .in('status', ['confirmed', 'paid', 'ongoing']);
+
+      if (checkError) throw checkError;
+
+      if (conflicting && conflicting.length > 0) {
+        Alert.alert(
+          'Date Fully Booked',
+          'Sorry, but another client just booked this date. Please choose a different day.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
       const { data: booking, error } = await supabase.from('bookings').insert({
         customer_id: session.user.id,
         caterer_id: caterer.id,
         package_id: selectedPkg.id,
-        event_date: eventDate,
+        event_date: formattedDateString,
+        event_time: formattedTimeString,
         guest_count: guests,
         total_cost: totalCost,
         downpayment_amount: downpayment,
@@ -278,7 +426,7 @@ export default function BookingWizard() {
         await sendNotification({
           user_id: catererProfile.user_id,
           title: 'New Booking Request',
-          message: `${profile?.full_name ?? 'A customer'} has requested a booking for ${eventType} on ${eventDate}.`,
+          message: `${profile?.full_name ?? 'A customer'} has requested a booking for ${eventType} on ${formattedDateString} at ${formattedTimeString}.`,
           type: 'new_booking_request',
           booking_id: booking?.id,
         });
@@ -308,22 +456,24 @@ export default function BookingWizard() {
     return (
       <View style={styles.center}>
         <View style={styles.emptyIconWrap}>
-          <Image source={ICONS.searchEmpty} style={styles.emptyIconImg} />
+          <SearchX size={40} color={Colors.textMuted} />
         </View>
         <Text style={styles.emptyTitle}>Caterer not found</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.85}>
-          <Image source={ICONS.arrowLeft} style={[styles.iconBackBtnSm, { tintColor: Colors.white }]} />
+          <ArrowLeft size={16} color={Colors.white} />
           <Text style={styles.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const isCurrentDateBooked = fullyBookedDates.includes(formattedDateString);
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
         <TouchableOpacity onPress={() => step === 0 ? router.back() : prevStep()} style={styles.headerBack}>
-          <Image source={ICONS.arrowLeft} style={[styles.iconHeaderBack, { tintColor: Colors.black }]} />
+          <ArrowLeft size={18} color={Colors.black} />
         </TouchableOpacity>
         <View style={styles.headerMid}>
           {caterer.logo_url ? (
@@ -341,9 +491,9 @@ export default function BookingWizard() {
         <View style={{ width: 36 }} />
       </View>
 
-      <StepBar step={step} total={4} />
+      <StepBar step={step} />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
 
         {step === 0 && (
           <View style={styles.stepPad}>
@@ -353,7 +503,7 @@ export default function BookingWizard() {
             {packages.length === 0 ? (
               <View style={styles.empty}>
                 <View style={styles.emptyIconWrapSm}>
-                  <Image source={ICONS.package} style={[styles.emptyIconImgSm, { tintColor: Colors.border }]} />
+                  <PackageIcon size={32} color={Colors.border} />
                 </View>
                 <Text style={styles.emptyTitle}>No packages yet</Text>
                 <Text style={styles.emptySub}>This caterer hasn't set up packages yet.</Text>
@@ -362,7 +512,7 @@ export default function BookingWizard() {
               packages.map(pkg => {
                 const tier = TIER_CONFIG[pkg.tier] ?? TIER_CONFIG.bronze;
                 const isSelected = selectedPkg?.id === pkg.id;
-                const pricePerGuest = pkg.guest_capacity > 0 ? pkg.price / pkg.guest_capacity : 0;
+                const pricePerGuest = pkg.min_guests > 0 ? pkg.price / pkg.min_guests : 0;
 
                 return (
                   <TouchableOpacity
@@ -375,19 +525,19 @@ export default function BookingWizard() {
                       <Image source={{ uri: pkg.image_url }} style={styles.pkgImage} resizeMode="cover" />
                     ) : (
                       <View style={[styles.pkgImagePlaceholder, { backgroundColor: tier.bg }]}>
-                        <Image source={ICONS.plate} style={[styles.pkgImagePlaceholderIcon, { tintColor: tier.color }]} />
+                        <UtensilsCrossed size={44} color={tier.color} />
                       </View>
                     )}
 
                     <View style={styles.pkgBody}>
                       <View style={styles.pkgTitleRow}>
                         <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-                          <Image source={ICONS.medal} style={[styles.iconTierMedal, { tintColor: tier.color }]} />
+                          <Medal size={13} color={tier.color} />
                           <Text style={[styles.tierBadgeText, { color: tier.color }]}>{tier.label}</Text>
                         </View>
                         {isSelected && (
                           <View style={styles.selectedBadge}>
-                            <Image source={ICONS.checkOutline} style={[styles.iconSelectedBadge, { tintColor: Colors.white }]} />
+                            <Check size={11} color={Colors.white} strokeWidth={3} />
                             <Text style={styles.selectedBadgeText}>Selected</Text>
                           </View>
                         )}
@@ -401,7 +551,7 @@ export default function BookingWizard() {
                       <View style={styles.pkgPricing}>
                         <View>
                           <Text style={styles.pkgPrice}>₱{pkg.price.toLocaleString()}</Text>
-                          <Text style={styles.pkgPriceSub}>per {pkg.guest_capacity} guests</Text>
+                          <Text style={styles.pkgPriceSub}>per {pkg.min_guests} guests</Text>
                         </View>
                         <View style={styles.pkgPricePerGuest}>
                           <Text style={styles.pkgPricePerGuestNum}>₱{pricePerGuest.toFixed(0)}</Text>
@@ -409,37 +559,29 @@ export default function BookingWizard() {
                         </View>
                       </View>
 
-                      {pkg.includes && pkg.includes.length > 0 && (
+                      {/* ── FOOD INCLUSIONS ── */}
+                      {pkg.food_inclusions && pkg.food_inclusions.length > 0 && (
                         <View style={styles.includesWrap}>
-                          <Text style={styles.includesLabel}>WHAT'S INCLUDED</Text>
-                          {pkg.includes.map((inc, i) => (
+                          <Text style={styles.includesLabel}>FOOD INCLUSIONS</Text>
+                          {pkg.food_inclusions.map((food, i) => (
                             <View key={i} style={styles.includeRow}>
-                              <Image source={ICONS.checkOutline} style={[styles.iconIncludeCheck, { tintColor: Colors.success }]} />
-                              <Text style={styles.includeText}>{inc}</Text>
+                              <UtensilsCrossed size={14} color={Colors.orange} />
+                              <Text style={styles.includeText}>{food}</Text>
                             </View>
                           ))}
                         </View>
                       )}
 
-                      {(pkg as any).package_menu_items?.length > 0 && (
-                        <View style={{ marginTop: 10 }}>
-                          <Text style={styles.includesLabel}>INCLUDED MENU ITEMS</Text>
-                          <View style={styles.menuItemsChips}>
-                            {(pkg as any).package_menu_items.slice(0, 10).map((pmi: any) => {
-                              const catCfg = CATEGORY_CONFIG[pmi.menu_items?.category] ?? CATEGORY_CONFIG.main_course;
-                              return (
-                                <View key={pmi.menu_items?.id} style={styles.menuItemChip}>
-                                  <Image source={catCfg.icon} style={[styles.iconMenuItemChip, { tintColor: catCfg.color }]} />
-                                  <Text style={styles.menuItemChipText}>{pmi.menu_items?.name}</Text>
-                                </View>
-                              );
-                            })}
-                            {(pkg as any).package_menu_items.length > 10 && (
-                              <View style={styles.menuItemChip}>
-                                <Text style={styles.menuItemChipText}>+{(pkg as any).package_menu_items.length - 10} more</Text>
-                              </View>
-                            )}
-                          </View>
+                      {/* ── PACKAGE / SERVICE INCLUSIONS ── */}
+                      {pkg.includes && pkg.includes.length > 0 && (
+                        <View style={styles.includesWrap}>
+                          <Text style={styles.includesLabel}>PACKAGE INCLUSIONS</Text>
+                          {pkg.includes.map((inc, i) => (
+                            <View key={i} style={styles.includeRow}>
+                              <Check size={14} color="#10B981" strokeWidth={3} />
+                              <Text style={styles.includeText}>{inc}</Text>
+                            </View>
+                          ))}
                         </View>
                       )}
 
@@ -448,7 +590,7 @@ export default function BookingWizard() {
                         onPress={() => setSelectedPkg(pkg)}
                       >
                         {isSelected && (
-                          <Image source={ICONS.checkOutline} style={[styles.iconSelectPkgBtn, { tintColor: Colors.white }]} />
+                          <Check size={14} color={Colors.white} strokeWidth={3} />
                         )}
                         <Text style={[styles.selectPkgBtnText, isSelected && styles.selectPkgBtnTextSelected]}>
                           {isSelected ? 'Selected' : 'Select Package'}
@@ -470,26 +612,64 @@ export default function BookingWizard() {
             {selectedPkg && (
               <View style={styles.selectedPkgSummary}>
                 <View style={[styles.tierBadge, { backgroundColor: TIER_CONFIG[selectedPkg.tier]?.bg }]}>
-                  <Image source={ICONS.medal} style={[styles.iconTierMedal, { tintColor: TIER_CONFIG[selectedPkg.tier]?.color }]} />
+                  <Medal size={13} color={TIER_CONFIG[selectedPkg.tier]?.color} />
                   <Text style={[styles.tierBadgeText, { color: TIER_CONFIG[selectedPkg.tier]?.color }]}>
                     {TIER_CONFIG[selectedPkg.tier]?.label}
                   </Text>
                 </View>
                 <Text style={styles.selectedPkgName}>{selectedPkg.name}</Text>
-                <Text style={styles.selectedPkgPrice}>₱{selectedPkg.price.toLocaleString()} / {selectedPkg.guest_capacity} guests</Text>
+                <Text style={styles.selectedPkgPrice}>₱{selectedPkg.price.toLocaleString()} / {selectedPkg.min_guests} guests</Text>
               </View>
             )}
 
+            {/* Event Date Field */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Event Date *</Text>
-              <Text style={styles.fieldHint}>Format: YYYY-MM-DD (e.g. 2026-12-25)</Text>
-              <TextInput
-                style={styles.fieldInput}
-                placeholder="2026-12-25"
-                placeholderTextColor={Colors.textMuted}
-                value={eventDate}
-                onChangeText={setEventDate}
-                keyboardType="numbers-and-punctuation"
+              <TouchableOpacity
+                style={[styles.datePickerButton, isCurrentDateBooked && { borderColor: Colors.error, backgroundColor: '#FEF2F2' }]}
+                onPress={() => setDatePickerVisible(true)}
+              >
+                {isCurrentDateBooked ? (
+                  <AlertTriangle size={18} color={Colors.error} />
+                ) : (
+                  <CalendarDays size={18} color={Colors.orange} />
+                )}
+                <Text style={[styles.datePickerButtonText, isCurrentDateBooked && { color: Colors.error }]}>
+                  {formattedDateString} {isCurrentDateBooked ? ' (Fully Booked)' : ''}
+                </Text>
+              </TouchableOpacity>
+              {isCurrentDateBooked && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <AlertTriangle size={14} color={Colors.error} />
+                  <Text style={{ fontSize: 12, color: Colors.error, fontWeight: '700' }}>
+                    Sorry, but this date is fully booked. Please select another day.
+                  </Text>
+                </View>
+              )}
+              <DateTimePickerModal
+                isVisible={isDatePickerVisible}
+                mode="date"
+                onConfirm={handleConfirmDate}
+                onCancel={() => setDatePickerVisible(false)}
+                minimumDate={new Date()}
+              />
+            </View>
+
+            {/* Event Time Field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Event Time *</Text>
+              <TouchableOpacity
+                style={styles.datePickerButton}
+                onPress={() => setTimePickerVisible(true)}
+              >
+                <Clock size={18} color={Colors.orange} />
+                <Text style={styles.datePickerButtonText}>{formattedTimeString}</Text>
+              </TouchableOpacity>
+              <DateTimePickerModal
+                isVisible={isTimePickerVisible}
+                mode="time"
+                onConfirm={handleConfirmTime}
+                onCancel={() => setTimePickerVisible(false)}
               />
             </View>
 
@@ -503,15 +683,23 @@ export default function BookingWizard() {
                 onChangeText={setGuestCount}
                 keyboardType="number-pad"
               />
-              {selectedPkg && guests > 0 && (
+              {selectedPkg && guests > 0 && guests < selectedPkg.min_guests && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <AlertTriangle size={14} color={Colors.error} />
+                  <Text style={{ fontSize: 12, color: Colors.error, fontWeight: '700' }}>
+                    This package requires a minimum of {selectedPkg.min_guests} guests.
+                  </Text>
+                </View>
+              )}
+              {selectedPkg && guests >= selectedPkg.min_guests && (
                 <View style={styles.guestCalc}>
                   <View style={styles.guestCalcTextRow}>
-                    <Image source={ICONS.package} style={[styles.iconGuestCalc, { tintColor: '#92400E' }]} />
+                    <PackageIcon size={14} color="#92400E" />
                     <Text style={styles.guestCalcText}>
-                      {Math.ceil(guests / selectedPkg.guest_capacity)} × {selectedPkg.name} needed
+                      {Math.ceil(guests / selectedPkg.min_guests)} × {selectedPkg.name} needed
                     </Text>
                   </View>
-                  <Text style={styles.guestCalcPrice}>₱{(selectedPkg.price * Math.ceil(guests / selectedPkg.guest_capacity)).toLocaleString()}</Text>
+                  <Text style={styles.guestCalcPrice}>₱{(selectedPkg.price * Math.ceil(guests / selectedPkg.min_guests)).toLocaleString()}</Text>
                 </View>
               )}
             </View>
@@ -531,15 +719,35 @@ export default function BookingWizard() {
               </View>
             </View>
 
+            {/* Venue & Map Picker */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Venue *</Text>
+              <View style={styles.venueLabelRow}>
+                <Text style={styles.fieldLabel}>Venue / Location *</Text>
+                <TouchableOpacity style={styles.locationPinHelper} onPress={() => setMapModalVisible(true)}>
+                  <Navigation size={13} color={Colors.orange} />
+                  <Text style={styles.locationPinHelperText}>Pin on Map</Text>
+                </TouchableOpacity>
+              </View>
               <TextInput
                 style={styles.fieldInput}
-                placeholder="e.g. Cebu Grand Ballroom, Mactan"
+                placeholder="e.g. Enan Chiong Activity Center or tap 'Pin on Map'"
                 placeholderTextColor={Colors.textMuted}
                 value={venue}
                 onChangeText={setVenue}
               />
+              <TouchableOpacity 
+                style={styles.mapPreviewCard} 
+                onPress={() => setMapModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <MapPin size={20} color={Colors.orange} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.mapPreviewTitle}>Interactive Venue Mapper</Text>
+                  <Text style={styles.mapPreviewSub}>
+                    {venue ? `Selected: ${venue}` : 'Tap here to drop a pin precisely at your event venue.'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.fieldGroup}>
@@ -566,7 +774,7 @@ export default function BookingWizard() {
             {menuItems.length === 0 ? (
               <View style={styles.empty}>
                 <View style={styles.emptyIconWrapSm}>
-                  <Image source={ICONS.plate} style={[styles.emptyIconImgSm, { tintColor: Colors.border }]} />
+                  <UtensilsCrossed size={32} color={Colors.border} />
                 </View>
                 <Text style={styles.emptyTitle}>No menu items</Text>
                 <Text style={styles.emptySub}>This caterer hasn't added menu items yet.</Text>
@@ -584,10 +792,11 @@ export default function BookingWizard() {
                   const items = menuItems.filter(m => m.category === cat);
                   if (items.length === 0) return null;
                   const catCfg = CATEGORY_CONFIG[cat];
+                  const CatIcon = catCfg.icon;
                   return (
                     <View key={cat}>
                       <View style={styles.catHeader}>
-                        <Image source={catCfg.icon} style={[styles.iconCatHeader, { tintColor: catCfg.color }]} />
+                        <CatIcon size={18} color={catCfg.color} />
                         <Text style={styles.catLabel}>
                           {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </Text>
@@ -595,13 +804,14 @@ export default function BookingWizard() {
                       {items.map(item => {
                         const qty = getQty(item.id);
                         const itemCfg = CATEGORY_CONFIG[item.category] ?? CATEGORY_CONFIG.main_course;
+                        const ItemIcon = itemCfg.icon;
                         return (
                           <View key={item.id} style={styles.menuItemCard}>
                             {item.image_url ? (
                               <Image source={{ uri: item.image_url }} style={styles.menuItemImg} resizeMode="cover" />
                             ) : (
                               <View style={[styles.menuItemImgPlaceholder, { backgroundColor: itemCfg.color + '15' }]}>
-                                <Image source={itemCfg.icon} style={[styles.iconMenuItemImg, { tintColor: itemCfg.color }]} />
+                                <ItemIcon size={24} color={itemCfg.color} />
                               </View>
                             )}
                             <View style={styles.menuItemInfo}>
@@ -617,10 +827,9 @@ export default function BookingWizard() {
                                   </Text>
                                 )}
                               </Text>
-                              {/* Serving size */}
                               {((item as any).serving_size || (item as any).serving_unit) ? (
                                 <View style={styles.menuItemServing}>
-                                  <Image source={ICONS.scale} style={[styles.iconServingSm, { tintColor: Colors.textSecondary }]} />
+                                  <Scale size={11} color={Colors.textSecondary} />
                                   <Text style={styles.menuItemServingText}>
                                     {(item as any).serving_size ? `${(item as any).serving_size} ` : ''}
                                     {(item as any).serving_unit}
@@ -630,11 +839,11 @@ export default function BookingWizard() {
                             </View>
                             <View style={styles.qtyControl}>
                               <TouchableOpacity style={styles.qtyBtn} onPress={() => removeItem(item.id)}>
-                                <Text style={styles.qtyBtnText}>−</Text>
+                                <Minus size={14} color={Colors.textSecondary} />
                               </TouchableOpacity>
                               <Text style={styles.qtyNum}>{qty}</Text>
                               <TouchableOpacity style={[styles.qtyBtn, styles.qtyBtnAdd]} onPress={() => addItem(item)}>
-                                <Text style={[styles.qtyBtnText, styles.qtyBtnAddText]}>+</Text>
+                                <Plus size={14} color={Colors.white} />
                               </TouchableOpacity>
                             </View>
                           </View>
@@ -655,7 +864,7 @@ export default function BookingWizard() {
 
             <View style={styles.reviewSection}>
               <View style={styles.reviewSectionTitleRow}>
-                <Image source={ICONS.plate} style={styles.iconReviewSectionTitle} />
+                <UtensilsCrossed size={16} color={Colors.black} />
                 <Text style={styles.reviewSectionTitle}>Caterer</Text>
               </View>
               <View style={styles.reviewCatererCard}>
@@ -669,7 +878,7 @@ export default function BookingWizard() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.reviewCatererName}>{caterer.business_name}</Text>
                   <View style={styles.reviewCatererCityRow}>
-                    <Image source={ICONS.pin} style={styles.iconReviewPin} />
+                    <MapPin size={11} color={Colors.textSecondary} />
                     <Text style={styles.reviewCatererCity}>{caterer.city ?? 'Cebu'}</Text>
                   </View>
                 </View>
@@ -678,32 +887,59 @@ export default function BookingWizard() {
 
             <View style={styles.reviewSection}>
               <View style={styles.reviewSectionTitleRow}>
-                <Image source={ICONS.package} style={styles.iconReviewSectionTitle} />
-                <Text style={styles.reviewSectionTitle}>Package</Text>
+                <PackageIcon size={16} color={Colors.black} />
+                <Text style={styles.reviewSectionTitle}>Package & Inclusions</Text>
               </View>
               <View style={styles.reviewCard}>
                 <View style={[styles.tierBadge, { backgroundColor: TIER_CONFIG[selectedPkg.tier]?.bg, marginBottom: 8 }]}>
-                  <Image source={ICONS.medal} style={[styles.iconTierMedal, { tintColor: TIER_CONFIG[selectedPkg.tier]?.color }]} />
+                  <Medal size={13} color={TIER_CONFIG[selectedPkg.tier]?.color} />
                   <Text style={[styles.tierBadgeText, { color: TIER_CONFIG[selectedPkg.tier]?.color }]}>
                     {TIER_CONFIG[selectedPkg.tier]?.label}
                   </Text>
                 </View>
                 <Text style={styles.reviewPkgName}>{selectedPkg.name}</Text>
                 {selectedPkg.description && <Text style={styles.reviewPkgDesc}>{selectedPkg.description}</Text>}
+
+                {/* Food Inclusions in Review */}
+                {selectedPkg.food_inclusions && selectedPkg.food_inclusions.length > 0 && (
+                  <View style={[styles.includesWrap, { marginTop: 12, marginBottom: selectedPkg.includes && selectedPkg.includes.length > 0 ? 12 : 0 }]}>
+                    <Text style={styles.includesLabel}>FOOD INCLUSIONS</Text>
+                    {selectedPkg.food_inclusions.map((food, i) => (
+                      <View key={i} style={styles.includeRow}>
+                        <UtensilsCrossed size={14} color={Colors.orange} />
+                        <Text style={styles.includeText}>{food}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Package Inclusions in Review */}
+                {selectedPkg.includes && selectedPkg.includes.length > 0 && (
+                  <View style={[styles.includesWrap, { marginBottom: 0 }]}>
+                    <Text style={styles.includesLabel}>PACKAGE INCLUSIONS</Text>
+                    {selectedPkg.includes.map((inc, i) => (
+                      <View key={i} style={styles.includeRow}>
+                        <Check size={14} color="#10B981" strokeWidth={3} />
+                        <Text style={styles.includeText}>{inc}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
 
             <View style={styles.reviewSection}>
               <View style={styles.reviewSectionTitleRow}>
-                <Image source={ICONS.clipboard} style={styles.iconReviewSectionTitle} />
+                <ClipboardList size={16} color={Colors.black} />
                 <Text style={styles.reviewSectionTitle}>Event Details</Text>
               </View>
               <View style={styles.reviewCard}>
                 {[
-                  { label: 'Date',       value: eventDate },
-                  { label: 'Guests',     value: `${guests} guests` },
+                  { label: 'Date',      value: formattedDateString },
+                  { label: 'Time',      value: formattedTimeString },
+                  { label: 'Guests',    value: `${guests} guests` },
                   { label: 'Event Type', value: eventType },
-                  { label: 'Venue',      value: venue },
+                  { label: 'Venue',     value: venue },
                   ...(specialReqs ? [{ label: 'Special Requests', value: specialReqs }] : []),
                 ].map(row => (
                   <View key={row.label} style={styles.reviewRow}>
@@ -717,16 +953,17 @@ export default function BookingWizard() {
             {customItems.length > 0 && (
               <View style={styles.reviewSection}>
                 <View style={styles.reviewSectionTitleRow}>
-                  <Image source={ICONS.sparkles} style={styles.iconReviewSectionTitle} />
+                  <Sparkles size={16} color={Colors.black} />
                   <Text style={styles.reviewSectionTitle}>Add-ons</Text>
                 </View>
                 <View style={styles.reviewCard}>
                   {customItems.map(c => {
                     const itemCfg = CATEGORY_CONFIG[c.menuItem.category] ?? CATEGORY_CONFIG.main_course;
+                    const ItemIcon = itemCfg.icon;
                     return (
                       <View key={c.menuItem.id} style={styles.reviewRow}>
                         <View style={styles.reviewAddonLabelRow}>
-                          <Image source={itemCfg.icon} style={[styles.iconReviewAddon, { tintColor: itemCfg.color }]} />
+                          <ItemIcon size={14} color={itemCfg.color} />
                           <Text style={styles.reviewRowLabel}>{c.menuItem.name} ×{c.quantity}</Text>
                         </View>
                         <Text style={styles.reviewRowValue}>
@@ -741,7 +978,7 @@ export default function BookingWizard() {
 
             <View style={styles.reviewSection}>
               <View style={styles.reviewSectionTitleRow}>
-                <Image source={ICONS.card} style={styles.iconReviewSectionTitle} />
+                <CreditCard size={16} color={Colors.black} />
                 <Text style={styles.reviewSectionTitle}>Cost Breakdown</Text>
               </View>
               <View style={styles.reviewCard}>
@@ -771,7 +1008,7 @@ export default function BookingWizard() {
             </View>
 
             <View style={styles.noteBox}>
-              <Image source={ICONS.info} style={styles.iconNote} />
+              <Info size={16} color="#1E40AF" style={{ marginTop: 1 }} />
               <Text style={styles.noteText}>
                 By submitting, you agree to the caterer's terms. The caterer has 24 hours to confirm or reject this request.
               </Text>
@@ -780,10 +1017,76 @@ export default function BookingWizard() {
         )}
       </ScrollView>
 
+      {/* Map Modal */}
+      <Modal visible={isMapModalVisible} animationType="slide" transparent={false}>
+        <View style={styles.modalRoot}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Search & Pin Venue</Text>
+            <TouchableOpacity onPress={() => setMapModalVisible(false)} style={styles.modalCloseBtn}>
+                <X size={20} color={Colors.black} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.mapSearchContainer}>
+            <TextInput
+                style={styles.mapSearchInput}
+                placeholder="Search location (e.g. Enan Chiong Center)"
+                placeholderTextColor={Colors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleSearchLocation}
+                returnKeyType="search"
+            />
+            <TouchableOpacity 
+                style={styles.mapSearchBtn} 
+                onPress={handleSearchLocation}
+                disabled={searchingLocation}
+            >
+              {searchingLocation ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Search size={18} color={Colors.white} />
+              )}
+            </TouchableOpacity>
+        </View>
+
+          <View style={{ flex: 1, position: 'relative' }}>
+            <MapView
+                ref={mapRef}
+                style={{ width: '100%', height: '100%' }}
+                initialRegion={{
+                  latitude: selectedCoordinates.latitude,
+                  longitude: selectedCoordinates.longitude,
+                  latitudeDelta: 0.015,
+                  longitudeDelta: 0.0121,
+              }}
+                onPress={handleMapPress}
+            >
+              <Marker 
+                coordinate={selectedCoordinates} 
+                title={searchQuery || "Event Venue Location"} 
+                description="Tap anywhere on map or use search bar" 
+              />
+            </MapView>
+
+            <View style={styles.mapInstructionOverlay}>
+              <Text style={styles.mapInstructionText}>📍 Search or tap map to position pin.</Text>
+          </View>
+        </View>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity style={styles.confirmPinBtn} onPress={confirmPinnedLocation}>
+              <CheckCircle2 size={18} color={Colors.white} />
+              <Text style={styles.confirmPinBtnText}>Confirm Venue Pin Location</Text>
+            </TouchableOpacity>
+        </View>
+      </View>
+      </Modal>
+
       <View style={styles.bottomBar}>
         {step > 0 && (
           <TouchableOpacity style={styles.prevBtn} onPress={prevStep}>
-            <Image source={ICONS.arrowLeft} style={[styles.iconPrevBtn, { tintColor: Colors.textSecondary }]} />
+            <ArrowLeft size={14} color={Colors.textSecondary} />
             <Text style={styles.prevBtnText}>Back</Text>
           </TouchableOpacity>
         )}
@@ -801,17 +1104,17 @@ export default function BookingWizard() {
             style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
             onPress={handleSubmit}
             disabled={submitting}
-          >
+        >
             {submitting ? (
               <ActivityIndicator color={Colors.white} />
             ) : (
               <View style={styles.submitBtnRow}>
-                <Image source={ICONS.confetti} style={[styles.iconSubmitBtn, { tintColor: Colors.white }]} />
+                <PartyPopper size={16} color={Colors.white} />
                 <Text style={styles.submitBtnText}>Submit Booking Request</Text>
               </View>
             )}
-          </TouchableOpacity>
-        )}
+        </TouchableOpacity>
+      )}
       </View>
     </View>
   );
@@ -833,7 +1136,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 4,
   },
   headerBack: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', borderRadius: 18, backgroundColor: Colors.bgInput },
-  iconHeaderBack: { width: 16, height: 16 },
   headerMid: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerLogo: { width: 36, height: 36, borderRadius: 10 },
   headerLogoPlaceholder: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center' },
@@ -854,14 +1156,11 @@ const styles = StyleSheet.create({
   pkgCardSelected: { borderColor: Colors.orange, borderWidth: 2.5 },
   pkgImage: { width: '100%', height: 160 },
   pkgImagePlaceholder: { width: '100%', height: 140, justifyContent: 'center', alignItems: 'center' },
-  pkgImagePlaceholderIcon: { width: 44, height: 44 },
   pkgBody: { padding: 16 },
   pkgTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   tierBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  iconTierMedal: { width: 13, height: 13 },
   tierBadgeText: { fontSize: 12, fontWeight: '800' },
   selectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.orange, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  iconSelectedBadge: { width: 11, height: 11 },
   selectedBadgeText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
   pkgName: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
   pkgDesc: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19, marginBottom: 14 },
@@ -874,15 +1173,9 @@ const styles = StyleSheet.create({
   includesWrap: { marginBottom: 14 },
   includesLabel: { fontSize: 10, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 8 },
   includeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
-  iconIncludeCheck: { width: 14, height: 14 },
   includeText: { fontSize: 13, color: Colors.textSecondary, flex: 1 },
-  menuItemsChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  menuItemChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.bgInput, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: Colors.border },
-  iconMenuItemChip: { width: 11, height: 11 },
-  menuItemChipText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '600' },
   selectPkgBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7, backgroundColor: Colors.bgInput, borderRadius: 12, paddingVertical: 12, borderWidth: 1.5, borderColor: Colors.border, marginTop: 8 },
   selectPkgBtnSelected: { backgroundColor: Colors.orange, borderColor: Colors.orange },
-  iconSelectPkgBtn: { width: 14, height: 14 },
   selectPkgBtnText: { fontSize: 14, fontWeight: '800', color: Colors.textSecondary },
   selectPkgBtnTextSelected: { color: Colors.white },
 
@@ -892,6 +1185,23 @@ const styles = StyleSheet.create({
   fieldGroup: { marginBottom: 20 },
   fieldLabel: { fontSize: 13, fontWeight: '800', color: Colors.black, marginBottom: 4 },
   fieldHint: { fontSize: 11, color: Colors.textMuted, marginBottom: 8 },
+  datePickerButton: {
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  datePickerButtonText: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  venueLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  locationPinHelper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  locationPinHelperText: { fontSize: 11, fontWeight: '800', color: Colors.orange },
+  mapPreviewCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA',
+    borderRadius: 12, padding: 12, marginTop: 8,
+  },
+  mapPreviewTitle: { fontSize: 13, fontWeight: '800', color: '#9A3412' },
+  mapPreviewSub: { fontSize: 11, color: '#C2410C', marginTop: 2 },
   fieldInput: {
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
@@ -901,7 +1211,6 @@ const styles = StyleSheet.create({
   fieldTextarea: { minHeight: 100, textAlignVertical: 'top', paddingTop: 13 },
   guestCalc: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.orangeLight, borderRadius: 10, padding: 12, marginTop: 8, borderWidth: 1, borderColor: '#FFB26B' },
   guestCalcTextRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1 },
-  iconGuestCalc: { width: 13, height: 13 },
   guestCalcText: { fontSize: 13, color: '#92400E', fontWeight: '600', flex: 1 },
   guestCalcPrice: { fontSize: 16, fontWeight: '900', color: Colors.orange },
   eventTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
@@ -914,7 +1223,6 @@ const styles = StyleSheet.create({
   customTotalLabel: { fontSize: 13, color: '#92400E', fontWeight: '700' },
   customTotalValue: { fontSize: 18, fontWeight: '900', color: Colors.orange },
   catHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: 16 },
-  iconCatHeader: { width: 19, height: 19 },
   catLabel: { fontSize: 14, fontWeight: '900', color: Colors.black },
   menuItemCard: {
     flexDirection: 'row', alignItems: 'center',
@@ -926,7 +1234,6 @@ const styles = StyleSheet.create({
   },
   menuItemImg: { width: 60, height: 60, borderRadius: 10 },
   menuItemImgPlaceholder: { width: 60, height: 60, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  iconMenuItemImg: { width: 28, height: 28 },
   menuItemInfo: { flex: 1 },
   menuItemName: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 3 },
   menuItemDesc: { fontSize: 11, color: Colors.textMuted, lineHeight: 16, marginBottom: 4 },
@@ -939,18 +1246,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start', marginTop: 4,
     borderWidth: 1, borderColor: Colors.border,
   },
-  iconServingSm: { width: 11, height: 11 },
   menuItemServingText: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
   qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.bgInput, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  qtyBtnText: { fontSize: 18, fontWeight: '700', color: Colors.textSecondary, lineHeight: 22 },
   qtyBtnAdd: { backgroundColor: Colors.orange, borderColor: Colors.orange },
-  qtyBtnAddText: { color: Colors.white },
   qtyNum: { fontSize: 16, fontWeight: '900', color: Colors.black, minWidth: 20, textAlign: 'center' },
 
   reviewSection: { marginBottom: 18 },
   reviewSectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
-  iconReviewSectionTitle: { width: 16, height: 16, tintColor: Colors.black },
   reviewSectionTitle: { fontSize: 14, fontWeight: '900', color: Colors.black, letterSpacing: 0.3 },
   reviewCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   reviewCatererCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, padding: 14 },
@@ -958,7 +1261,6 @@ const styles = StyleSheet.create({
   reviewLogoPlaceholder: { width: 48, height: 48, borderRadius: 12, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center' },
   reviewCatererName: { fontSize: 16, fontWeight: '900', color: Colors.black, marginBottom: 2 },
   reviewCatererCityRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  iconReviewPin: { width: 11, height: 11, tintColor: Colors.textSecondary },
   reviewCatererCity: { fontSize: 12, color: Colors.textSecondary },
   reviewPkgName: { fontSize: 16, fontWeight: '800', color: Colors.black, marginBottom: 6 },
   reviewPkgDesc: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19 },
@@ -967,7 +1269,6 @@ const styles = StyleSheet.create({
   reviewRowLabel: { fontSize: 13, color: Colors.textSecondary, flex: 1 },
   reviewRowValue: { fontSize: 13, fontWeight: '700', color: Colors.black, flex: 1, textAlign: 'right' },
   reviewAddonLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  iconReviewAddon: { width: 14, height: 14 },
   reviewTotalLabel: { fontSize: 14, fontWeight: '900', color: Colors.black, flex: 1 },
   reviewTotalValue: { fontSize: 20, fontWeight: '900', color: Colors.orange, flex: 1, textAlign: 'right' },
   downpaymentBanner: {
@@ -979,19 +1280,30 @@ const styles = StyleSheet.create({
   downpaymentNote: { fontSize: 11, color: '#B45309' },
   downpaymentAmount: { fontSize: 22, fontWeight: '900', color: Colors.orange },
   noteBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#BFDBFE' },
-  iconNote: { width: 16, height: 16, marginTop: 1 },
   noteText: { fontSize: 12, color: '#1E40AF', lineHeight: 18, flex: 1 },
 
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyIconWrapSm: { width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.bgInput, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  emptyIconImgSm: { width: 32, height: 32 },
   emptyIconWrap: { width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.bgInput, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  emptyIconImg: { width: 40, height: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: Colors.black, marginBottom: 6 },
   emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.orange, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 16 },
-  iconBackBtnSm: { width: 14, height: 14 },
   backBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
+
+  modalRoot: { flex: 1, backgroundColor: Colors.white },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 50 : 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: Colors.black },
+  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.bgInput, justifyContent: 'center', alignItems: 'center' },
+  
+  mapSearchContainer: { flexDirection: 'row', padding: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border, gap: 8, alignItems: 'center' },
+  mapSearchInput: { flex: 1, backgroundColor: Colors.bgInput, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 12, height: 42, fontSize: 14, color: Colors.black },
+  mapSearchBtn: { backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center', width: 42, height: 42, borderRadius: 10 },
+
+  mapInstructionOverlay: { position: 'absolute', top: 15, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  mapInstructionText: { color: Colors.white, fontSize: 12, fontWeight: '700' },
+  modalFooter: { padding: 20, backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
+  confirmPinBtn: { backgroundColor: Colors.orange, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  confirmPinBtnText: { color: Colors.white, fontSize: 15, fontWeight: '900' },
 
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -1005,12 +1317,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 12, elevation: 12,
   },
   prevBtn: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 12, backgroundColor: Colors.bgInput, borderWidth: 1.5, borderColor: Colors.border },
-  iconPrevBtn: { width: 13, height: 13 },
   prevBtnText: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
   nextBtn: { flex: 1, backgroundColor: Colors.orange, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   nextBtnText: { fontSize: 15, fontWeight: '900', color: Colors.white },
-  submitBtn: { flex: 1, backgroundColor: Colors.success, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: Colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  submitBtn: { flex: 1, backgroundColor: '#10B981', borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   submitBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconSubmitBtn: { width: 16, height: 16 },
   submitBtnText: { fontSize: 15, fontWeight: '900', color: Colors.white },
 });

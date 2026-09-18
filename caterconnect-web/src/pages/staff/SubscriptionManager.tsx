@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { 
+  CreditCard, Search, Clock, 
+  AlertCircle, CheckCircle2, Building2,
+  X, Loader2, DollarSign, RefreshCw 
+} from 'lucide-react';
 
 type Payment = {
   id: string;
@@ -33,11 +38,11 @@ const PLANS = [
 ];
 
 export default function SubscriptionManager() {
-  const [payments, setPayments]   = useState<Payment[]>([]);
-  const [caterers, setCaterers]   = useState<Caterer[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [tab, setTab]             = useState<'caterers' | 'expiring' | 'payments'>('caterers');
-  const [search, setSearch]       = useState('');
+  const [payments, setPayments]    = useState<Payment[]>([]);
+  const [caterers, setCaterers]    = useState<Caterer[]>([]);
+  const [loading, setLoading]      = useState(true);
+  const [tab, setTab]              = useState<'caterers' | 'expiring' | 'payments'>('caterers');
+  const [search, setSearch]        = useState('');
   const [planFilter, setPlanFilter] = useState('all');
 
   const loadPayments = async () => {
@@ -51,9 +56,6 @@ export default function SubscriptionManager() {
     setPayments((data as any) ?? []);
   };
 
-  // Fetch caterers and profiles SEPARATELY (no join) and merge in JS.
-  // This avoids the whole query coming back empty if RLS/relationship
-  // quirks affect the embedded `profiles` join for the staff role.
   const loadCaterers = async () => {
     const { data: caterersData, error: caterersError } = await supabase
       .from('caterers')
@@ -106,7 +108,6 @@ export default function SubscriptionManager() {
 
   const planStyle = (planId: string) => PLANS.find((p) => p.id === planId) ?? PLANS[0];
 
-  // ── Expiring soon calculation ──────────────────────────────
   const now = Date.now();
   const expiringCaterers = caterers
     .filter(c => c.subscription_plan !== 'free' && c.subscription_expires_at)
@@ -120,13 +121,11 @@ export default function SubscriptionManager() {
   const expiredCount = expiringCaterers.filter(c => c.daysLeft < 0).length;
   const expiringSoonCount = expiringCaterers.filter(c => c.daysLeft >= 0).length;
 
-  // ── Revenue summary ──────────────────────────
   const totalRevenue = payments.reduce((s, p) => s + Number(p.amount), 0);
   const thisMonthRevenue = payments
     .filter(p => p.confirmed_at && new Date(p.confirmed_at) > new Date(now - 30 * 86400000))
     .reduce((s, p) => s + Number(p.amount), 0);
 
-  // ── Filtered caterers for the table ──────────────────────────
   const filteredCaterers = caterers.filter(c => {
     const matchesPlan = planFilter === 'all' || c.subscription_plan === planFilter;
     const matchesSearch = !search ||
@@ -137,18 +136,17 @@ export default function SubscriptionManager() {
   });
 
   return (
-    <div>
-      <div style={styles.pageHeader}>
+    <div style={{ paddingBottom: 40 }}>
+      {/* Header Section */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={styles.pageTitle}>Subscription Management</h1>
-          <p style={styles.pageSub}>
-            Payments are auto-confirmed via Xendit. Monitor caterer plans and renewals here.
-          </p>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Subscription Management</h1>
+          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>Payments are auto-confirmed via Xendit. Monitor caterer plans and renewals here.</p>
         </div>
       </div>
 
-      {/* ── PLAN SUMMARY — caterer count per plan, top of page ── */}
-      <div style={styles.planSummary}>
+      {/* Plan Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
         {PLANS.map((plan) => {
           const count = caterers.filter((c) => c.subscription_plan === plan.id).length;
           const isActive = planFilter === plan.id;
@@ -157,76 +155,100 @@ export default function SubscriptionManager() {
               key={plan.id}
               onClick={() => { setPlanFilter(isActive ? 'all' : plan.id); setTab('caterers'); }}
               style={{
-                ...styles.planPill,
                 background: plan.bg,
-                borderColor: isActive ? plan.color : plan.color + '44',
-                borderWidth: isActive ? 2.5 : 1.5,
-                cursor: 'pointer',
+                borderColor: isActive ? plan.color : '#E5E7EB',
+                borderWidth: isActive ? '2px' : '1px',
+                borderStyle: 'solid',
+                borderRadius: 20, padding: '20px 24px',
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+                cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left',
+                boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.05)' : 'none'
               }}
             >
-              <span style={{ fontSize: 30, fontWeight: 900, color: plan.color }}>{count}</span>
-              <span style={{ fontSize: 13, color: plan.color, fontWeight: 800 }}>{plan.label} Plan</span>
-              <span style={{ fontSize: 11, color: plan.color, opacity: 0.75 }}>
-                {plan.price === 0 ? 'Free' : `₱${plan.price}/mo`}
-              </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: plan.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{plan.label} Plan</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', background: 'rgba(255,255,255,0.6)', padding: '2px 8px', borderRadius: 10 }}>
+                  {plan.price === 0 ? 'Free' : `₱${plan.price}/mo`}
+                </span>
+              </div>
+              <span style={{ fontSize: 32, fontWeight: 900, color: '#111', lineHeight: 1 }}>{count}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Revenue mini stats */}
-      <div style={styles.revenueRow}>
-        <div style={styles.revenueCard}>
-          <span style={styles.revenueLabel}>Revenue (30 days)</span>
-          <span style={styles.revenueValue}>₱{thisMonthRevenue.toLocaleString()}</span>
+      {/* Revenue Mini Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <DollarSign size={24} />
+          </div>
+          <div>
+            <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Revenue (30 Days)</span>
+            <span style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>₱{thisMonthRevenue.toLocaleString()}</span>
+          </div>
         </div>
-        <div style={styles.revenueCard}>
-          <span style={styles.revenueLabel}>Total Revenue</span>
-          <span style={styles.revenueValue}>₱{totalRevenue.toLocaleString()}</span>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CreditCard size={24} />
+          </div>
+          <div>
+            <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Total Platform Revenue</span>
+            <span style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>₱{totalRevenue.toLocaleString()}</span>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={styles.tabs}>
-        <button
-          onClick={() => setTab('caterers')}
-          style={{ ...styles.tab, ...(tab === 'caterers' ? styles.tabActive : {}) }}
-        >
-          🍽️ Caterer Plans
-        </button>
-        <button
-          onClick={() => setTab('expiring')}
-          style={{ ...styles.tab, ...(tab === 'expiring' ? styles.tabActive : {}) }}
-        >
-          ⏰ Renewals
-          {expiringCaterers.length > 0 && (
-            <span style={styles.tabBadge}>{expiringCaterers.length}</span>
-          )}
-        </button>
-        <button
-          onClick={() => setTab('payments')}
-          style={{ ...styles.tab, ...(tab === 'payments' ? styles.tabActive : {}) }}
-        >
-          💳 Payment History
-        </button>
+      {/* Consistent Segmented Filter Navigation Tabs with Icons */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, background: '#F3F4F6', padding: 6, borderRadius: 14, border: '1px solid #E5E7EB', width: 'fit-content', flexWrap: 'wrap' }}>
+        {[
+          { key: 'caterers', icon: Building2, label: 'Caterer Plans', color: '#2563EB' },
+          { key: 'expiring', icon: Clock, label: 'Renewals', color: '#D97706', count: expiringCaterers.length },
+          { key: 'payments', icon: CreditCard, label: 'Payment History', color: '#16A34A' },
+        ].map((tabItem) => {
+          const TabIcon = tabItem.icon;
+          const isActive = tab === tabItem.key;
+          return (
+            <button
+              key={tabItem.key}
+              onClick={() => setTab(tabItem.key as any)}
+              style={{ 
+                padding: '10px 20px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s',
+                background: isActive ? '#FFFFFF' : 'transparent',
+                color: isActive ? '#111' : '#6B7280',
+                boxShadow: isActive ? '0 2px 4px rgba(0,0,0,0.04)' : 'none'
+              }}
+            >
+              <TabIcon size={16} color={isActive ? tabItem.color : '#6B7280'} />
+              {tabItem.label}
+              {tabItem.key === 'expiring' && expiringCaterers.length > 0 && (
+                <span style={{ marginLeft: 4, background: '#DC2626', color: '#FFF', borderRadius: 8, padding: '2px 6px', fontSize: 11, fontWeight: 800 }}>
+                  {expiringCaterers.length}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── CATERER PLANS TAB ── */}
+      {/* Caterers Tab */}
       {tab === 'caterers' && (
         <div>
-          {/* Filters */}
-          <div style={styles.filterBar}>
-            <input
-              type="text"
-              placeholder="Search by business name, owner, or email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={styles.searchInput}
-            />
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 280, maxWidth: 400 }}>
+              <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                placeholder="Search business, owner, or email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: '100%', padding: '12px 16px 12px 44px', borderRadius: 14, border: '1px solid #E5E7EB', outline: 'none', fontSize: 14, background: '#FFF' }}
+              />
+            </div>
             <select
               value={planFilter}
               onChange={(e) => setPlanFilter(e.target.value)}
-              style={styles.planFilterSelect}
+              style={{ padding: '12px 16px', borderRadius: 14, border: '1px solid #E5E7EB', fontSize: 14, fontWeight: 700, background: '#FFF', outline: 'none', cursor: 'pointer' }}
             >
               <option value="all">All Plans</option>
               {PLANS.map((p) => (
@@ -236,160 +258,158 @@ export default function SubscriptionManager() {
             {(planFilter !== 'all' || search) && (
               <button
                 onClick={() => { setPlanFilter('all'); setSearch(''); }}
-                style={styles.clearFilterBtn}
+                style={{ padding: '12px 18px', borderRadius: 14, border: '1px solid #E5E7EB', background: '#F9FAFB', color: '#4B5563', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                Clear ✕
+                <X size={14} /> Clear
               </button>
             )}
           </div>
 
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
             {loading ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">⏳</div>
-                <div className="empty-state-sub">Loading caterers...</div>
+              <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                <Loader2 size={36} color="#F97316" className="animate-spin" />
+                <span style={{ fontSize: 15, fontWeight: 600 }}>Loading active caterer ledger...</span>
               </div>
             ) : filteredCaterers.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">🍽️</div>
-                <div className="empty-state-title">No caterers found</div>
-                <div className="empty-state-sub">
-                  {search || planFilter !== 'all' ? 'Try adjusting your filters.' : 'No approved caterers yet.'}
+              <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E5E7EB' }}>
+                  <Building2 size={32} color="#D1D5DB" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4 }}>No caterers found</div>
+                  <div style={{ fontSize: 14 }}>Try modifying your active filter parameters.</div>
                 </div>
               </div>
             ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Business Name</th>
-                    <th>Owner</th>
-                    <th>Current Plan</th>
-                    <th>Expires</th>
-                    <th>Bookings / mo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCaterers.map((c) => {
-                    const ps = planStyle(c.subscription_plan);
-                    const expires = c.subscription_expires_at
-                      ? new Date(c.subscription_expires_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-                      : '—';
-                    return (
-                      <tr key={c.id}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {c.logo_url ? (
-                              <img
-                                src={c.logo_url}
-                                alt={c.business_name}
-                                style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover', flexShrink: 0, border: '1px solid #E5E7EB' }}
-                              />
-                            ) : (
-                              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEF3E8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#F97316', fontSize: 14, flexShrink: 0 }}>
-                                {c.business_name.charAt(0).toUpperCase()}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Business Name</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Owner Details</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Current Plan</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Expiration Date</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Bookings</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCaterers.map((c, i) => {
+                      const ps = planStyle(c.subscription_plan);
+                      const expires = c.subscription_expires_at
+                        ? new Date(c.subscription_expires_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : '—';
+                      return (
+                        <tr key={c.id} style={{ borderBottom: i === filteredCaterers.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          
+                          <td style={{ padding: '18px 20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              {c.logo_url ? (
+                                <img src={c.logo_url} alt="" style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
+                              ) : (
+                                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEF3E8', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>
+                                  {c.business_name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>{c.business_name}</div>
+                                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{c.city ?? ''}</div>
                               </div>
-                            )}
-                            <div>
-                              <div style={{ fontWeight: 700, color: '#111' }}>{c.business_name}</div>
-                              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{c.city ?? ''}</div>
                             </div>
-                          </div>
-                        </td>
-                        <td style={{ color: '#6B7280', fontSize: 13 }}>
-                          {(c.profiles as any)?.full_name ?? '—'}
-                          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{(c.profiles as any)?.email ?? ''}</div>
-                        </td>
-                        <td>
-                          <span className="badge" style={{ background: ps.bg, color: ps.color }}>
-                            {ps.label}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: 12, color: '#9CA3AF' }}>
-                          {c.subscription_plan === 'free' ? '—' : expires}
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 700, color: '#F97316', fontSize: 15 }}>
+                          </td>
+
+                          <td style={{ padding: '18px 20px' }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{(c.profiles as any)?.full_name ?? '—'}</div>
+                            <div style={{ fontSize: 12, color: '#9CA3AF' }}>{(c.profiles as any)?.email ?? ''}</div>
+                          </td>
+
+                          <td style={{ padding: '18px 20px' }}>
+                            <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: ps.bg, color: ps.color }}>
+                              {ps.label}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '18px 20px', fontSize: 13, fontWeight: 600, color: '#4B5563' }}>
+                            {c.subscription_plan === 'free' ? '—' : expires}
+                          </td>
+
+                          <td style={{ padding: '18px 20px', fontWeight: 900, fontSize: 15, color: '#F97316' }}>
                             {c.monthly_booking_count ?? 0}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── RENEWALS TAB ── */}
+      {/* Renewals Tab */}
       {tab === 'expiring' && (
         <div>
           {expiringCaterers.length > 0 && (
-            <div style={styles.alertSummary}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
               {expiredCount > 0 && (
-                <span style={styles.alertChipExpired}>{expiredCount} expired</span>
+                <div style={{ background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA', padding: '8px 16px', borderRadius: 12, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={16} /> {expiredCount} Expired Subscriptions
+                </div>
               )}
               {expiringSoonCount > 0 && (
-                <span style={styles.alertChipSoon}>{expiringSoonCount} expiring within 7 days</span>
+                <div style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '8px 16px', borderRadius: 12, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={16} /> {expiringSoonCount} Expiring within 7 days
+                </div>
               )}
             </div>
           )}
 
           {loading ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">⏳</div>
-              <div className="empty-state-sub">Loading...</div>
+            <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <Loader2 size={36} color="#F97316" className="animate-spin" />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Loading renewal queue...</span>
             </div>
           ) : expiringCaterers.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">✅</div>
-              <div className="empty-state-title">No upcoming renewals</div>
-              <div className="empty-state-sub">No paid subscriptions are expiring within the next 7 days.</div>
+            <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', padding: 80, textAlign: 'center', color: '#9CA3AF' }}>
+              <CheckCircle2 size={36} color="#16A34A" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4 }}>No upcoming renewals required</div>
+              <div style={{ fontSize: 14 }}>All active paid subscriptions are secure and up to date.</div>
             </div>
           ) : (
-            <div style={styles.paymentList}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {expiringCaterers.map((c) => {
                 const ps = planStyle(c.subscription_plan);
                 const isExpired = c.daysLeft < 0;
                 return (
-                  <div key={c.id} style={{ ...styles.paymentCard, borderLeft: `4px solid ${isExpired ? '#DC2626' : '#F59E0B'}` }}>
-                    <div style={styles.paymentCardLeft}>
-                      <div style={{ ...styles.planBadgeLg, background: ps.bg }}>
-                        <span style={{ color: ps.color, fontWeight: 900, fontSize: 13 }}>{ps.label}</span>
+                  <div key={c.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E5E7EB', borderLeft: `4px solid ${isExpired ? '#DC2626' : '#F59E0B'}`, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ padding: '8px 14px', borderRadius: 10, background: ps.bg, color: ps.color, fontWeight: 900, fontSize: 13, textAlign: 'center' }}>
+                        {ps.label}
                       </div>
                       <div>
-                        <div style={styles.paymentCatererRow}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                           {c.logo_url ? (
-                            <img src={c.logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', flexShrink: 0, border: '1px solid #E5E7EB' }} />
+                            <img src={c.logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
                           ) : (
-                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3E8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#F97316', fontSize: 12, flexShrink: 0 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3E8', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>
                               {c.business_name.charAt(0)}
                             </div>
                           )}
-                          <div style={styles.paymentCaterer}>{c.business_name}</div>
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#111' }}>{c.business_name}</span>
                         </div>
-                        <div style={styles.paymentMeta}>
-                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-                            {(c.profiles as any)?.email ?? ''}
-                          </span>
-                          {c.subscription_expires_at && (
-                            <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-                              Expires {new Date(c.subscription_expires_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
-                          )}
+                        <div style={{ fontSize: 13, color: '#6B7280', display: 'flex', gap: 12 }}>
+                          <span>{(c.profiles as any)?.email ?? ''}</span>
+                          <span>•</span>
+                          <span>Expires {new Date(c.subscription_expires_at!).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                       </div>
                     </div>
-                    <div style={styles.paymentCardRight}>
-                      <span
-                        className="badge"
-                        style={{
-                          background: isExpired ? '#FEE2E2' : '#FEF3C7',
-                          color: isExpired ? '#991B1B' : '#92400E',
-                        }}
-                      >
-                        {isExpired ? `Expired ${Math.abs(c.daysLeft)}d ago` : c.daysLeft === 0 ? 'Expires today' : `${c.daysLeft}d left`}
+                    <div>
+                      <span style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: isExpired ? '#FEE2E2' : '#FEF3C7', color: isExpired ? '#991B1B' : '#92400E', border: `1px solid ${isExpired ? '#FECACA' : '#FDE68A'}` }}>
+                        {isExpired ? `Expired ${Math.abs(c.daysLeft)} days ago` : c.daysLeft === 0 ? 'Expires today' : `${c.daysLeft} days left`}
                       </span>
                     </div>
                   </div>
@@ -400,77 +420,59 @@ export default function SubscriptionManager() {
         </div>
       )}
 
-      {/* ── PAYMENTS TAB — VIEW ONLY ── */}
+      {/* Payment History Tab */}
       {tab === 'payments' && (
         <div>
-          <div style={styles.autoNotice}>
-            ℹ️ All payments are processed and confirmed automatically through Xendit (GCash). This list is for monitoring only.
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, color: '#1D4ED8', fontSize: 14, fontWeight: 600 }}>
+            <RefreshCw size={18} /> All payments are securely processed and confirmed automatically through Xendit (GCash / Cards). This ledger serves for real-time tracking.
           </div>
 
           {loading ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">⏳</div>
-              <div className="empty-state-sub">Loading payments...</div>
+            <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <Loader2 size={36} color="#F97316" className="animate-spin" />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Loading payment audit trails...</span>
             </div>
           ) : payments.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">📭</div>
-              <div className="empty-state-title">No payments yet</div>
+            <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', padding: 80, textAlign: 'center', color: '#9CA3AF' }}>
+              <CreditCard size={36} color="#D1D5DB" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4 }}>No payment logs found</div>
+              <div style={{ fontSize: 14 }}>Successful transactions will appear here instantly.</div>
             </div>
           ) : (
-            <div style={styles.paymentList}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {payments.map((p) => {
                 const ps = planStyle(p.plan_id);
                 return (
-                  <div key={p.id} style={styles.paymentCard}>
-                    <div style={styles.paymentCardLeft}>
-                      <div style={{ ...styles.planBadgeLg, background: ps.bg }}>
-                        <span style={{ color: ps.color, fontWeight: 900, fontSize: 13 }}>{ps.label}</span>
-                        <span style={{ color: ps.color, fontSize: 15, fontWeight: 900 }}>
-                          ₱{Number(p.amount).toLocaleString()}
-                        </span>
+                  <div key={p.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E5E7EB', padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ padding: '10px 16px', borderRadius: 12, background: ps.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 100 }}>
+                        <span style={{ color: ps.color, fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>{ps.label}</span>
+                        <span style={{ color: ps.color, fontSize: 16, fontWeight: 900 }}>₱{Number(p.amount).toLocaleString()}</span>
                       </div>
                       <div>
-                        <div style={styles.paymentCatererRow}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                           {(p.caterers as any)?.logo_url ? (
-                            <img
-                              src={(p.caterers as any).logo_url}
-                              alt=""
-                              style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', flexShrink: 0, border: '1px solid #E5E7EB' }}
-                            />
+                            <img src={(p.caterers as any).logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
                           ) : (
-                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3E8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#F97316', fontSize: 12, flexShrink: 0 }}>
-                              {(p.caterers as any)?.business_name?.charAt(0) ?? '?'}
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3E8', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>
+                              {(p.caterers as any)?.business_name?.charAt(0) ?? '—'}
                             </div>
                           )}
-                          <div style={styles.paymentCaterer}>
-                            {(p.caterers as any)?.business_name ?? '—'}
-                          </div>
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#111' }}>{(p.caterers as any)?.business_name ?? '—'}</span>
                         </div>
-                        <div style={styles.paymentMeta}>
-                          {p.payment_method && (
-                            <span style={styles.metaChip}>via {p.payment_method}</span>
-                          )}
-                          {p.payment_reference && (
-                            <span style={styles.metaChip}>
-                              Ref: {p.payment_reference.slice(0, 20)}...
-                            </span>
-                          )}
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {p.payment_method && <span style={{ background: '#F3F4F6', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: '#4B5563', fontWeight: 700 }}>via {p.payment_method}</span>}
+                          {p.payment_reference && <span style={{ background: '#F3F4F6', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: '#4B5563', fontWeight: 700, fontFamily: 'monospace' }}>Ref: {p.payment_reference.slice(0, 16)}...</span>}
                           <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-                            {new Date(p.created_at).toLocaleDateString('en-PH', {
-                              month: 'short', day: 'numeric', year: 'numeric',
-                            })}
+                            {new Date(p.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div style={styles.paymentCardRight}>
-                      <span className="badge badge-approved">confirmed</span>
-                      {p.confirmed_at && (
-                        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
-                          {new Date(p.confirmed_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
-                        </div>
-                      )}
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', textTransform: 'uppercase' }}>
+                        Confirmed
+                      </span>
                     </div>
                   </div>
                 );
@@ -482,83 +484,3 @@ export default function SubscriptionManager() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  pageTitle:  { fontSize: 26, fontWeight: 900, color: '#111', marginBottom: 4 },
-  pageSub:    { fontSize: 14, color: '#6B7280' },
-
-  planSummary: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 },
-  planPill: {
-    borderRadius: 14, padding: '18px 16px', border: '1.5px solid',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-    transition: 'all 0.15s', fontFamily: 'inherit',
-  },
-
-  revenueRow: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 },
-  revenueCard: {
-    background: 'white', border: '1px solid #E8EAED', borderRadius: 12,
-    padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 4,
-  },
-  revenueLabel: { fontSize: 12, color: '#6B7280', fontWeight: 600 },
-  revenueValue: { fontSize: 20, fontWeight: 900, color: '#111' },
-
-  autoNotice: {
-    background: '#EFF6FF', border: '1px solid #BFDBFE',
-    borderRadius: 10, padding: '12px 16px',
-    fontSize: 13, color: '#1D4ED8', marginBottom: 16,
-  },
-
-  alertSummary: { display: 'flex', gap: 10, marginBottom: 16 },
-  alertChipExpired: {
-    background: '#FEE2E2', color: '#991B1B', fontWeight: 700, fontSize: 13,
-    padding: '6px 14px', borderRadius: 20,
-  },
-  alertChipSoon: {
-    background: '#FEF3C7', color: '#92400E', fontWeight: 700, fontSize: 13,
-    padding: '6px 14px', borderRadius: 20,
-  },
-
-  tabs:      { display: 'flex', gap: 8, marginBottom: 20 },
-  tab:       { padding: '10px 20px', borderRadius: 10, border: '1.5px solid #E8EAED', background: 'white', fontSize: 13, fontWeight: 700, color: '#6B7280', cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 6 },
-  tabActive: { background: '#111', color: 'white', border: '1.5px solid #111' },
-  tabBadge: { background: '#DC2626', color: 'white', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 900 },
-
-  filterBar: { display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center' },
-  searchInput: {
-    flex: 1, maxWidth: 360, padding: '9px 14px', borderRadius: 8,
-    border: '1px solid #E8EAED', fontSize: 13, outline: 'none',
-  },
-  planFilterSelect: {
-    padding: '9px 14px', borderRadius: 8, border: '1px solid #E8EAED',
-    fontSize: 13, cursor: 'pointer', background: 'white', outline: 'none', fontWeight: 600,
-  },
-  clearFilterBtn: {
-    padding: '9px 14px', borderRadius: 8, border: '1px solid #E8EAED',
-    fontSize: 13, cursor: 'pointer', background: '#F3F4F6', color: '#6B7280', fontWeight: 700,
-  },
-
-  paymentList: { display: 'flex', flexDirection: 'column', gap: 12 },
-  paymentCard: {
-    background: 'white', borderRadius: 14, border: '1px solid #E8EAED',
-    padding: '18px 22px', display: 'flex', justifyContent: 'space-between',
-    alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-    transition: 'box-shadow 0.15s',
-  },
-  paymentCardLeft:  { display: 'flex', alignItems: 'center', gap: 16 },
-  paymentCardRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end' },
-  paymentCatererRow:{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 },
-
-  planBadgeLg: {
-    borderRadius: 12, padding: '12px 16px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    minWidth: 110, gap: 2,
-  },
-
-  paymentCaterer: { fontSize: 15, fontWeight: 800, color: '#111' },
-  paymentMeta:    { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
-  metaChip: {
-    background: '#F3F4F6', borderRadius: 6, padding: '2px 8px',
-    fontSize: 11, color: '#6B7280', fontWeight: 600,
-  },
-};

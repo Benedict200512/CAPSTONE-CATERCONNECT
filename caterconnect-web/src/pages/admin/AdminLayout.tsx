@@ -8,7 +8,7 @@ export default function AdminLayout() {
       <main style={{
         flex: 1, marginLeft: 'var(--sidebar-w)',
         padding: '32px 36px', minHeight: '100vh',
-        background: '#F4F6F9',
+        background: '#FAF8F5',
       }}>
         <Outlet />
       </main>

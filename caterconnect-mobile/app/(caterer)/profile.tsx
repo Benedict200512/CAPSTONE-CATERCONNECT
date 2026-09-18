@@ -1,43 +1,33 @@
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import SubscriptionScreen from '@/screens/auth/SubscriptionScreen';
-
-const ICONS = {
-  hourglass: require('../../assets/icons/hourglass.png'),
-  checkSuccess: require('../../assets/icons/check_success.png'),
-  rejected: require('../../assets/icons/rejected.png'),
-  draft: require('../../assets/icons/draft.png'),
-  pencil: require('../../assets/icons/pencil.png'),
-  card: require('../../assets/icons/card.png'),
-  chat: require('../../assets/icons/chat.png'),
-  bell: require('../../assets/icons/bell.png'),
-  siren: require('../../assets/icons/siren.png'),
-  plate: require('../../assets/icons/plate.png'),
-  chevronRight: require('../../assets/icons/chevron_right.png'),
-};
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
+import SubscriptionScreen from '../../screens/auth/SubscriptionScreen';
+import { 
+  Hourglass, CheckCircle2, XCircle, FileEdit, 
+  CreditCard, MessageCircle, 
+  Bell, AlertTriangle, UtensilsCrossed, ChevronRight,
+  LogOut, Camera, Edit3, Building2, MapPin, AlertCircle
+} from 'lucide-react-native';
 
 type VerificationStatus = 'pending' | 'approved' | 'rejected' | 'unsubmitted' | null;
 
-const VERIFICATION_DISPLAY: Record<string, { label: string; icon: any }> = {
-  pending: { label: 'Pending Review', icon: ICONS.hourglass },
-  approved: { label: 'Verified', icon: ICONS.checkSuccess },
-  rejected: { label: 'Rejected', icon: ICONS.rejected },
-  unsubmitted: { label: 'Not Submitted', icon: ICONS.draft },
+const VERIFICATION_DISPLAY: Record<string, { label: string; icon: any; color: string }> = {
+  pending: { label: 'Pending Review', icon: Hourglass, color: Colors.orange },
+  approved: { label: 'Verified Caterer', icon: CheckCircle2, color: Colors.success },
+  rejected: { label: 'Rejected', icon: XCircle, color: Colors.error },
+  unsubmitted: { label: 'Not Submitted', icon: FileEdit, color: Colors.textMuted },
 };
 
 export default function CatererProfile() {
-  const { profile, session } = useAuth();
+  const { profile, session, catererData } = useAuth();
   const router = useRouter();
-  const initial = (profile?.full_name ?? 'C').charAt(0).toUpperCase();
 
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [showSubscription, setShowSubscription] = useState(false);
-  const [logoutPressed, setLogoutPressed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
@@ -65,13 +55,39 @@ export default function CatererProfile() {
   }, [session?.user?.id]);
 
   const verification = VERIFICATION_DISPLAY[verificationStatus ?? 'unsubmitted'];
+  const isVerified = verificationStatus === 'approved';
+  const needsProfileCompletion = !isVerified;
+  
+  const displayName = isVerified && catererData?.business_name 
+    ? catererData.business_name 
+    : profile?.full_name ?? 'No name';
+  const initial = displayName.charAt(0).toUpperCase();
 
   const menuItems = [
-    { icon: ICONS.pencil, label: 'Complete Business Profile', sub: 'Add logo, description, contact info', onPress: () => router.push('/(caterer)/edit-profile') },
-    { icon: ICONS.card, label: 'Subscription Plan', sub: 'View and upgrade your current plan', onPress: () => setShowSubscription(true) },
-    { icon: ICONS.chat, label: 'Consultations', sub: 'Get help from platform staff', onPress: () => router.push('/(caterer)/consultation') },
-    { icon: ICONS.bell, label: 'Notifications', sub: 'Manage notification preferences', onPress: () => router.push('/(caterer)/notifications') },
-    { icon: ICONS.siren, label: 'File a Complaint', sub: 'Report issues with customers or platform', onPress: () => router.push('/(caterer)/complaints') },
+    { 
+      icon: CreditCard, 
+      label: 'Subscription Plan', 
+      sub: 'View and upgrade your current plan', 
+      onPress: () => setShowSubscription(true) 
+    },
+    { 
+      icon: MessageCircle, 
+      label: 'Consultations', 
+      sub: 'Get help from platform staff', 
+      onPress: () => router.push('/(caterer)/consultation') 
+    },
+    { 
+      icon: Bell, 
+      label: 'Notifications', 
+      sub: 'Manage notification preferences', 
+      onPress: () => router.push('/(caterer)/notifications') 
+    },
+    { 
+      icon: AlertTriangle, 
+      label: 'File a Complaint', 
+      sub: 'Report issues with customers or platform', 
+      onPress: () => router.push('/(caterer)/complaints') 
+    },
   ];
 
   async function handleLogout() {
@@ -81,89 +97,170 @@ export default function CatererProfile() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      {/* Consistent Decorative Background Blobs */}
+      <View style={styles.backgroundBlobTop} />
+      <View style={styles.backgroundBlobMid} />
+      <View style={styles.backgroundBlobBottom} />
+
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}
+        contentContainerStyle={{ paddingBottom: 60, zIndex: 1 }}
         showsVerticalScrollIndicator={false}
       >
         <Modal visible={showSubscription} animationType="slide" presentationStyle="pageSheet">
           <SubscriptionScreen onClose={() => setShowSubscription(false)} />
         </Modal>
 
-        <Text style={styles.pageTitle}>Business Profile</Text>
-
-        <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
-          <Text style={styles.name}>{profile?.full_name ?? 'No name'}</Text>
-          <Text style={styles.email}>{session?.user?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Image source={ICONS.plate} style={styles.iconRoleBadge} />
-            <Text style={styles.roleText}>Caterer Account</Text>
-          </View>
+        {/* Header Title */}
+        <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
+          <Text style={styles.pageTitle}>Business Profile</Text>
         </View>
 
-        <View style={styles.card}>
-          {[
-            { label: 'Full Name', value: profile?.full_name ?? '—' },
-            { label: 'Email', value: session?.user?.email ?? '—' },
-            { label: 'Role', value: 'Caterer' },
-          ].map((row) => (
-            <View key={row.label}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{row.label}</Text>
-                <Text style={styles.infoValue} numberOfLines={1}>{row.value}</Text>
+        {/* Cover Photo & Hero Section */}
+        <View style={styles.mediaContainer}>
+          <View style={styles.coverWrap}>
+            {catererData?.cover_photo_url ? (
+              <Image source={{ uri: catererData.cover_photo_url }} style={styles.coverPhoto} resizeMode="cover" />
+            ) : (
+              <View style={styles.coverPlaceholder}>
+                <UtensilsCrossed size={32} color={Colors.textMuted} />
               </View>
-              <View style={styles.divider} />
+            )}
+            <TouchableOpacity 
+              style={styles.coverEditBtn}
+              onPress={() => router.push('/(caterer)/edit-profile')}
+              activeOpacity={0.8}
+            >
+              <Camera size={14} color={Colors.white} />
+              <Text style={styles.coverEditText}>Edit Cover</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Logo & Info Header */}
+          <View style={styles.profileHeaderRow}>
+            <View style={styles.logoWrap}>
+              {catererData?.logo_url ? (
+                <Image source={{ uri: catererData.logo_url }} style={styles.logoImage} />
+              ) : (
+                <Text style={styles.logoText}>{initial}</Text>
+              )}
             </View>
-          ))}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Verification</Text>
-            <View style={styles.verificationValueRow}>
-              {!loadingStatus && <Image source={verification.icon} style={styles.iconVerification} />}
-              <Text style={styles.verificationValueText} numberOfLines={1}>
-                {loadingStatus ? 'Loading…' : verification.label}
-              </Text>
+
+            <View style={styles.profileInfoMeta}>
+              <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+              
+              <View style={styles.badgeRow}>
+                {!loadingStatus && <verification.icon size={14} color={verification.color} />}
+                <Text style={[styles.badgeText, { color: verification.color }]}>
+                  {loadingStatus ? 'Loading...' : verification.label}
+                </Text>
+              </View>
+
+              <View style={styles.subMetaRow}>
+                <MapPin size={13} color={Colors.textSecondary} />
+                <Text style={styles.subMetaText} numberOfLines={1}>
+                  {catererData?.city || catererData?.address || 'Cebu City, Cebu'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>BUSINESS & SUPPORT</Text>
-        <View style={styles.menuCard}>
-          {menuItems.map((item, i) => (
-            <View key={item.label}>
-              <TouchableOpacity style={styles.menuRow} onPress={item.onPress} activeOpacity={0.7}>
-                <View style={styles.menuIconWrap}>
-                  <Image source={item.icon} style={styles.menuIcon} />
-                </View>
-                <View style={styles.menuBody}>
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                  <Text style={styles.menuSub}>{item.sub}</Text>
-                </View>
-                <Image source={ICONS.chevronRight} style={styles.menuArrow} />
+        <View style={styles.contentBody}>
+          {/* Action Required Banner for Unverified Caterers */}
+          {needsProfileCompletion && (
+            <TouchableOpacity 
+              style={styles.actionBanner}
+              onPress={() => router.push('/(caterer)/edit-profile')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.actionBannerIconWrap}>
+                <AlertCircle size={22} color={Colors.orange} />
+              </View>
+              <View style={styles.actionBannerTextWrap}>
+                <Text style={styles.actionBannerTitle}>Complete Your Business Profile</Text>
+                <Text style={styles.actionBannerSub}>Submit your business details and required permits to get verified.</Text>
+              </View>
+              <ChevronRight size={18} color={Colors.orange} />
+            </TouchableOpacity>
+          )}
+
+          {/* Business Information Card */}
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.cardHeaderLeft}>
+                <Building2 size={18} color={Colors.orange} />
+                <Text style={styles.cardTitle}>Business Information</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.editIconBtn}
+                onPress={() => router.push('/(caterer)/edit-profile')}
+                activeOpacity={0.7}
+              >
+                <Edit3 size={16} color={Colors.orange} />
               </TouchableOpacity>
-              {i < menuItems.length - 1 && <View style={styles.divider} />}
             </View>
-          ))}
+
+            <View style={styles.divider} />
+
+            {[
+              { label: 'Business Name', value: displayName },
+              { label: 'Owner Name', value: profile?.full_name ?? '—' },
+              { label: 'Email', value: session?.user?.email ?? '—' },
+              { label: 'Phone', value: catererData?.contact_phone ?? (profile as any)?.phone_number ?? '—' },
+              { label: 'Location', value: catererData?.city ?? '—' },
+              { label: 'Address', value: catererData?.address ?? '—' },
+            ].map((row, idx, arr) => (
+              <View key={row.label}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{row.label}</Text>
+                  <Text style={styles.infoValue} numberOfLines={1}>{row.value}</Text>
+                </View>
+                {idx < arr.length - 1 && <View style={styles.innerDivider} />}
+              </View>
+            ))}
+          </View>
+
+          {/* Business & Support Menu */}
+          <Text style={styles.sectionLabel}>BUSINESS & SUPPORT</Text>
+          <View style={styles.menuCard}>
+            {menuItems.map((item, i) => (
+              <View key={item.label}>
+                <TouchableOpacity 
+                  style={styles.menuRow} 
+                  onPress={item.onPress} 
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.menuIconWrap}>
+                    <item.icon size={20} color={Colors.orange} />
+                  </View>
+                  <View style={styles.menuBody}>
+                    <Text style={styles.menuLabel}>{item.label}</Text>
+                    <Text style={styles.menuSub}>{item.sub}</Text>
+                  </View>
+                  <ChevronRight size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
+                {i < menuItems.length - 1 && <View style={styles.innerDivider} />}
+              </View>
+            ))}
+          </View>
+
+          {/* Log Out Button */}
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={() => setShowLogoutConfirm(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.logoutIconWrap}>
+              <LogOut size={16} color={Colors.error} />
+            </View>
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={[styles.logoutBtn, logoutPressed && styles.logoutBtnPressed]}
-          onPress={() => setShowLogoutConfirm(true)}
-          onPressIn={() => setLogoutPressed(true)}
-          onPressOut={() => setLogoutPressed(false)}
-          activeOpacity={1}
-        >
-          <Text style={[styles.logoutText, logoutPressed && styles.logoutTextPressed]}>
-            Log Out
-          </Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 32 }} />
       </ScrollView>
 
+      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmBox}>
@@ -195,93 +292,180 @@ export default function CatererProfile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  content: { padding: 20, paddingBottom: 40 },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, marginBottom: 24 },
-  avatarSection: { alignItems: 'center', marginBottom: 24 },
-  avatar: {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: Colors.orange,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 14,
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+  container: { flex: 1, backgroundColor: 'transparent' },
+  
+  // Consistent Decorative Background Blobs
+  backgroundBlobTop: {
+    position: 'absolute',
+    top: -50,
+    right: -70,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#FED7AA',
+    opacity: 0.4,
+    zIndex: 0,
   },
-  avatarText: { color: Colors.white, fontSize: 36, fontWeight: '900' },
-  name: { fontSize: 22, fontWeight: '800', color: Colors.black, marginBottom: 4 },
-  email: { fontSize: 13, color: Colors.textSecondary, marginBottom: 10 },
-  roleBadge: {
+  backgroundBlobMid: {
+    position: 'absolute',
+    top: 360,
+    left: -90,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: '#FED7AA',
+    opacity: 0.35,
+    zIndex: 0,
+  },
+  backgroundBlobBottom: {
+    position: 'absolute',
+    bottom: 50,
+    right: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#FED7AA',
+    opacity: 0.3,
+    zIndex: 0,
+  },
+
+  header: { paddingHorizontal: 24, paddingBottom: 16, backgroundColor: Colors.white },
+  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+
+  mediaContainer: { backgroundColor: Colors.white, paddingBottom: 20, marginBottom: 16 },
+  coverWrap: { width: '100%', height: 160, position: 'relative', backgroundColor: '#E2E8F0' },
+  coverPhoto: { width: '100%', height: '100%' },
+  coverPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  coverEditBtn: {
+    position: 'absolute', bottom: 12, right: 16,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.orangeLight, paddingHorizontal: 16,
-    paddingVertical: 6, borderRadius: 20,
-    borderWidth: 1, borderColor: '#FFB26B',
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6,
   },
-  iconRoleBadge: { width: 14, height: 14 },
-  roleText: { color: Colors.orange, fontWeight: '800', fontSize: 13 },
+  coverEditText: { color: Colors.white, fontSize: 11, fontWeight: '700' },
+
+  profileHeaderRow: { 
+    flexDirection: 'row', paddingHorizontal: 24, 
+    alignItems: 'center', marginTop: 16, gap: 16 
+  },
+  logoWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: Colors.orange,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 4, borderColor: Colors.white,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+    overflow: 'hidden',
+  },
+  logoImage: { width: '100%', height: '100%', borderRadius: 36 },
+  logoText: { color: Colors.white, fontSize: 32, fontWeight: '900' },
+
+  profileInfoMeta: { flex: 1 },
+  name: { fontSize: 18, fontWeight: '800', color: Colors.black, marginBottom: 4, letterSpacing: -0.5 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+  badgeText: { fontSize: 12, fontWeight: '700' },
+  subMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  subMetaText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
+
+  contentBody: { paddingHorizontal: 20 },
+  
+  actionBanner: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF7ED',
+    borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#FED7AA',
+    gap: 12, shadowColor: Colors.orange, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2
+  },
+  actionBannerIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFEDD5', justifyContent: 'center', alignItems: 'center' },
+  actionBannerTextWrap: { flex: 1 },
+  actionBannerTitle: { fontSize: 14, fontWeight: '800', color: '#9A3412', marginBottom: 2 },
+  actionBannerSub: { fontSize: 12, color: '#C2410C', lineHeight: 16 },
+
   card: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: '#F1F5F9',
     marginBottom: 24, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02, shadowRadius: 8, elevation: 1,
   },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
-  infoLabel: { fontSize: 13, color: Colors.textSecondary },
-  infoValue: { fontSize: 13, color: Colors.black, fontWeight: '700', maxWidth: '55%', textAlign: 'right' },
-  verificationValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' },
-  verificationValueText: { fontSize: 13, color: Colors.black, fontWeight: '700', textAlign: 'right', flexShrink: 1 },
-  iconVerification: { width: 15, height: 15, flexShrink: 0 },
-  divider: { height: 1, backgroundColor: Colors.divider, marginHorizontal: 16 },
-  sectionLabel: { fontSize: 11, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.5, marginBottom: 10 },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18 },
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cardTitle: { fontSize: 15, fontWeight: '800', color: Colors.black },
+  editIconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center' },
+
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 14 },
+  infoLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  infoValue: { fontSize: 13, color: Colors.black, fontWeight: '700', maxWidth: '60%', textAlign: 'right' },
+  divider: { height: 1, backgroundColor: '#F1F5F9' },
+  innerDivider: { height: 1, backgroundColor: '#F8FAFC', marginHorizontal: 18 },
+
+  sectionLabel: { fontSize: 12, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.5, marginBottom: 12, marginLeft: 4 },
   menuCard: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    marginBottom: 20, overflow: 'hidden',
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: '#F1F5F9',
+    marginBottom: 24, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02, shadowRadius: 8, elevation: 1,
   },
-  menuRow: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', padding: 18, gap: 16 },
   menuIconWrap: {
-    width: 42, height: 42, borderRadius: 12,
-    backgroundColor: Colors.orangeLight,
+    width: 42, height: 42, borderRadius: 14,
+    backgroundColor: '#FFF7ED',
     justifyContent: 'center', alignItems: 'center',
   },
-  menuIcon: { width: 21, height: 21 },
   menuBody: { flex: 1 },
-  menuLabel: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 2 },
+  menuLabel: { fontSize: 14, fontWeight: '700', color: Colors.black, marginBottom: 2 },
   menuSub: { fontSize: 12, color: Colors.textSecondary },
-  menuArrow: { width: 16, height: 16 },
 
   logoutBtn: {
-    borderWidth: 2, borderColor: Colors.error,
-    borderRadius: 12, padding: 14, alignItems: 'center',
-    backgroundColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 10,
+    marginBottom: 20,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  logoutBtnPressed: {
-    backgroundColor: '#FFF0F0',
-    borderColor: Colors.error,
+  logoutIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  logoutText: { color: Colors.error, fontWeight: '800', fontSize: 15 },
-  logoutTextPressed: { color: Colors.error, opacity: 0.75 },
+  logoutText: { color: Colors.error, fontWeight: '700', fontSize: 14 },
 
   confirmOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center', alignItems: 'center',
-    zIndex: 999, paddingHorizontal: 28,
+    zIndex: 999, paddingHorizontal: 24,
   },
   confirmBox: {
-    backgroundColor: Colors.white, borderRadius: 20,
-    padding: 28, width: '100%',
+    backgroundColor: Colors.white, borderRadius: 24,
+    padding: 32, width: '100%',
     shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2, shadowRadius: 24, elevation: 14,
   },
-  confirmTitle: { fontSize: 20, fontWeight: '900', color: Colors.black, marginBottom: 8 },
-  confirmSub: { fontSize: 14, color: Colors.textSecondary, lineHeight: 21, marginBottom: 24 },
+  confirmTitle: { fontSize: 22, fontWeight: '900', color: Colors.black, marginBottom: 12, letterSpacing: -0.5 },
+  confirmSub: { fontSize: 15, color: Colors.textSecondary, lineHeight: 22, marginBottom: 28 },
   confirmActions: { flexDirection: 'row', gap: 12 },
   confirmCancel: {
-    flex: 1, borderWidth: 2, borderColor: Colors.border,
-    borderRadius: 12, padding: 13, alignItems: 'center',
+    flex: 1, borderWidth: 2, borderColor: '#F1F5F9',
+    borderRadius: 14, padding: 14, alignItems: 'center',
   },
   confirmCancelText: { color: Colors.black, fontWeight: '700', fontSize: 15 },
   confirmLogout: {
     flex: 1, backgroundColor: Colors.error,
-    borderRadius: 12, padding: 13, alignItems: 'center',
+    borderRadius: 14, padding: 14, alignItems: 'center',
   },
   confirmLogoutText: { color: Colors.white, fontWeight: '800', fontSize: 15 },
 });

@@ -10,6 +10,11 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { pickAndUpload } from '../../lib/storage';
 import * as ImagePicker from 'expo-image-picker';
+import { 
+  Building2, ShieldCheck, IdCard, ClipboardType, 
+  MapPin, Camera, ImageIcon, FileText, Info, ChevronLeft,
+  UploadCloud
+} from 'lucide-react-native';
 
 type CatererDoc = {
   id: string;
@@ -20,25 +25,26 @@ type CatererDoc = {
 };
 
 const REQUIRED_DOCS = [
-  { type: 'business_permit',       label: 'Business Permit',                    icon: '🏢' },
-  { type: 'sanitary_permit',       label: 'Sanitary Permit',                    icon: '🧪' },
-  { type: 'government_id',         label: 'Government-issued ID',               icon: '🪪' },
-  { type: 'business_registration', label: 'Business Registration Certificate',  icon: '📋' },
-  { type: 'proof_of_address',      label: 'Proof of Address',                   icon: '🏠' },
+  { type: 'business_permit',       label: 'Business Permit',                    icon: Building2 },
+  { type: 'sanitary_permit',       label: 'Sanitary Permit',                    icon: ShieldCheck },
+  { type: 'government_id',         label: 'Government-issued ID',               icon: IdCard },
+  { type: 'business_registration', label: 'Business Registration Certificate', icon: ClipboardType },
+  { type: 'proof_of_address',      label: 'Proof of Address',                   icon: MapPin },
 ];
 
 export default function CatererEditProfile() {
   const { profile, catererData, session, reloadProfile } = useAuth();
   const router = useRouter();
 
+  // Fallback checks profiles table first, then catererData
   const [fullName, setFullName]         = useState(profile?.full_name ?? '');
   const [phone, setPhone]               = useState((profile as any)?.phone_number ?? '');
-  const [businessName, setBusinessName] = useState(catererData?.business_name ?? '');
+  const [businessName, setBusinessName] = useState(catererData?.business_name ?? (profile as any)?.business_name ?? '');
   const [description, setDescription]   = useState(catererData?.business_description ?? '');
-  const [city, setCity]                 = useState(catererData?.city ?? '');
-  const [contactPhone, setContactPhone] = useState(catererData?.contact_phone ?? '');
-  const [contactEmail, setContactEmail] = useState(catererData?.contact_email ?? '');
-  const [address, setAddress]           = useState(catererData?.address ?? '');
+  const [city, setCity]                 = useState(catererData?.city ?? (profile as any)?.city ?? '');
+  const [contactPhone, setContactPhone] = useState(catererData?.contact_phone ?? (profile as any)?.phone_number ?? '');
+  const [contactEmail, setContactEmail] = useState(catererData?.contact_email ?? profile?.email ?? '');
+  const [address, setAddress]           = useState(catererData?.address ?? (profile as any)?.address ?? '');
   const [downpayment, setDownpayment]   = useState(String(catererData?.downpayment_percent ?? '25'));
   const [logoUrl, setLogoUrl]           = useState(catererData?.logo_url ?? '');
   const [coverUrl, setCoverUrl]         = useState(catererData?.cover_photo_url ?? '');
@@ -52,12 +58,12 @@ export default function CatererEditProfile() {
   useEffect(() => {
     setFullName(profile?.full_name ?? '');
     setPhone((profile as any)?.phone_number ?? '');
-    setBusinessName(catererData?.business_name ?? '');
+    setBusinessName(catererData?.business_name ?? (profile as any)?.business_name ?? '');
     setDescription(catererData?.business_description ?? '');
-    setCity(catererData?.city ?? '');
-    setContactPhone(catererData?.contact_phone ?? '');
-    setContactEmail(catererData?.contact_email ?? '');
-    setAddress(catererData?.address ?? '');
+    setCity(catererData?.city ?? (profile as any)?.city ?? '');
+    setContactPhone(catererData?.contact_phone ?? (profile as any)?.phone_number ?? '');
+    setContactEmail(catererData?.contact_email ?? profile?.email ?? '');
+    setAddress(catererData?.address ?? (profile as any)?.address ?? '');
     setDownpayment(String(catererData?.downpayment_percent ?? '25'));
     setLogoUrl(catererData?.logo_url ?? '');
     setCoverUrl(catererData?.cover_photo_url ?? '');
@@ -78,6 +84,7 @@ export default function CatererEditProfile() {
     const { data, error } = await supabase.from('caterers').insert({
       user_id: session.user.id,
       business_name: businessName.trim(),
+      city: city.trim() || null,
       verification_status: 'pending',
     }).select('id').single();
     if (error) { Alert.alert('Error', error.message); return null; }
@@ -135,7 +142,6 @@ export default function CatererEditProfile() {
 
     try {
       setUploadingDoc(docType);
-
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Please allow access to your photos to upload documents.');
@@ -212,9 +218,12 @@ export default function CatererEditProfile() {
     if (!businessName.trim()) { Alert.alert('Required', 'Business name is required.'); return; }
     setSaving(true);
 
+    // Update profiles table
     await supabase.from('profiles').update({
-      full_name:    fullName.trim() || profile?.full_name,
-      phone_number: phone.trim() || null,
+      full_name:     fullName.trim() || profile?.full_name,
+      phone_number:  phone.trim() || null,
+      business_name: businessName.trim() || null,
+      city:          city.trim() || null,
     }).eq('id', session.user.id);
 
     const catererId = catererData?.id ?? null;
@@ -253,77 +262,55 @@ export default function CatererEditProfile() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: 48 }}
+      contentContainerStyle={{ paddingBottom: 60 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <ChevronLeft size={22} color={Colors.black} />
         </TouchableOpacity>
-        <Text style={styles.pageTitle}>Business Profile</Text>
-        <Text style={styles.pageSub}>Manage your caterer profile and photos</Text>
+        <View style={styles.headerTextWrap}>
+          <Text style={styles.pageTitle}>Business Profile</Text>
+          <Text style={styles.pageSub}>Manage your catering details and verification</Text>
+        </View>
       </View>
 
-      <View style={styles.coverWrap}>
-        {coverUrl ? (
-          <Image
-            source={{ uri: coverUrl }}
-            style={styles.coverPhoto}
-            resizeMode="cover"
-            onError={() => setCoverUrl('')}
-          />
-        ) : (
-          <View style={styles.coverPlaceholder}>
-            <Text style={styles.coverPlaceholderText}>🏞️ Cover Photo</Text>
-            <Text style={styles.coverPlaceholderSub}>16:9 ratio recommended</Text>
-          </View>
-        )}
-        <TouchableOpacity
-          style={styles.coverEditBtn}
-          onPress={handlePickCover}
-          disabled={uploadingCover}
-        >
-          {uploadingCover
-            ? <ActivityIndicator size="small" color={Colors.white} />
-            : <Text style={styles.coverEditText}>📷 Change Cover</Text>
-          }
-        </TouchableOpacity>
-      </View>
+      {/* Top Cover & Logo Section */}
+      <View style={styles.mediaContainer}>
+        <View style={styles.coverWrap}>
+          {coverUrl ? (
+            <Image source={{ uri: coverUrl }} style={styles.coverPhoto} resizeMode="cover" onError={() => setCoverUrl('')} />
+          ) : (
+            <View style={styles.coverPlaceholder}>
+              <ImageIcon size={32} color={Colors.textMuted} />
+              <Text style={styles.coverPlaceholderSub}>16:9 Cover Photo</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.coverEditBtn} onPress={handlePickCover} disabled={uploadingCover}>
+            {uploadingCover ? <ActivityIndicator size="small" color={Colors.white} /> : (
+              <>
+                <Camera size={14} color={Colors.white} />
+                <Text style={styles.coverEditText}>Edit Cover</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      {/* Logo */}
-      <View style={styles.logoSection}>
         <View style={styles.logoWrap}>
           {logoUrl ? (
-            <Image
-              source={{ uri: logoUrl }}
-              style={styles.logo}
-              onError={() => setLogoUrl('')}
-            />
+            <Image source={{ uri: logoUrl }} style={styles.logo} onError={() => setLogoUrl('')} />
           ) : (
             <View style={styles.logoPlaceholder}>
               <Text style={styles.logoInitial}>{initial}</Text>
             </View>
           )}
-          <TouchableOpacity
-            style={styles.logoEditBtn}
-            onPress={handlePickLogo}
-            disabled={uploadingLogo}
-          >
-            {uploadingLogo
-              ? <ActivityIndicator size="small" color={Colors.white} />
-              : <Text style={styles.logoEditIcon}>📷</Text>
-            }
+          <TouchableOpacity style={styles.logoEditBtn} onPress={handlePickLogo} disabled={uploadingLogo}>
+            {uploadingLogo ? <ActivityIndicator size="small" color={Colors.black} /> : <Camera size={16} color={Colors.black} />}
           </TouchableOpacity>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.logoLabel}>Business Logo</Text>
-          <Text style={styles.logoHint}>Square image recommended</Text>
         </View>
       </View>
 
       <View style={styles.formSection}>
-
         <Text style={styles.sectionTitle}>BUSINESS INFORMATION</Text>
         <View style={styles.card}>
           {[
@@ -425,35 +412,23 @@ export default function CatererEditProfile() {
         </View>
 
         <Text style={styles.sectionTitle}>BUSINESS DOCUMENTS</Text>
-
         <View style={styles.docProgressCard}>
           <View style={styles.docProgressTop}>
-            <Text style={styles.docProgressLabel}>Documents Submitted</Text>
-            <Text style={[
-              styles.docProgressCount,
-              { color: uploadedCount === REQUIRED_DOCS.length ? Colors.success : Colors.orange }
-            ]}>
+            <Text style={styles.docProgressLabel}>Verification Progress</Text>
+            <Text style={[styles.docProgressCount, { color: uploadedCount === REQUIRED_DOCS.length ? Colors.success : Colors.orange }]}>
               {uploadedCount}/{REQUIRED_DOCS.length}
             </Text>
           </View>
           <View style={styles.docProgressBarBg}>
             <View style={[
               styles.docProgressBarFill,
-              {
-                width: `${(uploadedCount / REQUIRED_DOCS.length) * 100}%` as any,
-                backgroundColor: uploadedCount === REQUIRED_DOCS.length ? Colors.success : Colors.orange,
-              }
+              { width: `${(uploadedCount / REQUIRED_DOCS.length) * 100}%` as any, backgroundColor: uploadedCount === REQUIRED_DOCS.length ? Colors.success : Colors.orange }
             ]} />
           </View>
-          {uploadedCount < REQUIRED_DOCS.length && (
-            <Text style={styles.docProgressNote}>
-              Upload all documents to complete your verification application.
-            </Text>
-          )}
-          {uploadedCount === REQUIRED_DOCS.length && (
-            <Text style={[styles.docProgressNote, { color: Colors.success }]}>
-              All documents uploaded! Submit for verification in your profile.
-            </Text>
+          {uploadedCount < REQUIRED_DOCS.length ? (
+            <Text style={styles.docProgressNote}>Upload all required documents below to submit your profile for platform verification.</Text>
+          ) : (
+            <Text style={[styles.docProgressNote, { color: Colors.success, fontWeight: '600' }]}>All documents uploaded. Your profile is ready for review.</Text>
           )}
         </View>
 
@@ -465,11 +440,8 @@ export default function CatererEditProfile() {
             return (
               <View key={doc.type}>
                 <View style={styles.docRow}>
-                  <View style={[
-                    styles.docIconWrap,
-                    { backgroundColor: uploaded ? '#DCFCE7' : Colors.bgInput }
-                  ]}>
-                    <Text style={styles.docIcon}>{doc.icon}</Text>
+                  <View style={[styles.docIconWrap, { backgroundColor: uploaded ? '#DCFCE7' : '#F1F5F9' }]}>
+                    <doc.icon size={22} color={uploaded ? Colors.success : Colors.textSecondary} />
                   </View>
 
                   <View style={styles.docInfo}>
@@ -482,15 +454,9 @@ export default function CatererEditProfile() {
                         ]} />
                         <Text style={[
                           styles.docStatusText,
-                          {
-                            color: uploaded.status === 'approved' ? Colors.success
-                              : uploaded.status === 'rejected' ? Colors.error
-                              : Colors.orange
-                          }
+                          { color: uploaded.status === 'approved' ? Colors.success : uploaded.status === 'rejected' ? Colors.error : Colors.orange }
                         ]}>
-                          {uploaded.status === 'approved' ? 'Approved'
-                            : uploaded.status === 'rejected' ? 'Rejected'
-                            : 'Pending review'}
+                          {uploaded.status === 'approved' ? 'Approved' : uploaded.status === 'rejected' ? 'Rejected' : 'Pending review'}
                         </Text>
                       </View>
                     ) : (
@@ -508,25 +474,22 @@ export default function CatererEditProfile() {
                     disabled={isUploading || uploadingDoc !== null}
                   >
                     {isUploading ? (
-                      <ActivityIndicator size="small" color={Colors.white} />
+                      <ActivityIndicator size="small" color={uploaded ? Colors.black : Colors.white} />
                     ) : (
-                      <Text style={[
-                        styles.docUploadBtnText,
-                        uploaded && styles.docUploadBtnTextUploaded,
-                      ]}>
-                        {uploaded ? 'Re-upload' : 'Upload'}
-                      </Text>
+                      <>
+                        <UploadCloud size={14} color={uploaded ? Colors.textSecondary : Colors.white} style={{ marginRight: 4 }} />
+                        <Text style={[styles.docUploadBtnText, uploaded && styles.docUploadBtnTextUploaded]}>
+                          {uploaded ? 'Replace' : 'Upload'}
+                        </Text>
+                      </>
                     )}
                   </TouchableOpacity>
                 </View>
 
-                {/* File name preview if uploaded */}
                 {uploaded?.file_name && (
                   <View style={styles.docFileName}>
-                    <Text style={styles.docFileIcon}>📄</Text>
-                    <Text style={styles.docFileNameText} numberOfLines={1}>
-                      {uploaded.file_name}
-                    </Text>
+                    <FileText size={12} color={Colors.textMuted} />
+                    <Text style={styles.docFileNameText} numberOfLines={1}>{uploaded.file_name}</Text>
                   </View>
                 )}
 
@@ -537,21 +500,14 @@ export default function CatererEditProfile() {
         </View>
 
         <View style={styles.infoBox}>
+          <Info size={20} color="#1D4ED8" style={{ marginTop: 2 }} />
           <Text style={styles.infoBoxText}>
-            ℹ️ All documents are reviewed by our staff before your account is verified. Accepted formats: JPG, PNG. Make sure documents are clear and legible.
+            All documents are manually reviewed by our staff. Accepted formats: JPG, PNG. Please ensure your images are bright and text is legible.
           </Text>
         </View>
 
-        {/* Save */}
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.65 }]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving
-            ? <ActivityIndicator color={Colors.white} />
-            : <Text style={styles.saveBtnText}>Save Business Profile</Text>
-          }
+        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={handleSave} disabled={saving}>
+          {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>Save Business Profile</Text>}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -559,108 +515,99 @@ export default function CatererEditProfile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  header:    { paddingHorizontal: 20, paddingBottom: 16 },
-  backBtn:   { marginBottom: 8 },
-  backText:  { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, marginBottom: 4 },
-  pageSub:   { fontSize: 13, color: Colors.textSecondary },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { 
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, 
+    paddingBottom: 20, backgroundColor: Colors.white, zIndex: 10 
+  },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  headerTextWrap: { flex: 1 },
+  pageTitle: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
+  pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
 
-  coverWrap: { width: '100%', height: 190, position: 'relative', backgroundColor: '#1A1A1A' },
-  coverPhoto: { width: '100%', height: 190 },
-  coverPlaceholder: { width: '100%', height: 190, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' },
-  coverPlaceholderText: { fontSize: 28, marginBottom: 8 },
-  coverPlaceholderSub:  { fontSize: 12, color: Colors.textMuted },
+  mediaContainer: { position: 'relative', marginBottom: 56, backgroundColor: Colors.white },
+  coverWrap: { width: '100%', height: 180, position: 'relative', backgroundColor: '#E2E8F0' },
+  coverPhoto: { width: '100%', height: '100%' },
+  coverPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
+  coverPlaceholderSub: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
   coverEditBtn: {
     position: 'absolute', bottom: 12, right: 12,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, 
+    paddingHorizontal: 14, paddingVertical: 8,
   },
-  coverEditText: { color: Colors.white, fontSize: 13, fontWeight: '700' },
+  coverEditText: { color: Colors.white, fontSize: 12, fontWeight: '700' },
 
-  logoSection: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingVertical: 20 },
-  logoWrap:    { position: 'relative' },
-  logo:        { width: 80, height: 80, borderRadius: 16, borderWidth: 3, borderColor: Colors.white },
-  logoPlaceholder: { width: 80, height: 80, borderRadius: 16, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: Colors.white },
-  logoInitial: { color: Colors.white, fontSize: 32, fontWeight: '900' },
-  logoEditBtn: { position: 'absolute', bottom: -4, right: -4, width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.black, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: Colors.white },
-  logoEditIcon: { fontSize: 14 },
-  logoLabel:    { fontSize: 15, fontWeight: '800', color: Colors.black, marginBottom: 2 },
-  logoHint:     { fontSize: 12, color: Colors.textMuted },
+  logoWrap: { 
+    position: 'absolute', bottom: -40, left: 24, 
+    width: 96, height: 96, borderRadius: 48, 
+    backgroundColor: Colors.white, padding: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.1, shadowRadius: 12, elevation: 6
+  },
+  logo: { width: '100%', height: '100%', borderRadius: 44, backgroundColor: Colors.bgInput },
+  logoPlaceholder: { width: '100%', height: '100%', borderRadius: 44, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center' },
+  logoInitial: { color: Colors.white, fontSize: 36, fontWeight: '800' },
+  logoEditBtn: { 
+    position: 'absolute', bottom: 0, right: 0, 
+    width: 32, height: 32, borderRadius: 16, 
+    backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center', 
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 
+  },
 
-  formSection:  { paddingHorizontal: 20 },
-  sectionTitle: { fontSize: 11, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.5, marginBottom: 10, marginTop: 4 },
+  formSection: { paddingHorizontal: 20 },
+  sectionTitle: { fontSize: 12, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 12, marginTop: 12 },
 
-  card: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 20, overflow: 'hidden' },
-  field:      { padding: 16 },
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary, marginBottom: 4 },
-  fieldSub:   { fontSize: 11, color: Colors.textMuted, marginBottom: 10 },
+  card: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 8, elevation: 1 },
+  field: { padding: 18 },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6 },
+  fieldSub: { fontSize: 12, color: Colors.textMuted, marginBottom: 12 },
   input: {
-    backgroundColor: Colors.bgInput, borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 14, color: Colors.black,
+    backgroundColor: '#F8FAFC', borderRadius: 12,
+    borderWidth: 1, borderColor: '#E2E8F0',
+    paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 15, color: Colors.black,
   },
-  multiline: { minHeight: 80, paddingTop: 11 },
-  divider:   { height: 1, backgroundColor: Colors.divider, marginHorizontal: 16 },
+  multiline: { minHeight: 90, paddingTop: 14 },
+  divider: { height: 1, backgroundColor: '#F1F5F9', marginHorizontal: 18 },
 
-  dpRow:           { flexDirection: 'row', gap: 10, marginTop: 4 },
-  dpBtn:           { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: Colors.bgInput, borderWidth: 1.5, borderColor: Colors.border },
-  dpBtnActive:     { backgroundColor: Colors.orangeLight, borderColor: Colors.orange },
-  dpBtnText:       { fontSize: 16, fontWeight: '800', color: Colors.textSecondary },
+  dpRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  dpBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0' },
+  dpBtnActive: { backgroundColor: '#FFF7ED', borderColor: Colors.orange },
+  dpBtnText: { fontSize: 16, fontWeight: '800', color: Colors.textSecondary },
   dpBtnTextActive: { color: Colors.orange },
 
-  docProgressCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  docProgressTop:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  docProgressLabel:  { fontSize: 13, fontWeight: '700', color: Colors.black },
-  docProgressCount:  { fontSize: 18, fontWeight: '900' },
-  docProgressBarBg:  { height: 8, backgroundColor: Colors.bgInput, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
-  docProgressBarFill:{ height: 8, borderRadius: 4 },
-  docProgressNote:   { fontSize: 11, color: Colors.textSecondary, lineHeight: 16 },
+  docProgressCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 8, elevation: 1 },
+  docProgressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  docProgressLabel: { fontSize: 14, fontWeight: '800', color: Colors.black },
+  docProgressCount: { fontSize: 18, fontWeight: '900' },
+  docProgressBarBg: { height: 10, backgroundColor: '#F1F5F9', borderRadius: 5, overflow: 'hidden', marginBottom: 12 },
+  docProgressBarFill: { height: 10, borderRadius: 5 },
+  docProgressNote: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18 },
 
-  docRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  docIconWrap:   { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-  docIcon:       { fontSize: 22 },
-  docInfo:       { flex: 1 },
-  docLabel:      { fontSize: 13, fontWeight: '700', color: Colors.black, marginBottom: 3 },
-  docStatusRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  docStatusDot:  { width: 6, height: 6, borderRadius: 3 },
-  docStatusText: { fontSize: 11, fontWeight: '700' },
-  docMissingText:{ fontSize: 11, color: Colors.textMuted },
+  docRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18 },
+  docIconWrap: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  docInfo: { flex: 1 },
+  docLabel: { fontSize: 14, fontWeight: '700', color: Colors.black, marginBottom: 4 },
+  docStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  docStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  docStatusText: { fontSize: 12, fontWeight: '700' },
+  docMissingText: { fontSize: 12, color: Colors.textMuted },
 
   docUploadBtn: {
-    backgroundColor: Colors.orange, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 8,
-    minWidth: 72, alignItems: 'center',
+    flexDirection: 'row', backgroundColor: Colors.orange, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10, minWidth: 84, alignItems: 'center', justifyContent: 'center'
   },
-  docUploadBtnUploaded: { backgroundColor: Colors.bgInput, borderWidth: 1, borderColor: Colors.border },
-  docUploadBtnText:         { fontSize: 12, fontWeight: '800', color: Colors.white },
+  docUploadBtnUploaded: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
+  docUploadBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
   docUploadBtnTextUploaded: { color: Colors.textSecondary },
 
-  docFileName: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingBottom: 10,
-  },
-  docFileIcon:     { fontSize: 13 },
-  docFileNameText: { fontSize: 11, color: Colors.textMuted, flex: 1 },
+  docFileName: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingBottom: 14, marginTop: -6 },
+  docFileNameText: { fontSize: 12, color: Colors.textMuted, flex: 1, fontWeight: '500' },
 
-  infoBox: {
-    backgroundColor: '#EFF6FF', borderRadius: 12,
-    padding: 14, marginBottom: 20,
-    borderWidth: 1, borderColor: '#BFDBFE',
-  },
-  infoBoxText: { fontSize: 12, color: '#1D4ED8', lineHeight: 18 },
+  infoBox: { flexDirection: 'row', backgroundColor: '#EFF6FF', borderRadius: 16, padding: 16, marginBottom: 24, gap: 12, borderWidth: 1, borderColor: '#DBEAFE' },
+  infoBoxText: { flex: 1, fontSize: 13, color: '#1E3A8A', lineHeight: 20, fontWeight: '500' },
 
-  saveBtn: {
-    backgroundColor: Colors.orange, borderRadius: 14,
-    paddingVertical: 16, alignItems: 'center',
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
-  },
-  saveBtnText: { color: Colors.white, fontWeight: '900', fontSize: 16 },
+  saveBtn: { backgroundColor: Colors.orange, borderRadius: 16, paddingVertical: 18, alignItems: 'center', shadowColor: Colors.orange, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 4 },
+  saveBtnText: { color: Colors.white, fontWeight: '800', fontSize: 16 },
 });

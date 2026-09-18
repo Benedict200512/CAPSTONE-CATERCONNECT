@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Image, Modal, Platform,
-  ScrollView, StyleSheet, Text,
+  ActivityIndicator, Alert, Image, Modal, Platform,
+  ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -11,23 +11,10 @@ import { supabase } from '../../lib/supabase';
 import PaymentScreen from '../../screens/auth/PaymentScreen';
 import ReviewScreen from '../../screens/auth/ReviewScreen';
 import ChatScreen from '../../screens/auth/ChatScreen';
-
-// ── Custom icon set (PNG) — replaces all emoji glyphs. ──────────
-// All STATUS_CONFIG icons are single-color outlines (safe to tint per-status).
-// Drop these into assets/icons/ alongside the rest of your icon set.
-const ICONS = {
-  hourglass: require('../../assets/icons/hourglass.png'),
-  checkOutline: require('../../assets/icons/check_outline.png'),
-  card: require('../../assets/icons/card.png'),
-  refreshAmber: require('../../assets/icons/refresh_amber.png'),
-  confetti: require('../../assets/icons/confetti.png'),
-  xOutline: require('../../assets/icons/x_outline.png'),
-  banned: require('../../assets/icons/banned.png'),
-  clipboard: require('../../assets/icons/clipboard.png'),
-  pin: require('../../assets/icons/pin.png'),
-  warning: require('../../assets/icons/warning.png'),
-  clock: require('../../assets/icons/clock.png'),
-};
+import {
+  Clock, CheckCircle2, CreditCard, RefreshCw, PartyPopper,
+  XCircle, Ban, ClipboardList, MapPin, AlertTriangle, MessageSquare, Star, AlertCircle, Check, Wallet
+} from 'lucide-react-native';
 
 type Booking = {
   id: string; status: string;
@@ -35,52 +22,145 @@ type Booking = {
   guest_count: number; total_cost: number;
   downpayment_amount: number; downpayment_deadline: string | null;
   venue: string | null; created_at: string;
-  caterers: { business_name: string; logo_url: string | null; city: string | null } | null;
+  rejection_reason: string | null;
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  // --- Refund Tracking Fields ---
+  refund_status: 'none' | 'pending' | 'processed' | 'failed';
+  refund_amount: number;
+  refunded_at: string | null;
+  refund_account_details: string | null;
+  caterer_notes: string | null;
+  caterers: { business_name: string; logo_url: string | null; city: string | null; user_id: string } | null;
   packages: { name: string; tier: string } | null;
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  pending:   { label: 'Pending Review',   color: '#92400E', bg: '#FEF3C7', icon: ICONS.hourglass },
-  confirmed: { label: 'Confirmed',        color: '#166534', bg: '#DCFCE7', icon: ICONS.checkOutline },
-  paid:      { label: 'Payment Verified', color: '#166534', bg: '#DCFCE7', icon: ICONS.checkOutline },
-  ongoing:   { label: 'Event Ongoing',    color: '#D97706', bg: '#FFFBEB', icon: ICONS.refreshAmber },
-  completed: { label: 'Completed',        color: '#166534', bg: '#DCFCE7', icon: ICONS.confetti },
-  rejected:  { label: 'Rejected',         color: '#991B1B', bg: '#FEE2E2', icon: ICONS.xOutline },
-  cancelled: { label: 'Cancelled',        color: '#6B7280', bg: '#F3F4F6', icon: ICONS.banned },
+  pending:   { label: 'Pending Review',   color: '#B45309', bg: '#FEF3C7', icon: Clock },
+  confirmed: { label: 'Confirmed',        color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
+  paid:      { label: 'Payment Verified', color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
+  ongoing:   { label: 'Event Ongoing',    color: '#D97706', bg: '#FFFBEB', icon: RefreshCw },
+  completed: { label: 'Completed',        color: '#15803D', bg: '#DCFCE7', icon: PartyPopper },
+  rejected:  { label: 'Rejected',         color: '#B91C1C', bg: '#FEE2E2', icon: XCircle },
+  cancelled: { label: 'Cancelled',        color: '#4B5563', bg: '#F3F4F6', icon: Ban },
 };
 
-const TIER_CONFIG: Record<string, { color: string; bg: string }> = {
-  bronze:  { color: '#B45309', bg: '#FEF3C7' },
-  silver:  { color: '#6B7280', bg: '#F3F4F6' },
-  gold:    { color: '#D97706', bg: '#FFFBEB' },
-  premium: { color: '#7C3AED', bg: '#F5F3FF' },
+const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed', 'rejected', 'cancelled'];
+
+const CANCELLATION_REASONS = [
+  "Event date changed",
+  "Found another caterer",
+  "Budget constraints",
+  "Event was cancelled entirely",
+  "Other"
+];
+
+// ── Countdown Helper ──
+const getCountdownText = (eventDateString: string) => {
+  if (!eventDateString) return '';
+  const eventDate = new Date(eventDateString);
+  const today = new Date();
+  eventDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const diffTime = eventDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return 'Event has passed';
+  if (diffDays === 0) return '🎉 Event is TODAY!';
+  if (diffDays === 1) return '⏳ 1 day left';
+  return `⏳ ${diffDays} days left`;
 };
 
-const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed'];
+// ── Status Timeline Component ──
+function BookingTimeline({ status }: { status: string }) {
+  const getStepIndex = (st: string) => {
+    switch (st) {
+      case 'pending': return 0;
+      case 'confirmed': return 1;
+      case 'paid':
+      case 'ongoing': return 2;
+      case 'completed': return 3;
+      case 'rejected':
+      case 'cancelled': return -1;
+      default: return 0;
+    }
+  };
+
+  const currentStep = getStepIndex(status);
+  if (currentStep === -1) return null; 
+
+  const steps = ['Requested', 'Confirmed', 'Paid', 'Event Day'];
+
+  return (
+    <View style={tl.wrap}>
+      {steps.map((label, i) => {
+        const active = i === currentStep;
+        const done = i < currentStep;
+        return (
+          <View key={label} style={tl.stepWrap}>
+            <View style={[tl.circle, active && tl.circleActive, done && tl.circleDone]}>
+              {done ? (
+                <Check size={10} color={Colors.white} strokeWidth={3} />
+              ) : (
+                <Text style={[tl.circleText, active && tl.circleTextActive]}>{i + 1}</Text>
+              )}
+            </View>
+            <Text style={[tl.label, active && tl.labelActive]} numberOfLines={1}>{label}</Text>
+            {i < steps.length - 1 && (
+              <View style={[tl.line, done && tl.lineDone]} />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const tl = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 10, marginBottom: 14, borderWidth: 1, borderColor: '#F3F4F6' },
+  stepWrap: { alignItems: 'center', flex: 1, position: 'relative' },
+  circle: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', marginBottom: 4, zIndex: 2 },
+  circleActive: { backgroundColor: Colors.orange },
+  circleDone: { backgroundColor: '#10B981' },
+  circleText: { fontSize: 10, fontWeight: '800', color: '#9CA3AF' },
+  circleTextActive: { color: Colors.white },
+  label: { fontSize: 9, fontWeight: '700', color: Colors.textSecondary, textAlign: 'center' },
+  labelActive: { color: Colors.orange, fontWeight: '900' },
+  line: { position: 'absolute', top: 11, left: '50%', right: '-50%', height: 2, backgroundColor: '#E5E7EB', zIndex: 1 },
+  lineDone: { backgroundColor: '#10B981' },
+});
 
 export default function CustomerBookings() {
   const { session } = useAuth();
   const router = useRouter();
-  const [bookings, setBookings]         = useState<Booking[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [filter, setFilter]             = useState('all');
+  const [bookings, setBookings]            = useState<Booking[]>([]);
+  const [loading, setLoading]              = useState(true);
+  const [filter, setFilter]                = useState('all');
   const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
-  const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
-  const [chatBooking, setChatBooking]     = useState<Booking | null>(null);
+  const [reviewBooking, setReviewBooking]   = useState<Booking | null>(null);
+  const [chatBooking, setChatBooking]       = useState<Booking | null>(null);
+
+  // Cancellation State
+  const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
+  const [selectedReason, setSelectedReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  const [refundAccount, setRefundAccount] = useState(''); // 👈 GCash Account Input State
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const load = async () => {
     if (!session?.user?.id) return;
     setLoading(true);
     let query = supabase
-  .from('bookings')
-  .select(`
-    *,
-    caterers(id, business_name, logo_url, city, user_id),
-    packages(name, tier),
-    reviews(id)
-  `)
-  .eq('customer_id', session.user.id)
-  .order('created_at', { ascending: false });
+      .from('bookings')
+      .select(`
+        *,
+        caterers(id, business_name, logo_url, city, user_id),
+        packages(name, tier),
+        reviews(id)
+      `)
+      .eq('customer_id', session.user.id)
+      .order('created_at', { ascending: false });
     if (filter !== 'all') query = query.eq('status', filter);
     const { data } = await query;
     setBookings((data as any) ?? []);
@@ -95,6 +175,91 @@ export default function CustomerBookings() {
   const deadlinePassed = (d: string | null) =>
     d ? new Date(d) < new Date() : false;
 
+  const getCancelWarningMessage = (booking: Booking | null) => {
+    if (!booking) return '';
+    const eventDate = new Date(booking.event_date);
+    const today = new Date();
+    eventDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (booking.status === 'pending') {
+      return 'Are you sure you want to cancel this pending booking request?';
+    } else if (diffDays > 7) {
+      return booking.status === 'paid'
+        ? 'Since this is more than 7 days before your event, your booking will be cancelled and your downpayment is eligible for a full refund.'
+        : 'Since this is more than 7 days before your event, you can cancel freely with no penalty.';
+    } else {
+      return booking.status === 'paid'
+        ? '⚠️ Warning: This is less than 7 days before your event. Per our policy, your downpayment is non-refundable because ingredients and staff have already been prepared.'
+        : '⚠️ Warning: This is less than 7 days before your event. Are you sure you want to cancel?';
+    }
+  };
+
+  const confirmCancelBooking = async () => {
+    if (!cancellingBooking) return;
+    
+    const finalReason = selectedReason === 'Other' ? customReason.trim() : selectedReason;
+    
+    if (!finalReason) {
+      Alert.alert("Missing Reason", "Please select or specify a reason for cancelling.");
+      return;
+    }
+
+    const eventDate = new Date(cancellingBooking.event_date);
+    const today = new Date();
+    eventDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    const isPaid = cancellingBooking.status === 'paid';
+    const isEligibleForRefund = isPaid && diffDays > 7;
+
+    if (isEligibleForRefund && !refundAccount.trim()) {
+      Alert.alert("GCash Details Required", "Please enter your GCash account details so platform staff can disburse your refund immediately.");
+      return;
+    }
+
+    setIsCancelling(true);
+    
+    const targetRefundStatus = isEligibleForRefund ? 'pending' : 'none';
+    const targetRefundAmount = isEligibleForRefund ? cancellingBooking.downpayment_amount : 0;
+
+    const { error } = await supabase
+      .from('bookings')
+      .update({ 
+        status: 'cancelled',
+        cancelled_by: 'customer',
+        cancellation_reason: finalReason,
+        cancelled_at: new Date().toISOString(),
+        refund_status: targetRefundStatus,
+        refund_amount: targetRefundAmount,
+        refund_account_details: isEligibleForRefund ? refundAccount.trim() : null
+      })
+      .eq('id', cancellingBooking.id);
+
+    setIsCancelling(false);
+
+    if (error) {
+      console.error("Supabase Cancel Error:", error);
+      Alert.alert('Cancellation Failed', `Error: ${error.message}`);
+    } else {
+      if (isEligibleForRefund) {
+        Alert.alert('Refund Requested', 'Your booking is cancelled. Platform staff will review your GCash details and disburse your refund instantly.');
+      } else if (isPaid && diffDays <= 7) {
+        Alert.alert('Cancelled', 'Booking cancelled. As per policy (under 7 days), the downpayment is non-refundable.');
+      } else {
+        Alert.alert('Cancelled', 'Your booking has been successfully cancelled.');
+      }
+      
+      setCancellingBooking(null);
+      setSelectedReason('');
+      setCustomReason('');
+      setRefundAccount('');
+      load();
+    }
+  };
+
   return (
     <View style={styles.root}>
       {/* Payment modal */}
@@ -104,6 +269,7 @@ export default function CustomerBookings() {
         )}
       </Modal>
 
+      {/* Review Modal */}
       <Modal visible={!!reviewBooking} animationType="slide" presentationStyle="pageSheet">
         {reviewBooking && (
           <ReviewScreen
@@ -117,68 +283,188 @@ export default function CustomerBookings() {
       </Modal>
 
       {/* Chat modal */}
-<Modal visible={!!chatBooking} animationType="slide" presentationStyle="fullScreen">
-  {chatBooking && (
-    <ChatScreen
-      bookingId={chatBooking.id}
-      receiverId={(chatBooking.caterers as any)?.user_id ?? ''}
-      receiverName={(chatBooking.caterers as any)?.business_name ?? 'Caterer'}
-      receiverAvatar={(chatBooking.caterers as any)?.logo_url ?? null}
-      bookingInfo={`${chatBooking.event_type ?? 'Event'} · ${formatDate(chatBooking.event_date)}`}
-      onClose={() => setChatBooking(null)}
-    />
-  )}
-</Modal>
+      <Modal visible={!!chatBooking} animationType="slide" presentationStyle="fullScreen">
+        {chatBooking && (
+          <ChatScreen
+            bookingId={chatBooking.id}
+            receiverId={(chatBooking.caterers as any)?.user_id ?? ''}
+            receiverName={(chatBooking.caterers as any)?.business_name ?? 'Caterer'}
+            receiverAvatar={(chatBooking.caterers as any)?.logo_url ?? null}
+            bookingInfo={`${chatBooking.event_type ?? 'Event'} · ${formatDate(chatBooking.event_date)}`}
+            onClose={() => setChatBooking(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Cancellation Reason Modal */}
+      <Modal visible={!!cancellingBooking} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Cancel Booking</Text>
+            
+            <Text style={styles.modalWarningText}>
+              {getCancelWarningMessage(cancellingBooking)}
+            </Text>
+
+            <Text style={styles.modalSubPrompt}>Please let us know why you are cancelling:</Text>
+            
+            {CANCELLATION_REASONS.map((reason) => (
+              <TouchableOpacity
+                key={reason}
+                style={[
+                  styles.reasonRow, 
+                  selectedReason === reason && styles.reasonRowSelected
+                ]}
+                onPress={() => setSelectedReason(reason)}
+              >
+                <Text style={[
+                  styles.reasonText,
+                  selectedReason === reason && styles.reasonTextSelected
+                ]}>
+                  {reason}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            {selectedReason === 'Other' && (
+              <TextInput
+                style={styles.customInput}
+                placeholder="Please specify your reason..."
+                placeholderTextColor={Colors.textMuted}
+                value={customReason}
+                onChangeText={setCustomReason}
+                multiline
+              />
+            )}
+
+            {/* --- GCash Account Input for Refund-Eligible Bookings --- */}
+            {cancellingBooking?.status === 'paid' && (() => {
+              const eventDate = new Date(cancellingBooking.event_date);
+              const today = new Date();
+              eventDate.setHours(0, 0, 0, 0);
+              today.setHours(0, 0, 0, 0);
+              const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+              
+              if (diffDays > 7) {
+                return (
+                  <View style={{ marginTop: 10, marginBottom: 10 }}>
+                    <Text style={styles.modalSubPrompt}>Enter GCash Number & Name for Refund:</Text>
+                    <TextInput
+                      style={styles.customInput}
+                      placeholder="e.g., 09123456789 - Juan Dela Cruz"
+                      placeholderTextColor={Colors.textMuted}
+                      value={refundAccount}
+                      onChangeText={setRefundAccount}
+                    />
+                  </View>
+                );
+              }
+              return null;
+            })()}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.closeBtn} 
+                onPress={() => {
+                  setCancellingBooking(null);
+                  setSelectedReason('');
+                  setCustomReason('');
+                  setRefundAccount('');
+                }}
+                disabled={isCancelling}
+              >
+                <Text style={styles.closeBtnText}>Keep Booking</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.confirmCancelBtn} 
+                onPress={confirmCancelBooking}
+                disabled={isCancelling}
+              >
+                <Text style={styles.confirmCancelText}>
+                  {isCancelling ? 'Cancelling...' : 'Confirm Cancel'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
-        <Text style={styles.pageTitle}>My Bookings</Text>
-        <Text style={styles.pageSub}>{bookings.length} booking{bookings.length !== 1 ? 's' : ''}</Text>
-      </View>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 44 }]}>
+        <View style={styles.headerTopRow}>
+          <View>
+            <Text style={styles.pageTitle}>My Bookings</Text>
+            <Text style={styles.pageSub}>Manage your catering events and payments</Text>
+          </View>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{bookings.length}</Text>
+          </View>
+        </View>
 
-      {/* Filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {FILTERS.map(f => (
-          <TouchableOpacity key={f} style={[styles.filterChip, filter === f && styles.filterChipActive]} onPress={() => setFilter(f)}>
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f === 'all' ? 'All' : STATUS_CONFIG[f]?.label ?? f}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+        {/* Filters */}
+        <View style={styles.filterOuterWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {FILTERS.map(f => {
+              const isActive = filter === f;
+              const label = f === 'all' ? 'All Bookings' : STATUS_CONFIG[f]?.label ?? f;
+              return (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  onPress={() => setFilter(f)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={Colors.orange} /></View>
       ) : bookings.length === 0 ? (
         <View style={styles.center}>
-          <Image source={ICONS.clipboard} style={styles.iconEmpty} />
-          <Text style={styles.emptyTitle}>No bookings yet</Text>
-          <Text style={styles.emptySub}>Browse caterers and make your first booking!</Text>
-          <TouchableOpacity style={styles.browseBtn} onPress={() => router.push('/(tabs)')}>
-            <Text style={styles.browseBtnText}>Browse Caterers</Text>
+          <View style={styles.emptyIconWrap}>
+            <ClipboardList size={32} color={Colors.orange} />
+          </View>
+          <Text style={styles.emptyTitle}>No bookings found</Text>
+          <Text style={styles.emptySub}>Discover premier local caterers and plan your next celebration!</Text>
+          <TouchableOpacity style={styles.browseBtn} onPress={() => router.push('/(tabs)')} activeOpacity={0.85}>
+            <Text style={styles.browseBtnText}>Explore Caterers</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 32, paddingTop: 6 }} showsVerticalScrollIndicator={false}>
           {bookings.map(b => {
             const sc = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.pending;
-            const tc = TIER_CONFIG[(b.packages as any)?.tier] ?? TIER_CONFIG.bronze;
+            const StatusIcon = sc.icon;
             const needsPayment = b.status === 'confirmed';
             const paymentOverdue = needsPayment && deadlinePassed(b.downpayment_deadline);
+            const countdownString = getCountdownText(b.event_date);
+
+            let displayLabel = sc.label;
+            if (b.status === 'cancelled') {
+              displayLabel = b.cancelled_by === 'caterer' ? 'Cancelled by Caterer' : 'Cancelled by You';
+            }
 
             return (
               <View key={b.id} style={[styles.bookingCard, paymentOverdue && styles.bookingCardUrgent]}>
-                {/* Status */}
+                {/* Status Bar Header */}
                 <View style={[styles.statusBar, { backgroundColor: sc.bg }]}>
                   <View style={styles.statusTextRow}>
-                    <Image source={sc.icon} style={[styles.iconStatus, { tintColor: sc.color }]} />
-                    <Text style={[styles.statusText, { color: sc.color }]}>{sc.label}</Text>
+                    <StatusIcon size={15} color={sc.color} />
+                    <Text style={[styles.statusText, { color: sc.color }]}>{displayLabel}</Text>
                   </View>
-                  <Text style={[styles.statusDate, { color: sc.color }]}>{formatDate(b.created_at)}</Text>
+                  <Text style={[styles.statusDate, { color: sc.color }]}>{countdownString}</Text>
                 </View>
 
                 <View style={styles.cardContent}>
-                  {/* Caterer */}
+                  {/* Caterer Row */}
                   <View style={styles.catererRow}>
                     {(b.caterers as any)?.logo_url ? (
                       <Image source={{ uri: (b.caterers as any).logo_url }} style={styles.catererLogo} />
@@ -188,54 +474,122 @@ export default function CustomerBookings() {
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.catererName}>{(b.caterers as any)?.business_name ?? '—'}</Text>
+                      <Text style={styles.catererName} numberOfLines={1}>{(b.caterers as any)?.business_name ?? '—'}</Text>
                       <View style={styles.catererCityRow}>
-                        <Image source={ICONS.pin} style={styles.iconPinSm} />
-                        <Text style={styles.catererCity}>{(b.caterers as any)?.city ?? 'Cebu'}</Text>
+                        <MapPin size={12} color={Colors.textSecondary} />
+                        <Text style={styles.catererCity}>{(b.caterers as any)?.city ?? 'Cebu'} · {b.event_type || 'Catering Event'}</Text>
                       </View>
                     </View>
                     {b.packages && (
-                      <View style={[styles.tierPill, { backgroundColor: tc.bg }]}>
-                        <Text style={[styles.tierPillText, { color: tc.color }]}>{b.packages.name}</Text>
+                      <View style={styles.tierPill}>
+                        <Text style={styles.tierPillText} numberOfLines={1}>{b.packages.name}</Text>
                       </View>
                     )}
                   </View>
 
-                  {/* Event info */}
+                  <BookingTimeline status={b.status} />
+
+                  {/* Event Info Grid */}
                   <View style={styles.eventInfoRow}>
                     <View style={styles.eventInfoItem}>
-                      <Text style={styles.eventInfoLabel}>DATE</Text>
+                      <Text style={styles.eventInfoLabel}>EVENT DATE</Text>
                       <Text style={styles.eventInfoValue}>{formatDate(b.event_date)}</Text>
                     </View>
+                    <View style={styles.eventInfoDivider} />
                     <View style={styles.eventInfoItem}>
                       <Text style={styles.eventInfoLabel}>GUESTS</Text>
-                      <Text style={styles.eventInfoValue}>{b.guest_count}</Text>
+                      <Text style={styles.eventInfoValue}>{b.guest_count} pax</Text>
                     </View>
+                    <View style={styles.eventInfoDivider} />
                     <View style={styles.eventInfoItem}>
-                      <Text style={styles.eventInfoLabel}>TOTAL</Text>
+                      <Text style={styles.eventInfoLabel}>TOTAL AMOUNT</Text>
                       <Text style={[styles.eventInfoValue, { color: Colors.orange }]}>
                         ₱{Number(b.total_cost).toLocaleString()}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Venue */}
                   {b.venue && (
                     <View style={styles.venueRow}>
-                      <Image source={ICONS.pin} style={styles.iconPinSm} />
-                      <Text style={styles.venueText}>{b.venue}</Text>
+                      <MapPin size={13} color={Colors.textSecondary} />
+                      <Text style={styles.venueText} numberOfLines={1}>Venue: {b.venue}</Text>
                     </View>
                   )}
 
-                  {/* CTA — Pay downpayment */}
+                  {b.status === 'rejected' && b.rejection_reason && (
+                    <View style={styles.rejectionBox}>
+                      <AlertCircle size={16} color="#B91C1C" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rejectionTitle}>Reason for Rejection:</Text>
+                        <Text style={styles.rejectionText}>{b.rejection_reason}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Cancelled Details & Refund Tracker Box */}
+                  {b.status === 'cancelled' && (
+                    <View style={styles.cancelledBox}>
+                      <Ban size={16} color="#4B5563" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cancelledTitle}>Booking Cancelled</Text>
+                        <Text style={styles.cancelledText}>
+                          Initiated by: {b.cancelled_by === 'caterer' ? 'Caterer' : 'You (Customer)'}
+                        </Text>
+                        {b.cancellation_reason && (
+                          <Text style={styles.cancelledText}>Reason: {b.cancellation_reason}</Text>
+                        )}
+                        
+                        {/* --- REFUND STATUS TRACKER FOR CUSTOMER --- */}
+                        {b.refund_status && b.refund_status !== 'none' && (
+                          <View style={{ marginTop: 10, padding: 12, backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                              <Wallet size={14} color={b.refund_status === 'processed' ? '#16A34A' : '#D97706'} />
+                              <Text style={{ fontSize: 12, fontWeight: '900', color: Colors.black }}>
+                                Refund Status: 
+                                <Text style={{ 
+                                  color: b.refund_status === 'processed' ? '#16A34A' : '#D97706' 
+                                }}> {b.refund_status.toUpperCase()}</Text>
+                              </Text>
+                            </View>
+                            
+                            <Text style={{ fontSize: 12, color: Colors.textSecondary, marginBottom: 2 }}>
+                              Amount to Refund: <Text style={{ fontWeight: '800', color: Colors.black }}>₱{Number(b.refund_amount).toLocaleString()}</Text>
+                            </Text>
+
+                            {b.refund_account_details && (
+                              <Text style={{ fontSize: 11.5, color: Colors.textSecondary, marginBottom: 4 }}>
+                                GCash Account: <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontWeight: '700' }}>{b.refund_account_details}</Text>
+                              </Text>
+                            )}
+
+                            {b.refund_status === 'pending' && (
+                              <Text style={{ fontSize: 11, color: '#D97706', marginTop: 4, fontWeight: '700' }}>
+                                ⏳ Platform staff are verifying your GCash details to disburse your refund immediately.
+                              </Text>
+                            )}
+
+                            {b.refund_status === 'processed' && (
+                              <Text style={{ fontSize: 11, color: '#16A34A', marginTop: 4, fontWeight: '700' }}>
+                                ✅ Refund successfully disbursed to your GCash account!
+                              </Text>
+                            )}
+
+                            {b.caterer_notes && (
+                              <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>
+                                Note: {b.caterer_notes}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
                   {b.status === 'confirmed' && (
                     <View style={styles.ctaSection}>
                       <View style={[styles.deadlineBox, paymentOverdue && styles.deadlineBoxUrgent]}>
                         <View style={styles.deadlineLabelRow}>
-                          <Image
-                            source={paymentOverdue ? ICONS.warning : ICONS.clock}
-                            style={[styles.iconDeadline, paymentOverdue && { tintColor: Colors.error }]}
-                          />
+                          {paymentOverdue ? <AlertTriangle size={15} color={Colors.error} /> : <Clock size={15} color="#B45309" />}
                           <Text style={[styles.deadlineLabel, paymentOverdue && { color: Colors.error }]}>
                             {paymentOverdue ? 'Payment Overdue!' : 'Downpayment Deadline'}
                           </Text>
@@ -244,61 +598,75 @@ export default function CustomerBookings() {
                           {b.downpayment_deadline ? formatDate(b.downpayment_deadline) : '—'}
                         </Text>
                       </View>
+
                       <TouchableOpacity
                         style={styles.payBtn}
                         onPress={() => setPayingBookingId(b.id)}
+                        activeOpacity={0.85}
                       >
-                        <Image source={ICONS.card} style={styles.iconPayBtn} />
-                        <Text style={styles.payBtnText}>Pay ₱{Number(b.downpayment_amount).toLocaleString()} via GCash</Text>
+                        <CreditCard size={16} color={Colors.white} />
+                        <Text style={styles.payBtnText}>Pay ₱{Number(b.downpayment_amount).toLocaleString()} Downpayment</Text>
                       </TouchableOpacity>
-                      <Text style={styles.payNote}>
-                        Payment is processed automatically via Xendit. Once GCash confirms your payment, your booking status updates to Paid instantly.
-                      </Text>
+                      <Text style={styles.payNote}>Secure processing via GCash / Xendit. Instant confirmation upon verification.</Text>
                     </View>
                   )}
 
                   {b.status === 'paid' && (
-                    <View style={styles.paidBox}>
-                      <Image source={ICONS.checkOutline} style={[styles.iconInlineBox, { tintColor: '#166534' }]} />
-                      <Text style={styles.paidBoxText}>Downpayment verified by Xendit. Your booking is fully confirmed!</Text>
+                    <View style={styles.statusMessageBox}>
+                      <CheckCircle2 size={16} color="#15803D" />
+                      <Text style={styles.statusMessageText}>Downpayment secured. Your booking is completely locked in!</Text>
                     </View>
                   )}
 
                   {b.status === 'completed' && (
-                    <View style={styles.completedBox}>
-                      <Image source={ICONS.confetti} style={[styles.iconInlineBox, { tintColor: '#166534' }]} />
-                      <Text style={styles.completedText}>Event completed! Thank you for using CaterConnect.</Text>
+                    <View style={styles.statusMessageBox}>
+                      <PartyPopper size={16} color="#15803D" />
+                      <Text style={styles.statusMessageText}>Event successfully completed. Hope you had a great experience!</Text>
                     </View>
                   )}
 
                   {/* Action buttons */}
                   <View style={styles.bookingActions}>
-                    {/* Chat — available for confirmed and above */}
-                    {['confirmed', 'paid', 'ongoing', 'completed'].includes(b.status) && (
+                    {['confirmed', 'paid', 'ongoing', 'completed', 'cancelled'].includes(b.status) && (
                       <TouchableOpacity
                         style={styles.chatBtn}
                         onPress={() => setChatBooking(b)}
+                        activeOpacity={0.8}
                       >
-                        <Text style={styles.chatBtnText}>Message Caterer</Text>
+                        <MessageSquare size={15} color={Colors.black} />
+                        <Text style={styles.chatBtnText}>
+                          {b.status === 'cancelled' ? 'Chat Support / Caterer' : 'Chat Caterer'}
+                        </Text>
                       </TouchableOpacity>
                     )}
 
-                    {/* Review — only for completed, only if not yet reviewed */}
                     {b.status === 'completed' && !(b as any).reviews?.length && (
                       <TouchableOpacity
                         style={styles.reviewBtn}
                         onPress={() => setReviewBooking(b)}
+                        activeOpacity={0.85}
                       >
-                        <Text style={styles.reviewBtnText}>Leave a Review</Text>
+                        <Star size={15} color={Colors.white} fill={Colors.white} />
+                        <Text style={styles.reviewBtnText}>Write Review</Text>
                       </TouchableOpacity>
                     )}
 
-                    {/* Already reviewed */}
                     {b.status === 'completed' && (b as any).reviews?.length > 0 && (
                       <View style={styles.reviewedBadge}>
-                        <Image source={ICONS.checkOutline} style={[styles.iconReviewed, { tintColor: Colors.success }]} />
-                        <Text style={styles.reviewedText}>Reviewed</Text>
+                        <CheckCircle2 size={14} color="#15803D" />
+                        <Text style={styles.reviewedText}>Review Submitted</Text>
                       </View>
+                    )}
+
+                    {['pending', 'confirmed', 'paid'].includes(b.status) && (
+                      <TouchableOpacity
+                        style={styles.cancelActionBtn}
+                        onPress={() => setCancellingBooking(b)}
+                        activeOpacity={0.8}
+                      >
+                        <Ban size={14} color={Colors.error} />
+                        <Text style={styles.cancelActionText}>Cancel</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 </View>
@@ -312,83 +680,308 @@ export default function CustomerBookings() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  header: { paddingHorizontal: 20, paddingBottom: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black },
-  pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  filterRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border },
-  filterChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
-  filterText: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
-  filterTextActive: { color: Colors.white, fontWeight: '800' },
-  list: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  
+  header: { 
+    backgroundColor: Colors.white, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F3F4F6',
+    paddingBottom: 4,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  pageTitle: { fontSize: 24, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  countBadge: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  countBadgeText: { fontSize: 13, fontWeight: '800', color: Colors.orange },
 
-  bookingCard: { backgroundColor: Colors.white, borderRadius: 18, marginBottom: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  bookingCardUrgent: { borderColor: Colors.error, borderWidth: 2 },
-  statusBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 },
+  filterOuterWrap: { backgroundColor: Colors.white },
+  filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
+  filterChip: { 
+    paddingHorizontal: 14, 
+    paddingVertical: 7, 
+    borderRadius: 16, 
+    backgroundColor: '#F1F5F9', 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
+  filterText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  filterTextActive: { color: Colors.white, fontWeight: '800' },
+
+  list: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
+
+  bookingCard: { 
+    backgroundColor: Colors.white, 
+    borderRadius: 20, 
+    marginBottom: 16, 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    overflow: 'hidden', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.04, 
+    shadowRadius: 12, 
+    elevation: 2 
+  },
+  bookingCardUrgent: { borderColor: Colors.error, borderWidth: 1.5 },
+  
+  statusBar: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingVertical: 10 
+  },
   statusTextRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconStatus: { width: 14, height: 14 },
-  statusText: { fontSize: 13, fontWeight: '800' },
-  statusDate: { fontSize: 11, fontWeight: '600', opacity: 0.8 },
-  cardContent: { padding: 14 },
-  catererRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  catererLogo: { width: 44, height: 44, borderRadius: 12 },
-  catererLogoPlaceholder: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center' },
+  statusText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.2 },
+  statusDate: { fontSize: 11, fontWeight: '700', opacity: 0.9 },
+
+  cardContent: { padding: 16 },
+
+  catererRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  catererLogo: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#F3F4F6' },
+  catererLogoPlaceholder: { width: 48, height: 48, borderRadius: 14, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center' },
   catererLogoText: { color: Colors.white, fontSize: 18, fontWeight: '900' },
-  catererName: { fontSize: 15, fontWeight: '800', color: Colors.black, marginBottom: 2 },
-  catererCityRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  iconPinSm: { width: 11, height: 11, tintColor: Colors.textSecondary },
-  catererCity: { fontSize: 12, color: Colors.textSecondary },
-  tierPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  tierPillText: { fontSize: 11, fontWeight: '800' },
-  eventInfoRow: { flexDirection: 'row', backgroundColor: Colors.bgInput, borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: Colors.border },
+  catererName: { fontSize: 16, fontWeight: '800', color: Colors.black, marginBottom: 3 },
+  catererCityRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  catererCity: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
+  
+  tierPill: { 
+    backgroundColor: '#FFF7ED', 
+    borderWidth: 1, 
+    borderColor: '#FED7AA',
+    paddingHorizontal: 10, 
+    paddingVertical: 5, 
+    borderRadius: 10,
+    maxWidth: 100,
+  },
+  tierPillText: { fontSize: 11, fontWeight: '800', color: Colors.orange, textAlign: 'center' },
+
+  eventInfoRow: { 
+    flexDirection: 'row', 
+    backgroundColor: '#F9FAFB', 
+    borderRadius: 14, 
+    padding: 12, 
+    marginBottom: 12, 
+    borderWidth: 1, 
+    borderColor: '#F3F4F6',
+    alignItems: 'center'
+  },
   eventInfoItem: { flex: 1, alignItems: 'center' },
-  eventInfoLabel: { fontSize: 9, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1, marginBottom: 4 },
-  eventInfoValue: { fontSize: 14, fontWeight: '900', color: Colors.black },
-  venueRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
-  venueText: { fontSize: 12, color: Colors.textSecondary },
-  ctaSection: { gap: 10 },
-  deadlineBox: { backgroundColor: '#FEF3C7', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  eventInfoDivider: { width: 1, height: 24, backgroundColor: '#E5E7EB' },
+  eventInfoLabel: { fontSize: 9, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.8, marginBottom: 3 },
+  eventInfoValue: { fontSize: 13, fontWeight: '900', color: Colors.black },
+
+  venueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  venueText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
+
+  rejectionBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  rejectionTitle: { fontSize: 12, fontWeight: '900', color: '#991B1B', marginBottom: 2 },
+  rejectionText: { fontSize: 12, fontWeight: '600', color: '#B91C1C', lineHeight: 16 },
+
+  cancelledBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  cancelledTitle: { fontSize: 12, fontWeight: '900', color: '#374151', marginBottom: 2 },
+  cancelledText: { fontSize: 12, fontWeight: '600', color: '#4B5563', lineHeight: 16 },
+
+  ctaSection: { gap: 10, marginTop: 4 },
+  deadlineBox: { 
+    backgroundColor: '#FEF3C7', 
+    borderRadius: 12, 
+    paddingHorizontal: 12, 
+    paddingVertical: 10, 
+    borderWidth: 1, 
+    borderColor: '#FDE68A', 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
+  },
   deadlineBoxUrgent: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
   deadlineLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconDeadline: { width: 14, height: 14, tintColor: '#92400E' },
   deadlineLabel: { fontSize: 12, fontWeight: '700', color: '#92400E' },
-  deadlineDate: { fontSize: 13, fontWeight: '900', color: '#92400E' },
-  payBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: Colors.orange, borderRadius: 12, paddingVertical: 13, shadowColor: Colors.orange, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
-  iconPayBtn: { width: 16, height: 16, tintColor: Colors.white },
+  deadlineDate: { fontSize: 12, fontWeight: '900', color: '#92400E' },
+
+  payBtn: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    gap: 8, 
+    backgroundColor: Colors.orange, 
+    borderRadius: 14, 
+    paddingVertical: 14, 
+    shadowColor: Colors.orange, 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.2, 
+    shadowRadius: 8, 
+    elevation: 3 
+  },
   payBtnText: { color: Colors.white, fontWeight: '900', fontSize: 14 },
-  payNote: { fontSize: 11, color: Colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 16 },
-  paidBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#DCFCE7', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#86EFAC' },
-  paidBoxText: { fontSize: 13, color: '#166534', fontWeight: '700', flex: 1 },
-  iconInlineBox: { width: 15, height: 15 },
-  completedBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#DCFCE7', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#86EFAC' },
-  completedText: { fontSize: 13, color: '#166534', fontWeight: '700', flex: 1 },
-  iconEmpty: { width: 52, height: 52, marginBottom: 12, tintColor: Colors.border },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: Colors.black, marginBottom: 6 },
-  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', marginBottom: 20 },
-  browseBtn: { backgroundColor: Colors.orange, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  payNote: { fontSize: 11, color: Colors.textMuted, textAlign: 'center', marginTop: 2, lineHeight: 15 },
+
+  statusMessageBox: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    backgroundColor: '#DCFCE7', 
+    borderRadius: 12, 
+    padding: 12, 
+    borderWidth: 1, 
+    borderColor: '#86EFAC',
+    marginBottom: 4
+  },
+  statusMessageText: { fontSize: 12, color: '#15803D', fontWeight: '700', flex: 1 },
+
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: '#FFF7ED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 18 },
+  browseBtn: { backgroundColor: Colors.orange, borderRadius: 14, paddingHorizontal: 24, paddingVertical: 14, shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
   browseBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
 
-  // Action buttons
-  bookingActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  bookingActions: { flexDirection: 'row', gap: 10, marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#F3F4F6', flexWrap: 'wrap' },
   chatBtn: {
-    flex: 1, backgroundColor: Colors.bgInput,
-    borderRadius: 10, paddingVertical: 10, alignItems: 'center',
-    borderWidth: 1.5, borderColor: Colors.border,
+    flex: 1, 
+    minWidth: 100,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12, 
+    paddingVertical: 12, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   chatBtnText: { fontSize: 13, fontWeight: '800', color: Colors.black },
   reviewBtn: {
-    flex: 1, backgroundColor: Colors.orange,
-    borderRadius: 10, paddingVertical: 10, alignItems: 'center',
+    flex: 1, 
+    minWidth: 100,
+    backgroundColor: Colors.orange,
+    borderRadius: 12, 
+    paddingVertical: 12, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   reviewBtnText: { color: Colors.white, fontWeight: '800', fontSize: 13 },
   reviewedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.success + '20', borderRadius: 10,
-    paddingVertical: 10, paddingHorizontal: 16,
-    borderWidth: 1, borderColor: Colors.success + '40',
+    flex: 1,
+    minWidth: 100,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#DCFCE7', 
+    borderRadius: 12,
+    paddingVertical: 12, 
+    borderWidth: 1, 
+    borderColor: '#86EFAC',
   },
-  iconReviewed: { width: 13, height: 13 },
-  reviewedText: { fontSize: 13, fontWeight: '800', color: Colors.success },
+  reviewedText: { fontSize: 13, fontWeight: '800', color: '#15803D' },
+  cancelActionBtn: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  cancelActionText: { fontSize: 13, fontWeight: '800', color: Colors.error },
+
+  modalOverlay: {
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 20
+  },
+  modalContent: {
+    backgroundColor: Colors.white, 
+    borderRadius: 20, 
+    padding: 24, 
+    width: '100%', 
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: Colors.black, marginBottom: 8 },
+  modalWarningText: { fontSize: 13, color: '#B91C1C', fontWeight: '600', lineHeight: 18, marginBottom: 16, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 10, borderWidth: 1, borderColor: '#FECACA' },
+  modalSubPrompt: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 12 },
+  
+  reasonRow: {
+    padding: 14, borderRadius: 12, borderWidth: 1, 
+    borderColor: '#E5E7EB', marginBottom: 10,
+    backgroundColor: '#F9FAFB'
+  },
+  reasonRowSelected: {
+    borderColor: Colors.error, backgroundColor: '#FEF2F2'
+  },
+  reasonText: { fontSize: 14, color: Colors.black, fontWeight: '600' },
+  reasonTextSelected: { color: Colors.error, fontWeight: '800' },
+  
+  customInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, 
+    padding: 14, height: 80, textAlignVertical: 'top', 
+    marginBottom: 10, fontSize: 14, backgroundColor: '#F9FAFB'
+  },
+  
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
+  closeBtn: {
+    flex: 1, padding: 14, borderRadius: 12, 
+    borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center'
+  },
+  closeBtnText: { fontWeight: '800', color: Colors.black, fontSize: 14 },
+  confirmCancelBtn: {
+    flex: 1, padding: 14, borderRadius: 12, 
+    backgroundColor: Colors.error, alignItems: 'center',
+    shadowColor: Colors.error, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3
+  },
+  confirmCancelText: { fontWeight: '900', color: Colors.white, fontSize: 14 },
 });

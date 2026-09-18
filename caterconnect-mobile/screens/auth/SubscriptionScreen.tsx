@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Platform,
+  ActivityIndicator, Alert, Platform,
   ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
@@ -8,46 +8,33 @@ import { Colors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import { initiateGCashPayment, openGCashCheckout } from '@/lib/xendit';
 import { supabase } from '@/lib/supabase';
+import { 
+  X, Tag, BadgeCheck, Zap, Crown, CheckCircle2, 
+  ChevronDown, ChevronUp, Lock, ArrowRight, ShieldCheck 
+} from 'lucide-react-native';
 
-// ── Custom icon set (PNG) — replaces all emoji glyphs. ──────────
-// Drop these into assets/icons/ alongside the rest of your icon set.
-const ICONS = {
-  close: require('../../assets/icons/close.png'),
-  star: require('../../assets/icons/star.png'),
-  fireWhite: require('../../assets/icons/fire_white.png'),
-  checkBlue: require('../../assets/icons/check_blue.png'),
-  tag: require('../../assets/icons/tag.png'),
-  check: require('../../assets/icons/check.png'),
-  chevronUp: require('../../assets/icons/chevron_up.png'),
-  chevronDown: require('../../assets/icons/chevron_down.png'),
-  lock: require('../../assets/icons/lock.png'),
-};
-
+// Matches the Supabase table structure from your image
 const PLANS = [
   {
     id: 'free',
     name: 'Free Plan',
     price: 0,
-    color: '#6B7280',
-    bg: '#F3F4F6',
-    border: '#E5E7EB',
-    badgeIcon: ICONS.tag,
+    max_packages: 3,
+    max_bookings: 5,
     features: [
       '3 catering packages',
       '5 booking requests/month',
       'Basic profile visibility',
       'Lower search placement',
     ],
-    limitations: true,
+    ui: { color: '#64748B', bg: '#F8FAFC', border: '#E2E8F0', icon: Tag, isDark: false },
   },
   {
     id: 'basic',
     name: 'Basic Plan',
     price: 299,
-    color: '#2563EB',
-    bg: '#EFF6FF',
-    border: '#BFDBFE',
-    badgeIcon: ICONS.checkBlue,
+    max_packages: null,
+    max_bookings: 20,
     features: [
       'Unlimited packages',
       '20 booking requests/month',
@@ -55,16 +42,14 @@ const PLANS = [
       'Improved Budget Match placement',
       'Profile customization',
     ],
-    limitations: false,
+    ui: { color: '#3B82F6', bg: '#EFF6FF', border: '#BFDBFE', icon: BadgeCheck, isDark: false },
   },
   {
     id: 'standard',
     name: 'Standard Plan',
     price: 499,
-    color: '#D97706',
-    bg: '#FFFBEB',
-    border: '#FDE68A',
-    badgeIcon: ICONS.fireWhite,
+    max_packages: null,
+    max_bookings: 50,
     features: [
       'All Basic features',
       '50 booking requests/month',
@@ -72,17 +57,14 @@ const PLANS = [
       'Priority Budget Match results',
       'Increased promotional visibility',
     ],
-    limitations: false,
-    popular: true,
+    ui: { color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A', icon: Zap, popular: true, isDark: false },
   },
   {
     id: 'premium',
     name: 'Premium Plan',
     price: 999,
-    color: '#7C3AED',
-    bg: '#F5F3FF',
-    border: '#DDD6FE',
-    badgeIcon: ICONS.star,
+    max_packages: null,
+    max_bookings: null,
     features: [
       'All Standard features',
       'Unlimited booking requests',
@@ -91,17 +73,9 @@ const PLANS = [
       '#1 Budget Match ranking',
       'Homepage feature placements',
     ],
-    limitations: false,
-    badgeLabel: 'PREMIUM',
+    ui: { color: '#C084FC', bg: '#2E1065', border: '#4C1D95', icon: Crown, badge: 'PRO', isDark: true },
   },
 ];
-
-const PLAN_ICON: Record<string, any> = {
-  free: ICONS.tag,
-  basic: ICONS.checkBlue,
-  standard: ICONS.fireWhite,
-  premium: ICONS.star,
-};
 
 type SubscriptionScreenProps = {
   onClose?: () => void;
@@ -131,7 +105,7 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
   const handleUpgrade = async (plan: typeof PLANS[0]) => {
     if (plan.id === 'free') return;
     if (plan.id === catererData?.subscription_plan) {
-      Alert.alert('Already on this plan', 'You are currently subscribed to this plan.');
+      Alert.alert('Already Subscribed', 'You are currently on this plan.');
       return;
     }
     if (!catererData?.id || !session?.user || !profile) return;
@@ -145,7 +119,6 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
           text: 'Pay with GCash',
           onPress: async () => {
             setPaying(plan.id);
-
             const referenceId = `sub_${catererData.id}_${plan.id}_${Date.now()}`;
 
             const result = await initiateGCashPayment({
@@ -163,19 +136,17 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
               return;
             }
 
-            const outcome = await openGCashCheckout(result.checkoutUrl!, result.chargeId!, result.webUrl,);
+            const outcome = await openGCashCheckout(result.checkoutUrl!, result.chargeId!, result.webUrl);
             setPaying(null);
 
             if (outcome === 'success') {
               Alert.alert(
-                'Payment Successful!',
-                `Your ${plan.name} has been activated! It may take a moment to reflect.`,
+                'Payment Successful! 🎉',
+                `Your ${plan.name} has been activated! It may take a moment to reflect.`
               );
               loadHistory();
             } else if (outcome === 'failed') {
               Alert.alert('Payment Failed', 'Your GCash payment was not completed. Please try again.');
-            } else {
-              Alert.alert('Payment Cancelled', 'You cancelled the payment.');
             }
           },
         },
@@ -183,136 +154,147 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
     );
   };
 
-  const currentPlan = catererData?.subscription_plan ?? 'free';
+  const currentPlanId = catererData?.subscription_plan ?? 'free';
+  const currentPlan = PLANS.find(p => p.id === currentPlanId) ?? PLANS[0];
   const expiresAt = (catererData as any)?.subscription_expires_at;
-  const currentPlanColor = PLANS.find((p) => p.id === currentPlan)?.color ?? Colors.orange;
-  const currentPlanIcon = PLAN_ICON[currentPlan] ?? ICONS.tag;
+  const usedBookings = catererData?.monthly_booking_count ?? 0;
+  
+  // Calculate Usage Progress
+  const bookingLimit = currentPlan.max_bookings;
+  const progressPercent = bookingLimit ? Math.min((usedBookings / bookingLimit) * 100, 100) : 100;
+  const progressColor = progressPercent > 90 ? Colors.error : currentPlan.ui.color;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <View style={styles.headerTop}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.pageTitle}>Subscription Plans</Text>
-            <Text style={styles.pageSub}>Upgrade to get more bookings and visibility</Text>
+            <Text style={styles.pageTitle}>Plans & Billing</Text>
+            <Text style={styles.pageSub}>Upgrade to get more bookings and higher visibility.</Text>
           </View>
           {onClose && (
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Image source={ICONS.close} style={[styles.iconClose, { tintColor: Colors.textSecondary }]} />
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
+              <X size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Current plan banner */}
-      <View style={[styles.currentPlanBanner, { borderColor: currentPlanColor }]}>
-        <View style={styles.currentPlanLeft}>
-          <Text style={[styles.currentPlanLabel, { color: currentPlanColor }]}>YOUR CURRENT PLAN</Text>
-          <Text style={styles.currentPlanName}>
-            {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
-          </Text>
-          {expiresAt && currentPlan !== 'free' && (
-            <Text style={styles.currentPlanExpiry}>
+      {/* Active Plan Dashboard */}
+      <View style={[styles.activePlanCard, { borderColor: currentPlan.ui.color }]}>
+        <View style={styles.activePlanHeader}>
+          <View>
+            <Text style={[styles.activePlanLabel, { color: currentPlan.ui.color }]}>CURRENT PLAN</Text>
+            <Text style={styles.activePlanName}>{currentPlan.name}</Text>
+          </View>
+          <View style={[styles.activePlanIconWrap, { backgroundColor: currentPlan.ui.color + '15' }]}>
+            <currentPlan.ui.icon size={24} color={currentPlan.ui.color} />
+          </View>
+        </View>
+
+        <View style={styles.usageContainer}>
+          <View style={styles.usageRow}>
+            <Text style={styles.usageLabel}>Monthly Bookings Used</Text>
+            <Text style={styles.usageValue}>
+              {bookingLimit ? `${usedBookings} / ${bookingLimit}` : `${usedBookings} (Unlimited)`}
+            </Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: progressColor }]} />
+          </View>
+        </View>
+
+        {expiresAt && currentPlanId !== 'free' && (
+          <View style={styles.renewalBox}>
+            <ShieldCheck size={16} color={Colors.textSecondary} />
+            <Text style={styles.renewalText}>
               Renews {new Date(expiresAt).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
             </Text>
-          )}
-          <Text style={styles.currentPlanUsage}>
-            {catererData?.monthly_booking_count ?? 0} bookings used this month
-          </Text>
-        </View>
-        <View style={[styles.currentPlanBadge, { backgroundColor: currentPlanColor + '18' }]}>
-          <Image
-            source={currentPlanIcon}
-            style={[
-              styles.currentPlanBadgeIcon,
-              currentPlanIcon !== ICONS.fireWhite && currentPlanIcon !== ICONS.star && { tintColor: currentPlanColor },
-            ]}
-          />
-        </View>
+          </View>
+        )}
       </View>
 
-      {/* Plan cards */}
-      <View style={{ padding: 20, gap: 14 }}>
+      {/* Plan Cards */}
+      <View style={styles.plansContainer}>
         {PLANS.map((plan) => {
-          const isCurrent = plan.id === currentPlan;
+          const isCurrent = plan.id === currentPlanId;
           const isPaying = paying === plan.id;
+          const { ui } = plan;
 
           return (
             <View
               key={plan.id}
               style={[
                 styles.planCard,
-                { borderColor: isCurrent ? plan.color : plan.border },
-                isCurrent && { backgroundColor: plan.bg },
+                { borderColor: isCurrent ? ui.color : ui.border, backgroundColor: ui.bg },
+                isCurrent && styles.planCardActive
               ]}
             >
-              {/* Ribbon badge: current / popular / premium — priority order, only one shows */}
+              {/* Badges */}
               {isCurrent ? (
-                <View style={[styles.ribbonBadge, { backgroundColor: plan.color }]}>
-                  <Image source={ICONS.check} style={[styles.ribbonIcon, { tintColor: Colors.white }]} />
-                  <Text style={styles.ribbonBadgeText}>CURRENT PLAN</Text>
+                <View style={[styles.ribbon, { backgroundColor: ui.color }]}>
+                  <Text style={styles.ribbonText}>ACTIVE</Text>
                 </View>
-              ) : plan.popular ? (
-                <View style={[styles.ribbonBadge, { backgroundColor: plan.color }]}>
-                  <Image source={ICONS.fireWhite} style={styles.ribbonIcon} />
-                  <Text style={styles.ribbonBadgeText}>MOST POPULAR</Text>
+              ) : ui.popular ? (
+                <View style={[styles.ribbon, { backgroundColor: ui.color }]}>
+                  <Zap size={10} color="#FFF" fill="#FFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.ribbonText}>MOST POPULAR</Text>
                 </View>
-              ) : plan.badgeLabel ? (
-                <View style={[styles.ribbonBadge, { backgroundColor: plan.color }]}>
-                  <Image source={ICONS.star} style={styles.ribbonIcon} />
-                  <Text style={styles.ribbonBadgeText}>{plan.badgeLabel}</Text>
+              ) : ui.badge ? (
+                <View style={[styles.ribbon, { backgroundColor: ui.color }]}>
+                  <Text style={styles.ribbonText}>{ui.badge}</Text>
                 </View>
               ) : null}
 
-              {/* Plan header */}
+              {/* Header */}
               <View style={styles.planHeader}>
-                <Text style={[styles.planName, { color: plan.color }]}>{plan.name}</Text>
-                <View style={styles.planPriceWrap}>
+                <Text style={[styles.planTitle, { color: ui.isDark ? '#FFF' : ui.color }]}>{plan.name}</Text>
+                <View style={styles.priceRow}>
                   {plan.price === 0 ? (
-                    <Text style={[styles.planPrice, { color: plan.color }]}>FREE</Text>
+                    <Text style={[styles.priceLarge, { color: ui.isDark ? '#FFF' : Colors.black }]}>FREE</Text>
                   ) : (
                     <>
-                      <Text style={[styles.planPrice, { color: plan.color }]}>₱{plan.price}</Text>
-                      <Text style={styles.planPricePer}>/month</Text>
+                      <Text style={[styles.priceLarge, { color: ui.isDark ? '#FFF' : Colors.black }]}>₱{plan.price}</Text>
+                      <Text style={[styles.priceSub, { color: ui.isDark ? '#A78BFA' : Colors.textSecondary }]}>/mo</Text>
                     </>
                   )}
                 </View>
               </View>
 
-              {/* Features */}
-              <View style={styles.featuresList}>
-                {plan.features.map((feat) => (
-                  <View key={feat} style={styles.featureRow}>
-                    <Image source={ICONS.check} style={[styles.iconFeatureCheck, { tintColor: plan.color }]} />
-                    <Text style={styles.featureText}>{feat}</Text>
+              {/* Feature List */}
+              <View style={styles.featureList}>
+                {plan.features.map((feat, idx) => (
+                  <View key={idx} style={styles.featureRow}>
+                    <CheckCircle2 size={16} color={ui.isDark ? '#C084FC' : ui.color} />
+                    <Text style={[styles.featureText, { color: ui.isDark ? '#E2E8F0' : Colors.textSecondary }]}>
+                      {feat}
+                    </Text>
                   </View>
                 ))}
               </View>
 
-              {/* CTA button */}
+              {/* Action Button */}
               {plan.id !== 'free' && (
                 <TouchableOpacity
                   style={[
                     styles.upgradeBtn,
-                    { backgroundColor: isCurrent ? plan.color + '33' : plan.color },
-                    isPaying && styles.upgradeBtnDisabled,
+                    { backgroundColor: isCurrent ? ui.isDark ? 'rgba(255,255,255,0.1)' : ui.color + '15' : ui.color },
+                    isPaying && { opacity: 0.7 }
                   ]}
                   onPress={() => handleUpgrade(plan)}
                   disabled={isCurrent || isPaying}
                   activeOpacity={0.85}
                 >
                   {isPaying ? (
-                    <ActivityIndicator color="white" size="small" />
+                    <ActivityIndicator color={ui.isDark && !isCurrent ? '#FFF' : ui.color} />
                   ) : isCurrent ? (
-                    <View style={styles.upgradeBtnRow}>
-                      <Image source={ICONS.check} style={[styles.iconUpgradeBtn, { tintColor: plan.color }]} />
-                      <Text style={[styles.upgradeBtnText, { color: plan.color }]}>Current Plan</Text>
-                    </View>
+                    <Text style={[styles.upgradeBtnText, { color: ui.isDark ? '#FFF' : ui.color }]}>Current Plan</Text>
                   ) : (
-                    <Text style={styles.upgradeBtnText}>
-                      Upgrade • Pay ₱{plan.price} via GCash
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.upgradeBtnText, { color: '#FFF' }]}>Upgrade via GCash</Text>
+                      <ArrowRight size={16} color="#FFF" />
+                    </View>
                   )}
                 </TouchableOpacity>
               )}
@@ -321,141 +303,111 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
         })}
       </View>
 
-      {/* Payment history */}
-      <TouchableOpacity
-        style={styles.historyToggle}
-        onPress={() => setShowHistory(!showHistory)}
-        activeOpacity={0.8}
-      >
-        <Image source={showHistory ? ICONS.chevronUp : ICONS.chevronDown} style={styles.iconChevron} />
-        <Text style={styles.historyToggleText}>
-          {showHistory ? 'Hide' : 'Show'} Payment History
-        </Text>
-      </TouchableOpacity>
+      {/* Payment History Accordion */}
+      <View style={styles.historySection}>
+        <TouchableOpacity style={styles.historyToggle} onPress={() => setShowHistory(!showHistory)} activeOpacity={0.8}>
+          <Text style={styles.historyToggleText}>Payment History</Text>
+          {showHistory ? <ChevronUp size={18} color={Colors.textSecondary} /> : <ChevronDown size={18} color={Colors.textSecondary} />}
+        </TouchableOpacity>
 
-      {showHistory && (
-        <View style={styles.historyList}>
-          {paymentHistory.length === 0 ? (
-            <Text style={styles.historyEmpty}>No payment history yet.</Text>
-          ) : (
-            paymentHistory.map((p) => (
-              <View key={p.id} style={styles.historyRow}>
-                <View>
-                  <Text style={styles.historyPlan}>{p.plan_id?.toUpperCase()} Plan</Text>
-                  <Text style={styles.historyDate}>
-                    {new Date(p.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </Text>
-                </View>
-                <View style={styles.historyRight}>
-                  <Text style={styles.historyAmount}>₱{Number(p.amount).toLocaleString()}</Text>
-                  <View style={[styles.historyStatus, { backgroundColor: p.status === 'confirmed' ? '#DCFCE7' : '#FEF3C7' }]}>
-                    <Text style={[styles.historyStatusText, { color: p.status === 'confirmed' ? '#166534' : '#92400E' }]}>
-                      {p.status}
+        {showHistory && (
+          <View style={styles.historyList}>
+            {paymentHistory.length === 0 ? (
+              <View style={styles.historyEmpty}>
+                <Text style={styles.historyEmptyText}>No transactions yet.</Text>
+              </View>
+            ) : (
+              paymentHistory.map((p) => (
+                <View key={p.id} style={styles.historyRow}>
+                  <View>
+                    <Text style={styles.historyPlan}>{p.plan_id.toUpperCase()} Plan</Text>
+                    <Text style={styles.historyDate}>
+                      {new Date(p.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Text>
                   </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.historyAmount}>₱{Number(p.amount).toLocaleString()}</Text>
+                    <View style={[styles.historyStatusBadge, { backgroundColor: p.status === 'confirmed' ? '#DCFCE7' : '#FEF3C7' }]}>
+                      <Text style={[styles.historyStatusText, { color: p.status === 'confirmed' ? '#166534' : '#92400E' }]}>
+                        {p.status}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ))
-          )}
-        </View>
-      )}
-
-      {/* Note */}
-      <View style={styles.noteBox}>
-        <Image source={ICONS.lock} style={[styles.iconNote, { tintColor: '#1E40AF' }]} />
-        <Text style={styles.noteText}>
-          Payments are processed securely via GCash through Xendit. Your subscription activates automatically upon successful payment.
-        </Text>
+              ))
+            )}
+          </View>
+        )}
       </View>
 
+      {/* Secure Payment Note */}
+      <View style={styles.secureNote}>
+        <Lock size={16} color="#475569" />
+        <Text style={styles.secureNoteText}>
+          Payments are securely processed via GCash & Xendit. Subscriptions activate instantly upon successful payment.
+        </Text>
+      </View>
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: { paddingHorizontal: 20, paddingBottom: 16 },
   headerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, marginBottom: 4 },
-  pageSub: { fontSize: 14, color: Colors.textSecondary },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.bg,
-    justifyContent: 'center', alignItems: 'center',
-    marginLeft: 12,
-  },
-  iconClose: { width: 13, height: 13 },
+  pageTitle: { fontSize: 28, fontWeight: '900', color: Colors.black, marginBottom: 4, letterSpacing: -0.5 },
+  pageSub: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
+  closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  
+  activePlanCard: { marginHorizontal: 20, marginBottom: 24, backgroundColor: Colors.white, borderRadius: 24, padding: 20, borderWidth: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 16, elevation: 3 },
+  activePlanHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  activePlanLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginBottom: 4 },
+  activePlanName: { fontSize: 24, fontWeight: '900', color: Colors.black },
+  activePlanIconWrap: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  
+  usageContainer: { marginBottom: 16 },
+  usageRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  usageLabel: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  usageValue: { fontSize: 13, fontWeight: '800', color: Colors.black },
+  progressTrack: { height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 4 },
+  
+  renewalBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12 },
+  renewalText: { fontSize: 12, fontWeight: '500', color: Colors.textSecondary },
 
-  currentPlanBanner: {
-    marginHorizontal: 20, marginBottom: 8,
-    backgroundColor: Colors.white, borderRadius: 18,
-    padding: 18, borderWidth: 1.5,
-    flexDirection: 'row', alignItems: 'center',
-  },
-  currentPlanLeft: { flex: 1 },
-  currentPlanLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4 },
-  currentPlanName: { fontSize: 22, fontWeight: '900', color: Colors.black, marginBottom: 3 },
-  currentPlanExpiry: { fontSize: 12, color: Colors.textSecondary, marginBottom: 2 },
-  currentPlanUsage: { fontSize: 12, color: Colors.textSecondary },
-  currentPlanBadge: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
-  currentPlanBadgeIcon: { width: 26, height: 26 },
+  plansContainer: { paddingHorizontal: 20, gap: 16 },
+  planCard: { borderRadius: 24, padding: 24, borderWidth: 1.5, overflow: 'hidden' },
+  planCardActive: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.06, shadowRadius: 24, elevation: 5 },
+  ribbon: { position: 'absolute', top: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, borderBottomLeftRadius: 16 },
+  ribbonText: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  
+  planHeader: { marginBottom: 20, marginTop: 4 },
+  planTitle: { fontSize: 15, fontWeight: '800', marginBottom: 4, letterSpacing: 1 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  priceLarge: { fontSize: 36, fontWeight: '900', letterSpacing: -1 },
+  priceSub: { fontSize: 15, fontWeight: '600' },
+  
+  featureList: { gap: 12, marginBottom: 24 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  featureText: { fontSize: 14, fontWeight: '500', flex: 1, lineHeight: 20 },
+  
+  upgradeBtn: { borderRadius: 16, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+  upgradeBtnText: { fontWeight: '900', fontSize: 15 },
 
-  planCard: {
-    backgroundColor: Colors.white, borderRadius: 20,
-    padding: 20, borderWidth: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06, shadowRadius: 10, elevation: 3,
-    overflow: 'hidden',
-  },
-  ribbonBadge: {
-    position: 'absolute', top: 0, right: 0,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    borderBottomLeftRadius: 14, paddingHorizontal: 12, paddingVertical: 6,
-  },
-  ribbonIcon: { width: 11, height: 11 },
-  ribbonBadgeText: { color: 'white', fontSize: 10, fontWeight: '900', letterSpacing: 0.3 },
-  planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, marginTop: 8 },
-  planName: { fontSize: 18, fontWeight: '900' },
-  planPriceWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  planPrice: { fontSize: 24, fontWeight: '900' },
-  planPricePer: { fontSize: 13, color: Colors.textSecondary },
-  featuresList: { gap: 10, marginBottom: 16 },
-  featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  iconFeatureCheck: { width: 16, height: 16, marginTop: 1 },
-  featureText: { fontSize: 13, color: Colors.textSecondary, flex: 1, lineHeight: 20 },
-  upgradeBtn: {
-    borderRadius: 50, paddingVertical: 14,
-    alignItems: 'center',
-  },
-  upgradeBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconUpgradeBtn: { width: 14, height: 14 },
-  upgradeBtnDisabled: { opacity: 0.6 },
-  upgradeBtnText: { color: 'white', fontWeight: '900', fontSize: 14 },
+  historySection: { marginHorizontal: 20, marginTop: 24, backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', overflow: 'hidden' },
+  historyToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
+  historyToggleText: { fontSize: 15, fontWeight: '800', color: Colors.black },
+  historyList: { borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  historyEmpty: { padding: 30, alignItems: 'center' },
+  historyEmptyText: { color: Colors.textMuted, fontSize: 14 },
+  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  historyPlan: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 4 },
+  historyDate: { fontSize: 12, color: Colors.textMuted },
+  historyAmount: { fontSize: 16, fontWeight: '900', color: Colors.black, marginBottom: 6 },
+  historyStatusBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  historyStatusText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
-  historyToggle: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    marginHorizontal: 20, marginBottom: 12, padding: 12,
-    backgroundColor: Colors.white, borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  iconChevron: { width: 13, height: 13 },
-  historyToggleText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
-  historyList: { marginHorizontal: 20, backgroundColor: Colors.white, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, marginBottom: 16 },
-  historyEmpty: { padding: 20, textAlign: 'center', color: Colors.textMuted, fontSize: 13 },
-  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.divider },
-  historyPlan: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 2 },
-  historyDate: { fontSize: 11, color: Colors.textMuted },
-  historyRight: { alignItems: 'flex-end', gap: 4 },
-  historyAmount: { fontSize: 15, fontWeight: '900', color: Colors.orange },
-  historyStatus: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  historyStatusText: { fontSize: 10, fontWeight: '800' },
-
-  noteBox: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    marginHorizontal: 20, backgroundColor: '#EFF6FF', borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: '#BFDBFE',
-  },
-  iconNote: { width: 15, height: 15, marginTop: 2 },
-  noteText: { fontSize: 12, color: '#1E40AF', lineHeight: 19, flex: 1 },
+  secureNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 20, marginTop: 24, padding: 16, backgroundColor: '#F1F5F9', borderRadius: 16 },
+  secureNoteText: { fontSize: 12, color: '#475569', lineHeight: 18, flex: 1, fontWeight: '500' },
 });

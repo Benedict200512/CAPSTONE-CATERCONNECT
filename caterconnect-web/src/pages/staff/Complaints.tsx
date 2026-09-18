@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { 
+  AlertTriangle, CheckCircle2, Loader2, FileText, 
+  Layers, Clock, Lock 
+} from 'lucide-react';
 
 type Complaint = {
   id: string;
@@ -17,32 +21,31 @@ type Complaint = {
   profiles?: { full_name: string; email: string } | null;
 };
 
-const PRIORITY_STYLE: Record<string, { bg: string; color: string }> = {
-  high:   { bg: '#FEE2E2', color: '#991B1B' },
-  medium: { bg: '#FEF3C7', color: '#92400E' },
-  low:    { bg: '#DCFCE7', color: '#166534' },
+const PRIORITY_STYLE: Record<string, { bg: string; color: string; border: string }> = {
+  high:   { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' },
+  medium: { bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' },
+  low:    { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0' },
 };
 
-const STATUS_BADGE: Record<string, string> = {
-  open:      'badge-open',
-  in_review: 'badge-review',
-  resolved:  'badge-resolved',
-  closed:    'badge-closed',
+const STATUS_BADGE: Record<string, { bg: string; color: string; border: string }> = {
+  open:       { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' },
+  in_review: { bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' },
+  resolved:  { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0' },
+  closed:    { bg: '#F3F4F6', color: '#4B5563', border: '#E5E7EB' },
 };
 
 export default function Complaints() {
   const [complaints, setComplaints]       = useState<Complaint[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [filter, setFilter]               = useState('open');
-  const [selected, setSelected]           = useState<Complaint | null>(null);
+  const [loading, setLoading]            = useState(true);
+  const [filter, setFilter]              = useState('open');
+  const [selected, setSelected]          = useState<Complaint | null>(null);
   const [resolutionNotes, setResolutionNotes] = useState('');
-  const [updating, setUpdating]           = useState(false);
-  const [counts, setCounts]               = useState<Record<string, number>>({});
+  const [updating, setUpdating]          = useState(false);
+  const [counts, setCounts]              = useState<Record<string, number>>({});
 
   const load = async () => {
     setLoading(true);
 
-    // Load counts for all statuses
     const statuses = ['open', 'in_review', 'resolved', 'closed'];
     const countRes = await Promise.all(
       statuses.map(s =>
@@ -53,7 +56,6 @@ export default function Complaints() {
     statuses.forEach((s, i) => { c[s] = countRes[i].count ?? 0; });
     setCounts(c);
 
-    // Load complaints with reporter info
     let query = supabase
       .from('complaints')
       .select('*, profiles(full_name, email)')
@@ -91,181 +93,171 @@ export default function Complaints() {
   const totalOpen = counts.open ?? 0;
 
   return (
-    <div>
+    <div style={{ paddingBottom: 40 }}>
       {/* Header */}
-      <div className="page-header">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 className="page-title">Complaints & Disputes</h1>
-          <p className="page-sub">Investigate and resolve platform disputes between users</p>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Complaints & Disputes</h1>
+          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>Investigate, prioritize, and resolve platform disputes between users.</p>
         </div>
-        {totalOpen > 0 && (
-          <div style={s.urgentPill}>
-            <span style={{ fontSize: 20, fontWeight: 900 }}>{totalOpen}</span>
-            <span style={{ fontSize: 12, fontWeight: 700 }}>need attention</span>
-          </div>
-        )}
+        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 999, padding: '8px 20px', fontSize: 13, color: '#111', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626' }} />
+          {totalOpen} ACTIVE DISPUTES
+        </div>
       </div>
 
-      {/* Status tabs with counts */}
-      <div className="tab-bar">
+      {/* Consistent Segmented Filter Tabs with Icons */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, background: '#F3F4F6', padding: 6, borderRadius: 14, border: '1px solid #E5E7EB', width: 'fit-content', flexWrap: 'wrap' }}>
         {[
-          { key: 'all',       label: 'All',       icon: '📋' },
-          { key: 'open',      label: 'Open',      icon: '🔴' },
-          { key: 'in_review', label: 'In Review', icon: '🔍' },
-          { key: 'resolved',  label: 'Resolved',  icon: '✅' },
-          { key: 'closed',    label: 'Closed',    icon: '🔒' },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            className={`tab-btn ${filter === tab.key ? 'active' : ''}`}
-            onClick={() => { setFilter(tab.key); setSelected(null); }}
-          >
-            {tab.icon} {tab.label}
-            {counts[tab.key] !== undefined && counts[tab.key] > 0 && (
-              <span style={{
-                marginLeft: 6, background: filter === tab.key ? 'rgba(255,255,255,0.2)' : '#F3F4F6',
-                color: filter === tab.key ? 'white' : '#6B7280',
-                borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 700,
-              }}>
-                {counts[tab.key]}
-              </span>
-            )}
-          </button>
-        ))}
+          { key: 'all', icon: Layers, label: 'All Tickets', color: '#2563EB' },
+          { key: 'open', icon: AlertTriangle, label: 'Open', color: '#DC2626' },
+          { key: 'in_review', icon: Clock, label: 'In Review', color: '#D97706' },
+          { key: 'resolved', icon: CheckCircle2, label: 'Resolved', color: '#16A34A' },
+          { key: 'closed', icon: Lock, label: 'Closed', color: '#4B5563' },
+        ].map((tab) => {
+          const TabIcon = tab.icon;
+          const isActive = filter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => { setFilter(tab.key); setSelected(null); }}
+              style={{ 
+                padding: '10px 20px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s', textTransform: 'capitalize',
+                background: isActive ? '#FFFFFF' : 'transparent',
+                color: isActive ? '#111' : '#6B7280',
+                boxShadow: isActive ? '0 2px 4px rgba(0,0,0,0.04)' : 'none'
+              }}
+            >
+              <TabIcon size={16} color={tab.color} />
+              {tab.label}
+              {counts[tab.key] !== undefined && counts[tab.key] > 0 && (
+                <span style={{ marginLeft: 4, background: isActive ? '#111' : '#E5E7EB', color: isActive ? '#FFF' : '#4B5563', borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 800 }}>
+                  {counts[tab.key]}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div style={s.splitView}>
-        {/* LEFT — list */}
-        <div style={s.listPanel}>
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24, alignItems: 'start' }}>
+        {/* LEFT LIST PANEL */}
+        <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', overflow: 'hidden', maxHeight: 'calc(100vh - 260px)', overflowY: 'auto' }}>
           {loading ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">⏳</div>
-              <div className="empty-state-sub">Loading complaints...</div>
+            <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <Loader2 size={28} className="animate-spin" color="#F97316" />
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Loading tickets...</span>
             </div>
           ) : complaints.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">{filter === 'open' ? '✅' : '📭'}</div>
-              <div className="empty-state-title">
-                {filter === 'open' ? 'All clear!' : `No ${filter.replace('_', ' ')} complaints`}
-              </div>
-              <div className="empty-state-sub">
-                {filter === 'open' ? 'No open complaints right now.' : 'Nothing here yet.'}
-              </div>
-            </div>
-          ) : (
-            complaints.map((c) => {
-              const ps = PRIORITY_STYLE[c.priority] ?? PRIORITY_STYLE.medium;
-              const isActive = selected?.id === c.id;
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => { setSelected(c); setResolutionNotes(c.resolution_notes ?? ''); }}
-                  style={{ ...s.listItem, ...(isActive ? s.listItemActive : {}) }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ ...s.priorityDot, background: ps.color }} />
-                      <span style={{ ...s.priorityLabel, background: ps.bg, color: ps.color }}>
-                        {c.priority}
-                      </span>
-                      <span className={`badge ${STATUS_BADGE[c.status] ?? 'badge-open'}`}>
-                        {c.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                    <div style={s.listItemType}>{c.complaint_type}</div>
-                    {c.subject && (
-                      <div style={s.listItemSubject}>{c.subject}</div>
-                    )}
-                    <div style={s.listItemMeta}>
-                      <span>Against: {c.against_name ?? '—'}</span>
-                      <span>·</span>
-                      <span>{new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
-                    </div>
-                  </div>
-                  <span style={{ color: '#D1D5DB', fontSize: 20 }}>›</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* RIGHT — detail */}
-        <div style={s.detailPanel}>
-          {!selected ? (
-            <div className="empty-state" style={{ padding: '80px 40px' }}>
-              <div className="empty-state-icon">⚠️</div>
-              <div className="empty-state-title">Select a complaint</div>
-              <div className="empty-state-sub">Click a complaint from the list to review details and take action</div>
+            <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF' }}>
+              <CheckCircle2 size={36} color="#16A34A" style={{ marginBottom: 12 }} />
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>All clear!</div>
+              <div style={{ fontSize: 13 }}>No complaints match this filter.</div>
             </div>
           ) : (
             <div>
-              {/* Detail header */}
-              <div style={s.detailHeader}>
-                <div style={{ flex: 1 }}>
+              {complaints.map((c) => {
+                const ps = PRIORITY_STYLE[c.priority] ?? PRIORITY_STYLE.medium;
+                const bs = STATUS_BADGE[c.status] ?? STATUS_BADGE.open;
+                const isActive = selected?.id === c.id;
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => { setSelected(c); setResolutionNotes(c.resolution_notes ?? ''); }}
+                    style={{ 
+                      padding: '16px 20px', borderBottom: '1px solid #F3F4F6', cursor: 'pointer', transition: 'background 0.15s',
+                      background: isActive ? '#FFF7ED' : 'transparent',
+                      borderLeft: isActive ? '4px solid #F97316' : '4px solid transparent'
+                    }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F9FAFB'; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 800, background: ps.bg, color: ps.color, border: `1px solid ${ps.border}`, textTransform: 'uppercase' }}>
+                        {c.priority}
+                      </span>
+                      <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 800, background: bs.bg, color: bs.color, border: `1px solid ${bs.border}`, textTransform: 'capitalize' }}>
+                        {c.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 2 }}>{c.complaint_type}</div>
+                    {c.subject && (
+                      <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.subject}</div>
+                    )}
+                    <div style={{ fontSize: 12, color: '#9CA3AF', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Against: {c.against_name ?? '—'}</span>
+                      <span>{new Date(c.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT DETAIL PANEL */}
+        <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', padding: 32, maxHeight: 'calc(100vh - 260px)', overflowY: 'auto' }}>
+          {!selected ? (
+            <div style={{ textAlign: 'center', padding: '120px 40px', color: '#9CA3AF' }}>
+              <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F9FAFB', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <AlertTriangle size={32} color="#D1D5DB" />
+              </div>
+              <div style={{ fontWeight: 800, color: '#111', fontSize: 18, marginBottom: 6 }}>Select a complaint ticket</div>
+              <div style={{ fontSize: 14 }}>Click a dispute from the list to review evidence and apply resolution notes.</div>
+            </div>
+          ) : (
+            <div>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid #E5E7EB' }}>
+                <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <h2 style={{ fontSize: 20, fontWeight: 900, color: '#111', margin: 0 }}>
-                      {selected.complaint_type}
-                    </h2>
-                    <span className={`badge ${STATUS_BADGE[selected.status] ?? 'badge-open'}`}>
+                    <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111', margin: 0 }}>{selected.complaint_type}</h2>
+                    <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: STATUS_BADGE[selected.status]?.bg, color: STATUS_BADGE[selected.status]?.color, border: `1px solid ${STATUS_BADGE[selected.status]?.border}`, textTransform: 'capitalize' }}>
                       {selected.status.replace('_', ' ')}
                     </span>
-                    <span style={{
-                      ...s.priorityLabel,
-                      ...PRIORITY_STYLE[selected.priority],
-                    }}>
-                      {selected.priority} priority
-                    </span>
                   </div>
-                  {selected.subject && (
-                    <div style={{ fontSize: 14, color: '#6B7280', marginBottom: 4 }}>{selected.subject}</div>
-                  )}
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>
-                    Filed {new Date(selected.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </div>
+                  {selected.subject && <div style={{ fontSize: 14, color: '#4B5563', marginBottom: 4, fontWeight: 600 }}>{selected.subject}</div>}
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>Filed on {new Date(selected.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
                 </div>
               </div>
 
-              {/* Info grid */}
-              <div style={s.section}>
-                <div style={s.sectionTitle}>Complaint Details</div>
-                <div style={s.infoGrid}>
-                  {[
-                    { label: 'Reporter',      value: (selected.profiles as any)?.full_name ?? selected.reporter_role ?? '—' },
-                    { label: 'Reporter Role', value: selected.reporter_role ?? '—' },
-                    { label: 'Against',       value: selected.against_name ?? '—' },
-                    { label: 'Type',          value: selected.complaint_type },
-                  ].map(row => (
-                    <div key={row.label} style={s.infoCell}>
-                      <span style={s.infoCellLabel}>{row.label}</span>
-                      <span style={s.infoCellValue}>{row.value}</span>
-                    </div>
-                  ))}
+              {/* Info Grid */}
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Case Metadata</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, background: '#F9FAFB', borderRadius: 16, padding: 16, border: '1px solid #E5E7EB' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 700, textTransform: 'uppercase' }}>Reporter</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{(selected.profiles as any)?.full_name ?? selected.reporter_role ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 700, textTransform: 'uppercase' }}>Respondent / Against</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{selected.against_name ?? '—'}</div>
+                  </div>
                 </div>
-
-                <div style={s.descBox}>
-                  <div style={s.descLabel}>Description</div>
-                  <div style={s.descText}>{selected.description}</div>
+                <div style={{ marginTop: 12, background: '#FFFFFF', borderRadius: 14, padding: 16, border: '1px solid #E5E7EB' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Incident Description</div>
+                  <div style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6 }}>{selected.description}</div>
                 </div>
               </div>
 
-              {/* Change priority */}
+              {/* Priority Control */}
               {selected.status !== 'closed' && (
-                <div style={s.section}>
-                  <div style={s.sectionTitle}>Change Priority</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ marginBottom: 24 }}>
+                  <h4 style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Adjust Priority Level</h4>
+                  <div style={{ display: 'flex', gap: 10 }}>
                     {['low', 'medium', 'high'].map((p) => {
                       const ps = PRIORITY_STYLE[p];
                       return (
                         <button key={p}
                           onClick={() => updatePriority(selected.id, p)}
                           style={{
-                            padding: '7px 18px', borderRadius: 8, cursor: 'pointer',
-                            border: `1.5px solid ${ps.color}`,
-                            background: selected.priority === p ? ps.bg : 'white',
-                            color: ps.color, fontWeight: 700, fontSize: 13,
-                            transition: 'all 0.15s',
+                            flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer',
+                            border: `1px solid ${selected.priority === p ? ps.color : '#E5E7EB'}`,
+                            background: selected.priority === p ? ps.bg : '#FFF',
+                            color: ps.color, fontWeight: 800, fontSize: 13, textTransform: 'capitalize',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                           }}>
-                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                          {p}
                         </button>
                       );
                     })}
@@ -273,12 +265,12 @@ export default function Complaints() {
                 </div>
               )}
 
-              {/* Resolution notes */}
-              <div style={s.section}>
-                <div style={s.sectionTitle}>Resolution Notes</div>
+              {/* Resolution Notes */}
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Resolution Log & Findings</h4>
                 <textarea
-                  style={s.textarea}
-                  placeholder="Document your investigation findings and resolution steps..."
+                  style={{ width: '100%', borderRadius: 14, border: '1px solid #E5E7EB', padding: 14, fontSize: 14, color: '#111', outline: 'none', background: '#F9FAFB', fontFamily: 'inherit', resize: 'vertical' }}
+                  placeholder="Document investigation steps, communications, and final outcome..."
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
                   rows={4}
@@ -286,58 +278,39 @@ export default function Complaints() {
                 />
               </div>
 
-              {/* Action buttons */}
+              {/* Action Buttons */}
               {selected.status !== 'closed' && (
-                <div style={s.actionGrid}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   {selected.status === 'open' && (
-                    <button className="btn btn-outline" style={{ justifyContent: 'center' }}
+                    <button style={{ flex: 1, padding: '14px', background: '#2563EB', color: '#FFF', border: 'none', borderRadius: 14, fontWeight: 800, cursor: updating ? 'not-allowed' : 'pointer' }}
                       onClick={() => updateStatus(selected.id, 'in_review')} disabled={updating}>
-                      🔍 Mark In Review
+                      Mark In Review
                     </button>
                   )}
                   {(selected.status === 'open' || selected.status === 'in_review') && (
-                    <button className="btn btn-green" style={{ justifyContent: 'center' }}
+                    <button style={{ flex: 1, padding: '14px', background: '#16A34A', color: '#FFF', border: 'none', borderRadius: 14, fontWeight: 800, cursor: updating ? 'not-allowed' : 'pointer' }}
                       onClick={() => updateStatus(selected.id, 'resolved')} disabled={updating}>
-                      ✅ Mark Resolved
+                      Mark Resolved
                     </button>
                   )}
                   {selected.status === 'resolved' && (
-                    <button className="btn btn-black" style={{ justifyContent: 'center' }}
+                    <button style={{ flex: 1, padding: '14px', background: '#111', color: '#FFF', border: 'none', borderRadius: 14, fontWeight: 800, cursor: updating ? 'not-allowed' : 'pointer' }}
                       onClick={() => updateStatus(selected.id, 'closed')} disabled={updating}>
-                      🔒 Close Complaint
+                      Close Ticket
                     </button>
                   )}
-                  <button className="btn btn-red" style={{ justifyContent: 'center' }}
-                    onClick={() => {
-                      if (window.confirm('Escalate this complaint to admin for further review?')) {
-                        updateStatus(selected.id, 'in_review');
-                      }
-                    }}
-                    disabled={updating}>
-                    ⬆️ Escalate to Admin
-                  </button>
                 </div>
               )}
 
-              {/* Closed banner */}
               {selected.status === 'closed' && (
-                <div style={s.closedBanner}>
-                  <span style={{ fontSize: 24 }}>🔒</span>
+                <div style={{ background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 16, padding: 20, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                  <FileText size={24} color="#4B5563" style={{ flexShrink: 0, marginTop: 2 }} />
                   <div>
-                    <div style={{ fontWeight: 800, color: '#374151', marginBottom: 4 }}>Complaint Closed</div>
+                    <div style={{ fontWeight: 900, color: '#111', fontSize: 15, marginBottom: 4 }}>Ticket Closed</div>
                     {selected.resolution_notes && (
-                      <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
-                        {selected.resolution_notes}
-                      </div>
+                      <div style={{ fontSize: 13, color: '#4B5563', lineHeight: 1.6 }}>{selected.resolution_notes}</div>
                     )}
                   </div>
-                </div>
-              )}
-
-              {/* Updating indicator */}
-              {updating && (
-                <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, marginTop: 12 }}>
-                  ⏳ Saving...
                 </div>
               )}
             </div>
@@ -347,59 +320,3 @@ export default function Complaints() {
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  urgentPill: {
-    background: '#FEE2E2', border: '1.5px solid #FECACA',
-    borderRadius: 12, padding: '10px 18px', textAlign: 'center',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-    color: '#DC2626',
-  },
-  splitView: { display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20, alignItems: 'start' },
-  listPanel: {
-    background: 'white', borderRadius: 16, border: '1px solid #E8EAED',
-    overflow: 'hidden', maxHeight: 'calc(100vh - 260px)', overflowY: 'auto',
-  },
-  listItem: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '14px 16px', borderBottom: '1px solid #F3F4F6',
-    cursor: 'pointer', transition: 'background 0.1s',
-  },
-  listItemActive: { background: '#FEF3E8', borderLeft: '3px solid #F97316' },
-  listItemType: { fontSize: 14, fontWeight: 800, color: '#111', marginBottom: 2 },
-  listItemSubject: { fontSize: 12, color: '#6B7280', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  listItemMeta: { display: 'flex', gap: 6, fontSize: 11, color: '#9CA3AF' },
-  priorityDot: { width: 6, height: 6, borderRadius: '50%', flexShrink: 0 },
-  priorityLabel: { display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
-
-  detailPanel: {
-    background: 'white', borderRadius: 16, border: '1px solid #E8EAED',
-    padding: '24px', maxHeight: 'calc(100vh - 260px)', overflowY: 'auto',
-  },
-  detailHeader: { marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid #E5E7EB' },
-
-  section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 11, fontWeight: 800, color: '#6B7280', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 },
-
-  infoGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', marginBottom: 12 },
-  infoCell: { display: 'flex', flexDirection: 'column', padding: '12px 16px', borderBottom: '1px solid #E5E7EB', borderRight: '1px solid #E5E7EB' },
-  infoCellLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' },
-  infoCellValue: { fontSize: 14, color: '#111', fontWeight: 600 },
-
-  descBox: { background: '#F9FAFB', borderRadius: 10, padding: '14px', border: '1px solid #E5E7EB' },
-  descLabel: { fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8 },
-  descText: { fontSize: 14, color: '#374151', lineHeight: 1.7 },
-
-  textarea: {
-    width: '100%', borderRadius: 10, border: '1.5px solid #E8EAED',
-    padding: '12px 14px', fontSize: 14, color: '#111',
-    resize: 'vertical', outline: 'none', fontFamily: 'inherit',
-    background: '#F9FAFB', boxSizing: 'border-box',
-  },
-  actionGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
-  closedBanner: {
-    display: 'flex', gap: 14, alignItems: 'flex-start',
-    background: '#F3F4F6', borderRadius: 14, padding: '16px 18px',
-    border: '1px solid #E5E7EB', marginTop: 8,
-  },
-};

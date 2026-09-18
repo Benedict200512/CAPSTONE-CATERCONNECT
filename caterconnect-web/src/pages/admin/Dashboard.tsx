@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Users, CheckCircle2, Clock, Calendar, Wallet, UserCog, Activity, CreditCard, TrendingUp,
+  ArrowRight, ShieldAlert, Store, Loader2, Sparkles, Zap, Crown, Building2
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -42,17 +46,6 @@ export default function AdminDashboard() {
     load();
   }, []);
 
-  const statCards = [
-    { icon: '👤', label: 'Customers',       value: stats.customers, color: '#2563EB', bg: '#DBEAFE', path: '/admin/users?role=customer' },
-    { icon: '🍽️', label: 'Caterers',        value: stats.caterers,  color: '#7C3AED', bg: '#F5F3FF', path: '/admin/users?role=caterer'  },
-    { icon: '✅', label: 'Verified',         value: stats.verified,  color: '#16A34A', bg: '#DCFCE7', path: '/staff/verification'        },
-    { icon: '⏳', label: 'Pending Review',   value: stats.pending,   color: '#D97706', bg: '#FEF3C7', path: '/staff/verification'        },
-    { icon: '📅', label: 'Total Bookings',   value: stats.bookings,  color: '#F97316', bg: '#FEF3E8', path: '/staff/bookings'            },
-    { icon: '💰', label: 'Total Revenue',    value: `₱${stats.revenue.toLocaleString()}`, color: '#16A34A', bg: '#DCFCE7', path: '/admin/revenue', isStr: true },
-    { icon: '🚨', label: 'Open Complaints',  value: stats.complaints, color: '#DC2626', bg: '#FEE2E2', path: '/staff/complaints'         },
-    { icon: '👷', label: 'Staff Members',    value: stats.staff,     color: '#6366F1', bg: '#EEF2FF', path: '/admin/users?role=staff'    },
-  ];
-
   const roleColor: Record<string, string> = {
     customer: '#2563EB', caterer: '#7C3AED', staff: '#16A34A', admin: '#F97316',
   };
@@ -60,113 +53,249 @@ export default function AdminDashboard() {
     customer: '#DBEAFE', caterer: '#F5F3FF', staff: '#DCFCE7', admin: '#FEF3E8',
   };
 
+  const adminFullName = profile?.full_name ?? 'Admin';
+
   return (
-    <div>
-      {/* Header */}
-      <div className="page-header">
+    <div style={{ paddingBottom: 40, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      {/* Top Header Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
-          <h1 className="page-title">Admin Dashboard</h1>
-          <p className="page-sub">Welcome back, {profile?.full_name?.split(' ')[0] ?? 'Admin'} 👋 — Full platform overview</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: '#111', marginBottom: 6, letterSpacing: '-0.01em' }}>
+            Welcome back, {adminFullName}! 👋
+          </h1>
+          <p style={{ fontSize: 14, color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
+            Here is your daily snapshot of CaterConnect's platform operations.
+          </p>
         </div>
-        <div style={s.datePill}>
-          {new Date().toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
+
+        <div>
+          <div style={{ background: '#FFFFFF', border: '1px solid #E8E4DE', borderRadius: 20, padding: '8px 16px', fontSize: 13, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+            <Calendar size={15} color="#EA580C" />
+            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="stat-grid">
-        {statCards.map((card) => (
-          <div key={card.label} className="card stat-card" onClick={() => navigate(card.path)}
-            style={{ cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.10)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}>
-            <div className="stat-icon" style={{ background: card.bg }}>{card.icon}</div>
-            <div>
-              <div className="stat-val" style={{ color: card.color }}>{loading ? '—' : card.value}</div>
-              <div className="stat-lbl">{card.label}</div>
+      {/* Primary KPI Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, marginBottom: 28 }}>
+        {[
+          { label: 'Total Users', value: stats.customers + stats.staff, icon: Users, color: '#F97316', bg: '#FFF7ED', accent: 'linear-gradient(135deg, #F97316 0%, #FB923C 100%)', trend: '+12%', path: '/admin/users' },
+          { label: 'Registered Caterers', value: stats.caterers, icon: Store, color: '#16A34A', bg: '#DCFCE7', accent: 'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)', trend: '+8%', path: '/admin/users?role=caterer' },
+          { label: 'Total Bookings', value: stats.bookings, icon: Calendar, color: '#2563EB', bg: '#DBEAFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)', trend: '+15%', path: '/staff/bookings' },
+          { label: 'Total Revenue', value: `₱${stats.revenue.toLocaleString()}`, icon: Wallet, color: '#7C3AED', bg: '#F5F3FF', accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)', trend: '+22%', path: '/admin/revenue' },
+        ].map((card, i) => {
+          const Icon = card.icon;
+          return (
+            <div key={i} onClick={() => navigate(card.path)} style={{ position: 'relative', background: '#FFFFFF', borderRadius: 24, padding: '24px 22px', border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease', overflow: 'hidden' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 14px 36px rgba(0,0,0,0.07)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 10px 30px rgba(0,0,0,0.04)'; }}>
+              
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: card.accent }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, marginTop: 4 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: card.bg, border: '1px solid #FED7AA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={22} color={card.color} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#DCFCE7', color: '#166534', padding: '4px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 700 }}>
+                  <TrendingUp size={13} /> {card.trend}
+                </div>
+              </div>
+              
+              <div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: '#111', letterSpacing: '-0.01em', marginBottom: 4 }}>
+                  {loading ? <Loader2 size={22} className="animate-spin" color="#9CA3AF" /> : card.value}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>{card.label}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
-        {/* Recent users */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '20px 24px', borderBottom: '1px solid #F1F3F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 900 }}>Recent Registrations</h3>
-            <button className="btn btn-outline btn-sm" onClick={() => navigate('/admin/users')}>View All →</button>
+      {/* Main Content Layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+        
+        {/* Left Column: Recent Registrations Table */}
+        <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '24px 24px 20px', borderBottom: '1px solid #E8E4DE', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
+              <UserCog size={19} color="#EA580C" /> Recent Registrations
+            </h3>
+            <button onClick={() => navigate('/admin/users')} style={{ background: '#FFF7ED', border: '1px solid #FED7AA', color: '#EA580C', padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#FFEDD5')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#FFF7ED')}>
+              View Directory <ArrowRight size={14} />
+            </button>
           </div>
-          {loading ? <div className="empty-state">⏳ Loading...</div> :
-            recentUsers.length === 0 ? <div className="empty-state">No users yet.</div> : (
-              <table>
-                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
+
+          <div style={{ flex: 1, overflowX: 'auto' }}>
+            {loading ? (
+              <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <Loader2 size={32} className="animate-spin" color="#EA580C" />
+                <span style={{ fontSize: 14, fontWeight: 500 }}>Loading user directory...</span>
+              </div>
+            ) : recentUsers.length === 0 ? (
+              <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF' }}>No recent users found.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E8E4DE' }}>
+                    <th style={{ padding: '16px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>User Profile</th>
+                    <th style={{ padding: '16px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>Account Email</th>
+                    <th style={{ padding: '16px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>Role Assignment</th>
+                    <th style={{ padding: '16px 24px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>Date Joined</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {recentUsers.map((u) => (
-                    <tr key={u.id}>
-                      <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {u.avatar_url ? (
-                      <img src={u.avatar_url} alt={u.full_name}
-                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid #E5E7EB' }} />
-                      ) : (
-                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: roleBg[u.role] ?? '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: roleColor[u.role] ?? '#6B7280', flexShrink: 0 }}>
-                     {(u.full_name ?? 'U').charAt(0).toUpperCase()}
-                     </div>
-                    )}
-                    <strong style={{ fontSize: 14 }}>{u.full_name ?? '—'}</strong>
-                    </div>
-                    </td>
-                      <td style={{ color: '#6B7280', fontSize: 13 }}>{u.email}</td>
-                      <td>
-                        <span className="badge" style={{ background: roleBg[u.role] ?? '#F3F4F6', color: roleColor[u.role] ?? '#6B7280' }}>{u.role}</span>
+                  {recentUsers.map((u, i) => (
+                    <tr key={u.id} style={{ borderBottom: i === recentUsers.length - 1 ? 'none' : '1px solid #E8E4DE', transition: 'background 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt={u.full_name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid #F3F4F6' }} />
+                          ) : (
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: roleBg[u.role] ?? '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: roleColor[u.role] ?? '#6B7280' }}>
+                              {(u.full_name ?? 'U').charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111', marginBottom: 2 }}>{u.full_name ?? '—'}</div>
+                            <div style={{ fontSize: 11.5, color: '#9CA3AF', fontFamily: 'monospace' }}>ID: {u.id.slice(0, 8)}</div>
+                          </div>
+                        </div>
                       </td>
-                      <td style={{ fontSize: 12, color: '#9CA3AF' }}>{u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '—'}</td>
+                      <td style={{ padding: '16px 24px', color: '#4B5563', fontSize: 14 }}>{u.email}</td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <span style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: roleBg[u.role] ?? '#F3F4F6', color: roleColor[u.role] ?? '#6B7280', textTransform: 'capitalize' }}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px 24px', fontSize: 13, color: '#6B7280', textAlign: 'right', fontWeight: 500 }}>
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
+          </div>
         </div>
 
-        {/* Right panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Platform health */}
-          <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 900, marginBottom: 16 }}>📊 Platform Health</h3>
-            {[
-              { label: 'Approval Rate', value: stats.caterers > 0 ? `${Math.round((stats.verified / stats.caterers) * 100)}%` : '—', color: '#16A34A' },
-              { label: 'Pending Reviews', value: stats.pending, color: '#D97706' },
-              { label: 'Open Complaints', value: stats.complaints, color: '#DC2626' },
-              { label: 'Active Bookings', value: stats.bookings, color: '#F97316' },
-            ].map((item) => (
-              <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid #F1F3F5' }}>
-                <span style={{ fontSize: 13, color: '#6B7280' }}>{item.label}</span>
-                <span style={{ fontSize: 16, fontWeight: 900, color: item.color }}>{loading ? '—' : item.value}</span>
+        {/* Right Column: Health & Operations */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          
+          {/* Action Center */}
+          <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0' }}>
+              <Activity size={19} color="#111" /> Action Center
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div onClick={() => navigate('/staff/verification')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#FEF3C7', borderRadius: 16, cursor: 'pointer', border: '1px solid #FDE68A', transition: 'transform 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ background: '#FFFBEB', padding: 8, borderRadius: 10, border: '1px solid #FDE68A' }}>
+                    <Clock size={18} color="#D97706" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#92400E' }}>Pending Verifications</div>
+                    <div style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>Caterers waiting for review</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: '#92400E' }}>{loading ? '-' : stats.pending}</span>
+                  <ArrowRight size={16} color="#D97706" />
+                </div>
               </div>
-            ))}
+              
+              <div onClick={() => navigate('/staff/complaints')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#FEE2E2', borderRadius: 16, cursor: 'pointer', border: '1px solid #FECACA', transition: 'transform 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 10, border: '1px solid #FECACA' }}>
+                    <ShieldAlert size={18} color="#DC2626" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#991B1B' }}>Open Complaints</div>
+                    <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>Requires immediate action</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: '#991B1B' }}>{loading ? '-' : stats.complaints}</span>
+                  <ArrowRight size={16} color="#DC2626" />
+                </div>
+              </div>
+
+              <div onClick={() => navigate('/staff/verification')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#DCFCE7', borderRadius: 16, cursor: 'pointer', border: '1px solid #BBF7D0', transition: 'transform 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ background: '#F0FDF4', padding: 8, borderRadius: 10, border: '1px solid #BBF7D0' }}>
+                    <CheckCircle2 size={18} color="#16A34A" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#166534' }}>Verified Caterers</div>
+                    <div style={{ fontSize: 12, color: '#15803D', marginTop: 2 }}>Active on the platform</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: '#166534' }}>{loading ? '-' : stats.verified}</span>
+                  <ArrowRight size={16} color="#16A34A" />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Subscription plans */}
-          <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 900, marginBottom: 14 }}>💳 Plans</h3>
-            {[
-              { plan: 'Free',     price: '₱0/mo',   color: '#6B7280', bg: '#F3F4F6' },
-              { plan: 'Basic',    price: '₱299/mo',  color: '#2563EB', bg: '#DBEAFE' },
-              { plan: 'Standard', price: '₱499/mo',  color: '#D97706', bg: '#FEF3C7' },
-              { plan: 'Premium',  price: '₱999/mo',  color: '#7C3AED', bg: '#F5F3FF' },
-            ].map((p) => (
-              <div key={p.plan} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: p.bg, borderRadius: 9, marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: p.color }}>{p.plan}</span>
-                <span style={{ fontSize: 13, fontWeight: 900, color: p.color }}>{p.price}</span>
-              </div>
-            ))}
+          {/* Subscription Tiers Mini-Widget (Exact Database Schema Match) */}
+          <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
+                <CreditCard size={19} color="#111" /> Subscription Tiers
+              </h3>
+              <button onClick={() => navigate('/staff/subscriptions')} style={{ background: 'transparent', border: 'none', color: '#EA580C', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Manage →
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              {[
+                { plan: 'Free Plan', price: '₱0', maxPkg: '3 packages', maxBooking: '5 bookings/mo', color: '#6B7280', bg: '#F9FAFB', border: '#E5E7EB', icon: Sparkles },
+                { plan: 'Basic Plan', price: '₱299', maxPkg: 'Unlimited', maxBooking: '20 bookings/mo', color: '#2563EB', bg: '#DBEAFE', border: '#93C5FD', icon: Zap },
+                { plan: 'Standard Plan', price: '₱499', maxPkg: 'Unlimited', maxBooking: '50 bookings/mo', color: '#D97706', bg: '#FEF3C7', border: '#FDE68A', icon: Crown },
+                { plan: 'Premium Plan', price: '₱999', maxPkg: 'Unlimited', maxBooking: 'Unlimited', color: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD', icon: Building2 },
+              ].map((p, idx) => {
+                const TierIcon = p.icon;
+                return (
+                  <div key={idx} style={{ background: p.bg, borderRadius: 18, padding: '16px', border: `1px solid ${p.border}`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: p.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.plan}</span>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+                        <TierIcon size={14} color={p.color} />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 19, fontWeight: 900, color: '#111', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {p.price}<span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280' }}>/mo</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4B5563', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 4 }}>
+                          {p.maxPkg}
+                        </span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4B5563', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 4 }}>
+                          {p.maxBooking}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
         </div>
       </div>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  datePill: { background: 'white', border: '1px solid #E8E4DE', borderRadius: 20, padding: '8px 16px', fontSize: 13, color: '#6B7280' },
-};

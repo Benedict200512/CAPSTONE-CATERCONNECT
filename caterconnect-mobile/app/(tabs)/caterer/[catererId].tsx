@@ -1,34 +1,23 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Dimensions, Image, Modal, Platform,
+  ActivityIndicator, Dimensions, Image, Platform,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import { useAuth } from '../../../context/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// ── Lucide Icons ──
+import {
+  ArrowLeft, ArrowRight, MapPin, Star, UtensilsCrossed,
+  Soup, Cake, Wine, Package, Utensils, CheckCircle2,
+  Phone, Mail, Scale, SearchX, Store, 
+  MessageSquareText, StarIcon
+} from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
-
-// ── Custom icon set (PNG) — replaces all emoji glyphs. ──────────
-const ICONS = {
-  arrowLeft: require('../../../assets/icons/arrow_left.png'),
-  arrowRightWhite: require('../../../assets/icons/arrow_right_white.png'),
-  pin: require('../../../assets/icons/pin.png'),
-  star: require('../../../assets/icons/star.png'),
-  starOutline: require('../../../assets/icons/star_outline.png'),
-  mainCourse: require('../../../assets/icons/main_course.png'),
-  appetizer: require('../../../assets/icons/appetizer.png'),
-  dessert: require('../../../assets/icons/dessert.png'),
-  drink: require('../../../assets/icons/drink.png'),
-  package: require('../../../assets/icons/package.png'),
-  plate: require('../../../assets/icons/plate.png'),
-  checkOutline: require('../../../assets/icons/check_outline.png'),
-  phone: require('../../../assets/icons/phone.png'),
-  envelope: require('../../../assets/icons/envelope.png'),
-  scale: require('../../../assets/icons/scale.png'),
-  searchEmpty: require('../../../assets/icons/search_empty.png'),
-};
 
 type Caterer = {
   id: string;
@@ -55,6 +44,7 @@ type Package = {
   price: number;
   guest_capacity: number;
   includes: string[] | null;
+  food_inclusions: string[] | null;
   event_types: string[] | null;
   image_url: string | null;
 };
@@ -83,23 +73,23 @@ type Review = {
 
 const TIER_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   bronze:  { color: '#B45309', bg: '#FEF3C7', label: 'Bronze'  },
-  silver:  { color: '#6B7280', bg: '#F3F4F6', label: 'Silver'  },
-  gold:    { color: '#D97706', bg: '#FFFBEB', label: 'Gold'    },
-  premium: { color: '#7C3AED', bg: '#F5F3FF', label: 'Premium' },
+  silver:  { color: '#4B5563', bg: '#F3F4F6', label: 'Silver'  },
+  gold:    { color: '#D97706', bg: '#FEF08A', label: 'Gold'    },
+  premium: { color: '#6D28D9', bg: '#EDE9FE', label: 'Premium' },
 };
 
 const PLAN_CONFIG: Record<string, { color: string; bg: string }> = {
-  premium:  { color: '#7C3AED', bg: '#F5F3FF' },
+  premium:  { color: '#6D28D9', bg: '#EDE9FE' },
   standard: { color: '#D97706', bg: '#FEF3C7' },
-  basic:    { color: '#2563EB', bg: '#DBEAFE' },
-  free:     { color: '#6B7280', bg: '#F3F4F6' },
+  basic:    { color: '#1D4ED8', bg: '#DBEAFE' },
+  free:     { color: '#4B5563', bg: '#F3F4F6' },
 };
 
 const CATEGORY_CONFIG: Record<string, { icon: any; color: string }> = {
-  main_course: { icon: ICONS.mainCourse, color: Colors.orange },
-  appetizer:   { icon: ICONS.appetizer,  color: '#16A34A' },
-  dessert:     { icon: ICONS.dessert,    color: '#EC4899' },
-  drink:       { icon: ICONS.drink,      color: '#2563EB' },
+  main_course: { icon: UtensilsCrossed, color: Colors.orange },
+  appetizer:   { icon: Soup,  color: '#10B981' },
+  dessert:     { icon: Cake,    color: '#EC4899' },
+  drink:       { icon: Wine,      color: '#3B82F6' },
 };
 const CATEGORY_ORDER = ['main_course', 'appetizer', 'dessert', 'drink'];
 
@@ -107,10 +97,11 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
   return (
     <View style={{ flexDirection: 'row', gap: 2 }}>
       {[1, 2, 3, 4, 5].map(i => (
-        <Image
+        <Star
           key={i}
-          source={i <= Math.round(value) ? ICONS.star : ICONS.starOutline}
-          style={{ width: size, height: size }}
+          size={size}
+          color={i <= Math.round(value) ? '#F59E0B' : '#E5E7EB'}
+          fill={i <= Math.round(value) ? '#F59E0B' : 'transparent'}
         />
       ))}
     </View>
@@ -137,10 +128,9 @@ export default function CatererDetailScreen() {
           .select('id, business_name, business_description, logo_url, cover_photo_url, city, address, contact_phone, contact_email, downpayment_percent, subscription_plan, avg_rating, review_count, verification_status')
           .eq('id', catererId)
           .single(),
-        // ── Updated: now also fetches linked menu items via package_menu_items ──
         supabase
           .from('packages')
-          .select('*, package_menu_items(menu_items(*))')
+          .select('*')
           .eq('caterer_id', catererId)
           .order('price', { ascending: true }),
         supabase
@@ -157,7 +147,7 @@ export default function CatererDetailScreen() {
       ]);
 
       if (catererRes.data) setCaterer(catererRes.data as any);
-      if (packagesRes.data) setPackages(packagesRes.data);
+      if (packagesRes.data) setPackages(packagesRes.data as any);
       if (menuRes.data) setMenuItems(menuRes.data);
       if (reviewsRes.data) setReviews(reviewsRes.data as any);
       setLoading(false);
@@ -200,11 +190,11 @@ export default function CatererDetailScreen() {
     return (
       <View style={s.center}>
         <View style={s.emptyIconWrap}>
-          <Image source={ICONS.searchEmpty} style={s.emptyIconImg} />
+          <SearchX size={36} color={Colors.textMuted} />
         </View>
         <Text style={s.emptyTitle}>Caterer not found</Text>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.85}>
-          <Image source={ICONS.arrowLeft} style={[s.iconBackBtnSm, { tintColor: Colors.white }]} />
+          <ArrowLeft size={18} color={Colors.white} />
           <Text style={s.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -218,23 +208,30 @@ export default function CatererDetailScreen() {
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
 
         {/* ── COVER PHOTO ── */}
         <View style={s.coverWrap}>
           {caterer.cover_photo_url ? (
             <Image source={{ uri: caterer.cover_photo_url }} style={s.coverPhoto} resizeMode="cover" />
           ) : (
-            <View style={s.coverPlaceholder} />
+            <View style={s.coverPlaceholder}>
+              <Store size={48} color="rgba(255,255,255,0.2)" />
+            </View>
           )}
+          
+          <LinearGradient
+            colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.4)']}
+            style={s.coverGradient}
+          />
 
           {/* Back button */}
           <TouchableOpacity
-            style={[s.backFloatBtn, { top: Platform.OS === 'ios' ? 52 : 36 }]}
+            style={[s.backFloatBtn, { top: Platform.OS === 'ios' ? 56 : 40 }]}
             onPress={() => router.back()}
-            activeOpacity={0.85}
+            activeOpacity={0.8}
           >
-            <Image source={ICONS.arrowLeft} style={[s.iconBackFloat, { tintColor: Colors.white }]} />
+            <ArrowLeft size={20} color={Colors.white} />
           </TouchableOpacity>
 
           {/* Plan badge */}
@@ -264,7 +261,7 @@ export default function CatererDetailScreen() {
               <Text style={s.businessName} numberOfLines={2}>{caterer.business_name}</Text>
               {caterer.verification_status === 'approved' && (
                 <View style={s.verifiedBadge}>
-                  <Image source={ICONS.checkOutline} style={[s.iconVerifiedSm, { tintColor: '#166534' }]} />
+                  <CheckCircle2 size={12} color="#16A34A" />
                   <Text style={s.verifiedText}>Verified</Text>
                 </View>
               )}
@@ -273,7 +270,7 @@ export default function CatererDetailScreen() {
             {/* City */}
             {caterer.city && (
               <View style={s.locationRow}>
-                <Image source={ICONS.pin} style={[s.iconLocationPin, { tintColor: Colors.textSecondary }]} />
+                <MapPin size={14} color={Colors.textSecondary} />
                 <Text style={s.locationText}>{caterer.city}</Text>
               </View>
             )}
@@ -287,13 +284,6 @@ export default function CatererDetailScreen() {
               </View>
             ) : (
               <Text style={s.noRating}>No reviews yet</Text>
-            )}
-
-            {/* Price range */}
-            {lowestPrice !== null && (
-              <Text style={s.priceRange}>
-                Starting from <Text style={s.priceRangeNum}>₱{lowestPrice.toFixed(0)}/guest</Text>
-              </Text>
             )}
           </View>
         </View>
@@ -314,11 +304,6 @@ export default function CatererDetailScreen() {
             <Text style={s.quickStatNum}>{caterer.downpayment_percent}%</Text>
             <Text style={s.quickStatLabel}>Downpayment</Text>
           </View>
-          <View style={s.quickStatDivider} />
-          <View style={s.quickStat}>
-            <Text style={s.quickStatNum}>{caterer.review_count ?? 0}</Text>
-            <Text style={s.quickStatLabel}>Reviews</Text>
-          </View>
         </View>
 
         {/* ── DESCRIPTION ── */}
@@ -335,8 +320,8 @@ export default function CatererDetailScreen() {
           <View style={s.contactCard}>
             {caterer.contact_phone && (
               <View style={s.contactRow}>
-                <View style={[s.contactIconWrap, { backgroundColor: '#DBEAFE' }]}>
-                  <Image source={ICONS.phone} style={[s.contactIcon, { tintColor: '#2563EB' }]} />
+                <View style={[s.contactIconWrap, { backgroundColor: '#EFF6FF' }]}>
+                  <Phone size={18} color="#2563EB" />
                 </View>
                 <Text style={s.contactText}>{caterer.contact_phone}</Text>
               </View>
@@ -344,15 +329,15 @@ export default function CatererDetailScreen() {
             {caterer.contact_email && (
               <View style={s.contactRow}>
                 <View style={[s.contactIconWrap, { backgroundColor: '#F3F4F6' }]}>
-                  <Image source={ICONS.envelope} style={[s.contactIcon, { tintColor: Colors.textSecondary }]} />
+                  <Mail size={18} color={Colors.textSecondary} />
                 </View>
                 <Text style={s.contactText}>{caterer.contact_email}</Text>
               </View>
             )}
             {caterer.address && (
-              <View style={s.contactRow}>
+              <View style={[s.contactRow, { borderBottomWidth: 0 }]}>
                 <View style={[s.contactIconWrap, { backgroundColor: Colors.orangeLight }]}>
-                  <Image source={ICONS.pin} style={[s.contactIcon, { tintColor: Colors.orange }]} />
+                  <MapPin size={18} color={Colors.orange} />
                 </View>
                 <Text style={s.contactText}>{caterer.address}</Text>
               </View>
@@ -364,21 +349,30 @@ export default function CatererDetailScreen() {
         </View>
 
         {/* ── TABS ── */}
-        <View style={s.tabRow}>
-          {(['packages', 'menu', 'reviews'] as const).map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={[s.tab, activeTab === tab && s.tabActive]}
-              onPress={() => setActiveTab(tab)}
-              activeOpacity={0.85}
-            >
-              <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
-                {tab === 'packages' ? `Packages (${packages.length})`
-                  : tab === 'menu' ? `Menu (${menuItems.length})`
-                  : `Reviews (${reviews.length})`}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={s.tabContainer}>
+          <View style={s.tabRow}>
+            {(['packages', 'menu', 'reviews'] as const).map(tab => (
+              <TouchableOpacity
+                key={tab}
+                style={[s.tab, activeTab === tab && s.tabActive]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
+                  {tab === 'packages' ? `Packages`
+                    : tab === 'menu' ? `Menu`
+                    : `Reviews`}
+                </Text>
+                <View style={[s.tabCountBadge, activeTab === tab && s.tabCountBadgeActive]}>
+                  <Text style={[s.tabCountText, activeTab === tab && s.tabCountTextActive]}>
+                    {tab === 'packages' ? packages.length
+                      : tab === 'menu' ? menuItems.length
+                      : reviews.length}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* ── PACKAGES TAB ── */}
@@ -387,9 +381,9 @@ export default function CatererDetailScreen() {
             {packages.length === 0 ? (
               <View style={s.emptyTab}>
                 <View style={s.emptyTabIconWrap}>
-                  <Image source={ICONS.package} style={[s.emptyTabIconImg, { tintColor: Colors.border }]} />
+                  <Package size={32} color={Colors.textMuted} />
                 </View>
-                <Text style={s.emptyTabText}>No packages available yet</Text>
+                <Text style={s.emptyTabText}>No packages available</Text>
               </View>
             ) : (
               packages.map(pkg => {
@@ -397,104 +391,57 @@ export default function CatererDetailScreen() {
                 const pricePerGuest = pkg.guest_capacity > 0 ? pkg.price / pkg.guest_capacity : 0;
                 return (
                   <View key={pkg.id} style={s.pkgCard}>
-                    {/* Package image */}
                     {pkg.image_url ? (
                       <Image source={{ uri: pkg.image_url }} style={s.pkgImg} resizeMode="cover" />
                     ) : (
                       <View style={[s.pkgImgPlaceholder, { backgroundColor: tier.bg }]}>
-                        <Image source={ICONS.plate} style={[s.pkgImgIcon, { tintColor: tier.color }]} />
+                        <Utensils size={40} color={tier.color} opacity={0.5} />
                       </View>
                     )}
 
                     <View style={s.pkgBody}>
-                      {/* Tier badge + name */}
                       <View style={[s.tierBadge, { backgroundColor: tier.bg }]}>
                         <Text style={[s.tierBadgeText, { color: tier.color }]}>{tier.label}</Text>
                       </View>
-                      <Text style={s.pkgName}>{pkg.name}</Text>
+                      
+                      <View style={s.pkgPriceRow}>
+                        <View style={{ flex: 1 }}>
+                           <Text style={s.pkgName}>{pkg.name}</Text>
+                           <Text style={s.pkgPriceSub}>For {pkg.guest_capacity} guests</Text>
+                        </View>
+                        <View style={s.pkgPerGuest}>
+                          <Text style={s.pkgPrice}>₱{pkg.price.toLocaleString()}</Text>
+                          <Text style={s.pkgPerGuestLabel}>≈ ₱{pricePerGuest.toFixed(0)} / pax</Text>
+                        </View>
+                      </View>
+
                       {pkg.description && (
                         <Text style={s.pkgDesc}>{pkg.description}</Text>
                       )}
 
-                      {/* Pricing */}
-                      <View style={s.pkgPriceRow}>
-                        <View>
-                          <Text style={s.pkgPrice}>₱{pkg.price.toLocaleString()}</Text>
-                          <Text style={s.pkgPriceSub}>for {pkg.guest_capacity} guests</Text>
-                        </View>
-                        <View style={s.pkgPerGuest}>
-                          <Text style={s.pkgPerGuestNum}>₱{pricePerGuest.toFixed(0)}</Text>
-                          <Text style={s.pkgPerGuestLabel}>/guest</Text>
-                        </View>
-                      </View>
-
-                      {/* Includes */}
-                      {pkg.includes && pkg.includes.length > 0 && (
+                      {/* ── FOOD INCLUSIONS ── */}
+                      {pkg.food_inclusions && pkg.food_inclusions.length > 0 && (
                         <View style={s.includesWrap}>
-                          <Text style={s.includesTitle}>WHAT'S INCLUDED</Text>
-                          {pkg.includes.map((inc, i) => (
+                          <Text style={s.includesTitle}>FOOD INCLUSIONS</Text>
+                          {pkg.food_inclusions.map((food, i) => (
                             <View key={i} style={s.includeRow}>
-                              <Image source={ICONS.checkOutline} style={[s.iconIncludeCheck, { tintColor: Colors.success }]} />
-                              <Text style={s.includeText}>{inc}</Text>
+                              <UtensilsCrossed size={16} color={Colors.orange} />
+                              <Text style={s.includeText}>{food}</Text>
                             </View>
                           ))}
                         </View>
                       )}
 
-                      {/* ── FOOD INCLUDED (from package_menu_items) ── */}
-                      {(pkg as any).package_menu_items?.length > 0 && (
-                        <View style={s.foodIncludedWrap}>
-                          <Text style={s.includesTitle}>FOOD INCLUDED</Text>
-                          {(() => {
-                            const linked = (pkg as any).package_menu_items
-                              .filter((pmi: any) => pmi.menu_items)
-                              .map((pmi: any) => pmi.menu_items);
-
-                            const byCat: Record<string, any[]> = {};
-                            linked.forEach((item: any) => {
-                              if (!byCat[item.category]) byCat[item.category] = [];
-                              byCat[item.category].push(item);
-                            });
-
-                            return CATEGORY_ORDER.map(cat => {
-                              const catItems = byCat[cat];
-                              if (!catItems || catItems.length === 0) return null;
-                              const catCfg = CATEGORY_CONFIG[cat];
-                              return (
-                                <View key={cat} style={s.foodCatGroup}>
-                                  <View style={s.foodCatLabelRow}>
-                                    <Image
-                                      source={catCfg.icon}
-                                      style={[s.foodCatIcon, { tintColor: catCfg.color }]}
-                                    />
-                                    <Text style={[s.foodCatLabel, { color: catCfg.color }]}>
-                                      {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                    </Text>
-                                  </View>
-                                  {catItems.map((item: any) => (
-                                    <View key={item.id} style={s.foodItemRow}>
-                                      <View style={s.foodItemDot} />
-                                      <View style={s.foodItemInfo}>
-                                        <Text style={s.foodItemName}>{item.name}</Text>
-                                        {(item.serving_size || item.serving_unit) && (
-                                          <View style={s.foodServingBadge}>
-                                            <Image
-                                              source={ICONS.scale}
-                                              style={[s.foodServingIcon, { tintColor: Colors.textMuted }]}
-                                            />
-                                            <Text style={s.foodServingText}>
-                                              {item.serving_size ? `${item.serving_size} ` : ''}
-                                              {item.serving_unit}
-                                            </Text>
-                                          </View>
-                                        )}
-                                      </View>
-                                    </View>
-                                  ))}
-                                </View>
-                              );
-                            });
-                          })()}
+                      {/* ── PACKAGE / SERVICE INCLUSIONS ── */}
+                      {pkg.includes && pkg.includes.length > 0 && (
+                        <View style={s.includesWrap}>
+                          <Text style={s.includesTitle}>PACKAGE INCLUSIONS</Text>
+                          {pkg.includes.map((inc, i) => (
+                            <View key={i} style={s.includeRow}>
+                              <CheckCircle2 size={16} color={Colors.success} />
+                              <Text style={s.includeText}>{inc}</Text>
+                            </View>
+                          ))}
                         </View>
                       )}
 
@@ -512,13 +459,13 @@ export default function CatererDetailScreen() {
                         </View>
                       )}
 
-                      {/* Book this package */}
                       <TouchableOpacity
                         style={s.bookPkgBtn}
                         onPress={() => handleBookPackage(pkg)}
                         activeOpacity={0.85}
                       >
                         <Text style={s.bookPkgBtnText}>Book This Package</Text>
+                        <ArrowRight size={16} color={Colors.white} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -534,7 +481,7 @@ export default function CatererDetailScreen() {
             {menuItems.length === 0 ? (
               <View style={s.emptyTab}>
                 <View style={s.emptyTabIconWrap}>
-                  <Image source={ICONS.plate} style={[s.emptyTabIconImg, { tintColor: Colors.border }]} />
+                  <Utensils size={32} color={Colors.textMuted} />
                 </View>
                 <Text style={s.emptyTabText}>No menu items added yet</Text>
               </View>
@@ -543,32 +490,39 @@ export default function CatererDetailScreen() {
                 const items = menuItems.filter(m => m.category === cat);
                 if (items.length === 0) return null;
                 const catCfg = CATEGORY_CONFIG[cat];
+                const Icon = catCfg.icon;
                 return (
-                  <View key={cat}>
+                  <View key={cat} style={{ marginBottom: 16 }}>
                     <View style={s.menuCatHeader}>
-                      <Image source={catCfg.icon} style={[s.menuCatIcon, { tintColor: catCfg.color }]} />
+                      <Icon size={20} color={catCfg.color} />
                       <Text style={s.menuCatLabel}>
                         {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       </Text>
-                      <Text style={s.menuCatCount}>{items.length} items</Text>
+                      <View style={s.menuCatCountBadge}>
+                         <Text style={s.menuCatCount}>{items.length}</Text>
+                      </View>
                     </View>
                     {items.map(item => {
                       const itemCfg = CATEGORY_CONFIG[item.category];
+                      const ItemIcon = itemCfg.icon;
                       return (
                         <View key={item.id} style={s.menuItemCard}>
                           <View style={[s.menuItemIconWrap, { backgroundColor: itemCfg.color + '15' }]}>
-                            <Image source={itemCfg.icon} style={[s.menuItemIcon, { tintColor: itemCfg.color }]} />
+                            <ItemIcon size={24} color={itemCfg.color} />
                           </View>
                           <View style={s.menuItemInfo}>
-                            <Text style={s.menuItemName}>{item.name}</Text>
+                            <View style={s.menuItemHeader}>
+                              <Text style={s.menuItemName} numberOfLines={1}>{item.name}</Text>
+                              <Text style={s.menuItemPrice}>₱{item.price_per_guest}</Text>
+                            </View>
                             {item.description && (
                               <Text style={s.menuItemDesc} numberOfLines={2}>{item.description}</Text>
                             )}
                             <View style={s.menuItemMeta}>
-                              <Text style={s.menuItemPrice}>₱{item.price_per_guest}/guest</Text>
+                              <Text style={s.menuItemPerGuest}>per guest</Text>
                               {(item.serving_size || item.serving_unit) && (
                                 <View style={s.servingBadge}>
-                                  <Image source={ICONS.scale} style={[s.iconServingBadge, { tintColor: Colors.textSecondary }]} />
+                                  <Scale size={12} color={Colors.textSecondary} />
                                   <Text style={s.servingText}>
                                     {item.serving_size ? `${item.serving_size} ` : ''}{item.serving_unit}
                                   </Text>
@@ -589,13 +543,12 @@ export default function CatererDetailScreen() {
         {/* ── REVIEWS TAB ── */}
         {activeTab === 'reviews' && (
           <View style={s.tabContent}>
-            {/* Summary */}
             {caterer.review_count && caterer.review_count > 0 ? (
               <View style={s.reviewSummaryCard}>
                 <Text style={s.reviewSummaryNum}>{(caterer.avg_rating ?? 0).toFixed(1)}</Text>
                 <View>
-                  <StarRating value={caterer.avg_rating ?? 0} size={22} />
-                  <Text style={s.reviewSummaryCount}>{caterer.review_count} reviews</Text>
+                  <StarRating value={caterer.avg_rating ?? 0} size={20} />
+                  <Text style={s.reviewSummaryCount}>Based on {caterer.review_count} reviews</Text>
                 </View>
               </View>
             ) : null}
@@ -603,7 +556,7 @@ export default function CatererDetailScreen() {
             {reviews.length === 0 ? (
               <View style={s.emptyTab}>
                 <View style={s.emptyTabIconWrap}>
-                  <Image source={ICONS.starOutline} style={[s.emptyTabIconImg, { tintColor: Colors.border }]} />
+                  <StarIcon size={32} color={Colors.textMuted} />
                 </View>
                 <Text style={s.emptyTabText}>No reviews yet</Text>
                 <Text style={s.emptyTabSub}>Be the first to leave a review after your event!</Text>
@@ -611,7 +564,6 @@ export default function CatererDetailScreen() {
             ) : (
               reviews.map(r => (
                 <View key={r.id} style={s.reviewCard}>
-                  {/* Reviewer */}
                   <View style={s.reviewerRow}>
                     {(r.profiles as any)?.avatar_url ? (
                       <Image source={{ uri: (r.profiles as any).avatar_url }} style={s.reviewerAvatar} />
@@ -625,38 +577,38 @@ export default function CatererDetailScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={s.reviewerName}>{(r.profiles as any)?.full_name ?? 'Customer'}</Text>
                       <Text style={s.reviewDate}>
-                        {new Date(r.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                        {new Date(r.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </Text>
                     </View>
                     <View style={s.reviewOverallBadge}>
-                      <Text style={s.reviewOverallNum}>{r.overall}</Text>
-                      <Image source={ICONS.star} style={s.iconReviewOverall} />
+                      <Star size={12} color="#F59E0B" fill="#F59E0B" />
+                      <Text style={s.reviewOverallNum}>{r.overall.toFixed(1)}</Text>
                     </View>
                   </View>
 
-                  {/* Category ratings */}
                   <View style={s.reviewRatingsRow}>
                     {[
-                      { label: 'Food',     val: r.food_quality    },
+                      { label: 'Food',    val: r.food_quality  },
                       { label: 'Service',  val: r.service_quality },
-                      { label: 'Time',     val: r.timeliness      },
+                      { label: 'Time',    val: r.timeliness    },
                     ].map(cat => (
                       <View key={cat.label} style={s.reviewRatingItem}>
                         <Text style={s.reviewRatingLabel}>{cat.label}</Text>
-                        <StarRating value={cat.val} size={11} />
+                        <StarRating value={cat.val} size={10} />
                       </View>
                     ))}
                   </View>
 
-                  {/* Comment */}
                   {r.comment && (
-                    <Text style={s.reviewComment}>{r.comment}</Text>
+                    <Text style={s.reviewComment}>"{r.comment}"</Text>
                   )}
 
-                  {/* Caterer reply */}
                   {r.caterer_reply && (
                     <View style={s.catererReply}>
-                      <Text style={s.catererReplyLabel}>Response from {caterer.business_name}</Text>
+                      <View style={s.catererReplyHeader}>
+                        <MessageSquareText size={14} color="#2563EB" />
+                        <Text style={s.catererReplyLabel}>Response from Caterer</Text>
+                      </View>
                       <Text style={s.catererReplyText}>{r.caterer_reply}</Text>
                     </View>
                   )}
@@ -672,8 +624,8 @@ export default function CatererDetailScreen() {
         <View style={s.bottomBarLeft}>
           {lowestPrice !== null ? (
             <>
-              <Text style={s.bottomBarFrom}>Starting from</Text>
-              <Text style={s.bottomBarPrice}>₱{lowestPrice.toFixed(0)}<Text style={s.bottomBarPer}>/guest</Text></Text>
+              <Text style={s.bottomBarFrom}>Packages from</Text>
+              <Text style={s.bottomBarPrice}>₱{lowestPrice.toFixed(0)}<Text style={s.bottomBarPer}> / guest</Text></Text>
             </>
           ) : (
             <Text style={s.bottomBarFrom}>Contact for pricing</Text>
@@ -681,7 +633,6 @@ export default function CatererDetailScreen() {
         </View>
         <TouchableOpacity style={s.bookNowBtn} onPress={handleBookNow} activeOpacity={0.85}>
           <Text style={s.bookNowText}>Book Now</Text>
-          <Image source={ICONS.arrowRightWhite} style={[s.iconBookNow, { tintColor: Colors.white }]} />
         </TouchableOpacity>
       </View>
     </View>
@@ -689,271 +640,251 @@ export default function CatererDetailScreen() {
 }
 
 const s = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.bg, gap: 12 },
+  root:   { flex: 1, backgroundColor: '#F9FAFB' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB', gap: 12 },
 
   // Cover
-  coverWrap:        { height: 240, position: 'relative' },
-  coverPhoto:       { width: '100%', height: 240 },
-  coverPlaceholder: { width: '100%', height: 240, backgroundColor: '#1A1A1A' },
+  coverWrap:        { height: 260, position: 'relative' },
+  coverPhoto:       { width: '100%', height: 260 },
+  coverPlaceholder: { width: '100%', height: 260, backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' },
+  coverGradient: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+  },
   backFloatBtn: {
-    position: 'absolute', left: 16,
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    position: 'absolute', left: 20,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
-  iconBackFloat: { width: 17, height: 17 },
   planBadge: {
-    position: 'absolute', top: Platform.OS === 'ios' ? 52 : 36, right: 16,
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5,
+    position: 'absolute', top: Platform.OS === 'ios' ? 56 : 40, right: 20,
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 4,
   },
-  planBadgeText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  planBadgeText: { fontSize: 11, fontWeight: '900', letterSpacing: 1 },
 
   // Info header
   infoHeader: {
     backgroundColor: Colors.white, paddingHorizontal: 20,
-    paddingBottom: 20, paddingTop: 0,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    paddingBottom: 24, paddingTop: 0,
+    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.03, shadowRadius: 16, elevation: 6,
+    zIndex: 10,
   },
   logoWrap: {
-    marginTop: -36, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 10, elevation: 6,
+    marginTop: -44, marginBottom: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1, shadowRadius: 12, elevation: 8,
     alignSelf: 'flex-start',
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 4,
   },
   logo: {
-    width: 72, height: 72, borderRadius: 18,
-    borderWidth: 3, borderColor: Colors.white,
+    width: 80, height: 80, borderRadius: 20,
   },
   logoPlaceholder: {
-    width: 72, height: 72, borderRadius: 18,
+    width: 80, height: 80, borderRadius: 20,
     backgroundColor: Colors.orange,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 3, borderColor: Colors.white,
   },
-  logoInitial:  { color: Colors.white, fontSize: 28, fontWeight: '900' },
+  logoInitial:  { color: Colors.white, fontSize: 32, fontWeight: '900' },
   infoBody:     { },
-  nameRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' },
-  businessName: { fontSize: 22, fontWeight: '900', color: Colors.black, flex: 1 },
-  verifiedBadge:{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DCFCE7', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#86EFAC' },
-  iconVerifiedSm: { width: 11, height: 11 },
-  verifiedText: { fontSize: 11, fontWeight: '800', color: '#166534' },
-  locationRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
-  iconLocationPin: { width: 13, height: 13 },
-  locationText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
-  ratingRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  ratingNum:    { fontSize: 15, fontWeight: '900', color: Colors.black },
-  ratingCount:  { fontSize: 13, color: Colors.textSecondary },
-  noRating:     { fontSize: 13, color: Colors.textMuted, marginBottom: 6 },
-  priceRange:   { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  priceRangeNum:{ fontWeight: '900', color: Colors.orange },
+  nameRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' },
+  businessName: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5, flexShrink: 1 },
+  verifiedBadge:{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DCFCE7', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  verifiedText: { fontSize: 12, fontWeight: '800', color: '#166534' },
+  locationRow:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  locationText: { fontSize: 15, color: Colors.textSecondary, fontWeight: '500' },
+  ratingRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ratingNum:    { fontSize: 16, fontWeight: '900', color: Colors.black },
+  ratingCount:  { fontSize: 14, color: Colors.textMuted },
+  noRating:     { fontSize: 14, color: Colors.textMuted, fontStyle: 'italic' },
 
   // Quick stats
   quickStats: {
     flexDirection: 'row', backgroundColor: Colors.white,
-    marginHorizontal: 20, marginTop: 16, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+    marginHorizontal: 20, marginTop: 20, borderRadius: 20,
+    borderWidth: 1, borderColor: '#F3F4F6',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02, shadowRadius: 8, elevation: 2,
   },
-  quickStat:       { flex: 1, alignItems: 'center', paddingVertical: 14 },
-  quickStatNum:    { fontSize: 18, fontWeight: '900', color: Colors.orange, marginBottom: 2 },
-  quickStatLabel:  { fontSize: 10, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5 },
-  quickStatDivider:{ width: 1, backgroundColor: Colors.divider },
+  quickStat:       { flex: 1, alignItems: 'center', paddingVertical: 16 },
+  quickStatNum:    { fontSize: 20, fontWeight: '900', color: Colors.orange, marginBottom: 4 },
+  quickStatLabel:  { fontSize: 11, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5 },
+  quickStatDivider:{ width: 1, backgroundColor: '#F3F4F6', marginVertical: 12 },
 
-  // Description
-  section:      { paddingHorizontal: 20, paddingTop: 20 },
-  sectionTitle: { fontSize: 17, fontWeight: '900', color: Colors.black, marginBottom: 10 },
-  descText:     { fontSize: 14, color: Colors.textSecondary, lineHeight: 22 },
+  // Description & General Section
+  section:      { paddingHorizontal: 20, paddingTop: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 12, letterSpacing: -0.3 },
+  descText:     { fontSize: 15, color: Colors.textSecondary, lineHeight: 24, fontWeight: '400' },
 
   // Contact
-  contactCard:  { backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
-  contactRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.divider },
-  contactIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  contactIcon:  { width: 17, height: 17 },
-  contactText:  { fontSize: 14, color: Colors.black, fontWeight: '600', flex: 1, lineHeight: 20 },
-  noContact:    { fontSize: 13, color: Colors.textMuted, padding: 16, textAlign: 'center' },
+  contactCard:  { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 8, elevation: 1 },
+  contactRow:   { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  contactIconWrap: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  contactText:  { fontSize: 15, color: Colors.black, fontWeight: '600', flex: 1 },
+  noContact:    { fontSize: 14, color: Colors.textMuted, padding: 20, textAlign: 'center' },
 
-  // Tabs
+  // Tabs Container
+  tabContainer: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8 },
   tabRow: {
-    flexDirection: 'row', marginHorizontal: 20, marginTop: 20,
-    backgroundColor: Colors.bgInput, borderRadius: 12,
-    padding: 4, borderWidth: 1, borderColor: Colors.border,
+    flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 16,
+    padding: 4, 
   },
-  tab:         { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  tabActive:   { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
-  tabText:     { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
-  tabTextActive:{ fontSize: 12, fontWeight: '800', color: Colors.black },
+  tab:         { flex: 1, flexDirection: 'row', paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  tabActive:   { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  tabText:     { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive:{ fontSize: 13, fontWeight: '800', color: Colors.black },
+  tabCountBadge: { backgroundColor: '#E5E7EB', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+  tabCountBadgeActive: { backgroundColor: Colors.orangeLight },
+  tabCountText: { fontSize: 10, fontWeight: '800', color: Colors.textMuted },
+  tabCountTextActive: { color: Colors.orange },
 
-  tabContent: { paddingHorizontal: 20, paddingTop: 16 },
+  tabContent: { paddingHorizontal: 20, paddingTop: 8 },
 
   // Packages
   pkgCard: {
-    backgroundColor: Colors.white, borderRadius: 18,
-    borderWidth: 1, borderColor: Colors.border,
-    marginBottom: 16, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    backgroundColor: Colors.white, borderRadius: 24,
+    borderWidth: 1, borderColor: '#F3F4F6',
+    marginBottom: 20, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04, shadowRadius: 16, elevation: 4,
   },
-  pkgImg:            { width: '100%', height: 160 },
-  pkgImgPlaceholder: { width: '100%', height: 130, justifyContent: 'center', alignItems: 'center' },
-  pkgImgIcon:        { width: 44, height: 44 },
-  pkgBody:           { padding: 16 },
-  tierBadge:         { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, marginBottom: 10 },
-  tierBadgeText:     { fontSize: 12, fontWeight: '800' },
-  pkgName:           { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
-  pkgDesc:           { fontSize: 13, color: Colors.textSecondary, lineHeight: 19, marginBottom: 14 },
+  pkgImg:            { width: '100%', height: 180 },
+  pkgImgPlaceholder: { width: '100%', height: 160, justifyContent: 'center', alignItems: 'center' },
+  pkgBody:           { padding: 20 },
+  tierBadge:         { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginBottom: 12 },
+  tierBadgeText:     { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   pkgPriceRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
-    paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1,
-    borderColor: Colors.divider, marginBottom: 14,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  pkgPrice:         { fontSize: 24, fontWeight: '900', color: Colors.orange },
-  pkgPriceSub:      { fontSize: 12, color: Colors.textSecondary },
-  pkgPerGuest:      { alignItems: 'flex-end' },
-  pkgPerGuestNum:   { fontSize: 18, fontWeight: '900', color: Colors.black },
-  pkgPerGuestLabel: { fontSize: 11, color: Colors.textSecondary },
-  includesWrap:     { marginBottom: 12 },
-  includesTitle:    { fontSize: 10, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 8 },
-  includeRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
-  iconIncludeCheck: { width: 14, height: 14 },
-  includeText:      { fontSize: 13, color: Colors.textSecondary, flex: 1 },
-  eventTypesWrap:   { marginBottom: 14 },
-  eventTypesRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  eventTypeChip:    { backgroundColor: Colors.orangeLight, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#FFB26B' },
-  eventTypeText:    { fontSize: 11, fontWeight: '700', color: Colors.orange },
+  pkgName:           { fontSize: 20, fontWeight: '900', color: Colors.black, marginBottom: 4, letterSpacing: -0.3 },
+  pkgPriceSub:       { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  pkgPerGuest:       { alignItems: 'flex-end', backgroundColor: '#F9FAFB', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#F3F4F6' },
+  pkgPrice:          { fontSize: 18, fontWeight: '900', color: Colors.orange },
+  pkgPerGuestLabel:  { fontSize: 11, color: Colors.textMuted, fontWeight: '600', marginTop: 2 },
+  pkgDesc:           { fontSize: 14, color: Colors.textSecondary, lineHeight: 22, marginBottom: 20 },
+  
+  includesWrap:     { marginBottom: 16 },
+  includesTitle:    { fontSize: 11, fontWeight: '900', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 12 },
+  includeRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  includeText:      { fontSize: 14, color: Colors.black, flex: 1, fontWeight: '500' },
+  
+  eventTypesWrap:   { marginBottom: 20 },
+  eventTypesRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  eventTypeChip:    { backgroundColor: Colors.orangeLight, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#FFB26B' },
+  eventTypeText:    { fontSize: 12, fontWeight: '800', color: Colors.orange },
+  
   bookPkgBtn: {
-    backgroundColor: Colors.orange, borderRadius: 12,
-    paddingVertical: 14, alignItems: 'center', marginTop: 4,
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+    backgroundColor: Colors.black, borderRadius: 16,
+    paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 8,
   },
-  bookPkgBtnText: { color: Colors.white, fontWeight: '900', fontSize: 15 },
+  bookPkgBtnText: { color: Colors.white, fontWeight: '900', fontSize: 16 },
 
-  // Food included (package_menu_items)
-  foodIncludedWrap: {
-    marginBottom: 14,
-    backgroundColor: Colors.bgInput,
-    borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  foodCatGroup:    { marginBottom: 10 },
-  foodCatLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  foodCatIcon:     { width: 15, height: 15 },
-  foodCatLabel:    { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
-  foodItemRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 5, paddingLeft: 4 },
-  foodItemDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.orange, marginTop: 6, flexShrink: 0 },
-  foodItemInfo:    { flex: 1 },
-  foodItemName:    { fontSize: 12, color: Colors.black, fontWeight: '600' },
-  foodServingBadge:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  foodServingIcon: { width: 10, height: 10 },
-  foodServingText: { fontSize: 10, color: Colors.textMuted, fontWeight: '600' },
-
-  // Menu
+  // Menu List
   menuCatHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 9,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.divider,
-    marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 12,
+    marginBottom: 8,
   },
-  menuCatIcon:  { width: 19, height: 19 },
-  menuCatLabel: { fontSize: 15, fontWeight: '900', color: Colors.black, flex: 1 },
-  menuCatCount: { fontSize: 12, color: Colors.textMuted, fontWeight: '600' },
+  menuCatLabel: { fontSize: 18, fontWeight: '900', color: Colors.black, flex: 1 },
+  menuCatCountBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  menuCatCount: { fontSize: 12, color: Colors.textSecondary, fontWeight: '700' },
   menuItemCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: Colors.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 14,
+    backgroundColor: Colors.white, borderRadius: 20,
+    padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: '#F3F4F6',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02, shadowRadius: 8, elevation: 1,
   },
   menuItemIconWrap: {
-    width: 52, height: 52, borderRadius: 14,
+    width: 48, height: 48, borderRadius: 16,
     justifyContent: 'center', alignItems: 'center', flexShrink: 0,
   },
-  menuItemIcon:  { width: 24, height: 24 },
   menuItemInfo:  { flex: 1 },
-  menuItemName:  { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 3 },
-  menuItemDesc:  { fontSize: 12, color: Colors.textMuted, lineHeight: 17, marginBottom: 6 },
-  menuItemMeta:  { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  menuItemPrice: { fontSize: 13, fontWeight: '800', color: Colors.orange },
-  servingBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.bgInput, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: Colors.border },
-  iconServingBadge: { width: 11, height: 11 },
+  menuItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
+  menuItemName:  { fontSize: 16, fontWeight: '800', color: Colors.black, flex: 1, marginRight: 8 },
+  menuItemPrice: { fontSize: 15, fontWeight: '900', color: Colors.orange },
+  menuItemDesc:  { fontSize: 13, color: Colors.textSecondary, lineHeight: 18, marginBottom: 8 },
+  menuItemMeta:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  menuItemPerGuest: { fontSize: 11, color: Colors.textMuted, fontWeight: '600' },
+  servingBadge:  { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F9FAFB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#F3F4F6' },
   servingText:   { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
 
   // Reviews
   reviewSummaryCard: {
     flexDirection: 'row', alignItems: 'center', gap: 20,
-    backgroundColor: Colors.orangeLight, borderRadius: 16,
-    padding: 20, marginBottom: 16,
+    backgroundColor: '#FFF7ED', borderRadius: 20,
+    padding: 24, marginBottom: 20,
     borderWidth: 1, borderColor: '#FFB26B',
   },
-  reviewSummaryNum:   { fontSize: 52, fontWeight: '900', color: Colors.orange },
-  reviewSummaryCount: { fontSize: 13, color: Colors.textSecondary, marginTop: 4 },
+  reviewSummaryNum:   { fontSize: 56, fontWeight: '900', color: Colors.orange, letterSpacing: -1 },
+  reviewSummaryCount: { fontSize: 14, color: Colors.textSecondary, marginTop: 4, fontWeight: '500' },
   reviewCard: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 16, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: '#F3F4F6',
+    padding: 20, marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02, shadowRadius: 10, elevation: 1,
   },
-  reviewerRow:           { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  reviewerAvatar:        { width: 42, height: 42, borderRadius: 21 },
-  reviewerAvatarPlaceholder: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.orangeLight, justifyContent: 'center', alignItems: 'center' },
-  reviewerAvatarText:    { fontSize: 16, fontWeight: '900', color: Colors.orange },
-  reviewerName:          { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 2 },
-  reviewDate:            { fontSize: 11, color: Colors.textMuted },
-  reviewOverallBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.orangeLight, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
-  reviewOverallNum:      { fontSize: 16, fontWeight: '900', color: Colors.orange },
-  iconReviewOverall:     { width: 13, height: 13 },
-  reviewRatingsRow:      { flexDirection: 'row', gap: 16, marginBottom: 10 },
-  reviewRatingItem:      { alignItems: 'center', gap: 4 },
-  reviewRatingLabel:     { fontSize: 10, fontWeight: '700', color: Colors.textMuted },
-  reviewComment:         { fontSize: 13, color: Colors.textSecondary, lineHeight: 20, fontStyle: 'italic', marginBottom: 10 },
+  reviewerRow:           { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  reviewerAvatar:        { width: 48, height: 48, borderRadius: 24 },
+  reviewerAvatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.orangeLight, justifyContent: 'center', alignItems: 'center' },
+  reviewerAvatarText:    { fontSize: 18, fontWeight: '900', color: Colors.orange },
+  reviewerName:          { fontSize: 15, fontWeight: '900', color: Colors.black, marginBottom: 2 },
+  reviewDate:            { fontSize: 12, color: Colors.textMuted, fontWeight: '500' },
+  reviewOverallBadge:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF7ED', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#FED7AA' },
+  reviewOverallNum:      { fontSize: 14, fontWeight: '900', color: Colors.orange },
+  reviewRatingsRow:      { flexDirection: 'row', gap: 20, marginBottom: 12, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 12 },
+  reviewRatingItem:      { gap: 6 },
+  reviewRatingLabel:     { fontSize: 11, fontWeight: '800', color: Colors.textSecondary },
+  reviewComment:         { fontSize: 14, color: Colors.black, lineHeight: 22, fontStyle: 'italic', marginBottom: 12 },
   catererReply: {
-    backgroundColor: '#EFF6FF', borderRadius: 12,
-    padding: 12, marginTop: 4,
+    backgroundColor: '#EFF6FF', borderRadius: 16,
+    padding: 16, marginTop: 4,
     borderWidth: 1, borderColor: '#BFDBFE',
   },
-  catererReplyLabel: { fontSize: 11, fontWeight: '800', color: '#1D4ED8', marginBottom: 4 },
-  catererReplyText:  { fontSize: 13, color: '#1E40AF', lineHeight: 19 },
+  catererReplyHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  catererReplyLabel: { fontSize: 12, fontWeight: '900', color: '#1D4ED8' },
+  catererReplyText:  { fontSize: 14, color: '#1E3A8A', lineHeight: 22 },
 
   // Empty states
-  emptyTab:    { alignItems: 'center', paddingVertical: 48 },
-  emptyTabIconWrap: { width: 76, height: 76, borderRadius: 38, backgroundColor: Colors.bgInput, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-  emptyTabIconImg: { width: 34, height: 34 },
-  emptyTabText:{ fontSize: 16, fontWeight: '800', color: Colors.black, marginBottom: 4 },
-  emptyTabSub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
-  emptyIconWrap: { width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.bgInput, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  emptyIconImg:  { width: 40, height: 40 },
-  emptyTitle:  { fontSize: 18, fontWeight: '800', color: Colors.black },
-  backBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.orange, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 8 },
-  iconBackBtnSm: { width: 14, height: 14 },
-  backBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
+  emptyTab:    { alignItems: 'center', paddingVertical: 60 },
+  emptyTabIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  emptyTabText:{ fontSize: 16, fontWeight: '900', color: Colors.black, marginBottom: 6 },
+  emptyTabSub: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center' },
+  emptyIconWrap: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  emptyTitle:  { fontSize: 20, fontWeight: '900', color: Colors.black },
+  backBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.black, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 14, marginTop: 12 },
+  backBtnText: { color: Colors.white, fontWeight: '900', fontSize: 15 },
 
   // Bottom bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: Colors.white,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    borderTopWidth: 1, borderTopColor: Colors.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08, shadowRadius: 12, elevation: 12,
+    paddingHorizontal: 20, paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    borderTopWidth: 1, borderTopColor: '#F3F4F6',
+    shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.05, shadowRadius: 20, elevation: 16,
   },
   bottomBarLeft:  { },
-  bottomBarFrom:  { fontSize: 12, color: Colors.textSecondary },
-  bottomBarPrice: { fontSize: 22, fontWeight: '900', color: Colors.black },
-  bottomBarPer:   { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  bottomBarFrom:  { fontSize: 12, color: Colors.textSecondary, fontWeight: '600', marginBottom: 2 },
+  bottomBarPrice: { fontSize: 24, fontWeight: '900', color: Colors.black },
+  bottomBarPer:   { fontSize: 14, fontWeight: '600', color: Colors.textMuted },
   bookNowBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.orange, borderRadius: 14,
-    paddingHorizontal: 28, paddingVertical: 14,
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    backgroundColor: Colors.orange, borderRadius: 16,
+    paddingHorizontal: 32, paddingVertical: 16,
+    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
   },
-  iconBookNow: { width: 14, height: 14 },
-  bookNowText: { color: Colors.white, fontWeight: '900', fontSize: 15 },
+  bookNowText: { color: Colors.white, fontWeight: '900', fontSize: 16 },
 });

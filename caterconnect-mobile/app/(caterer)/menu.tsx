@@ -1,24 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Platform,
+  ActivityIndicator, Alert, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
-
-const ICONS = {
-  mainCourse: require('../../assets/icons/main_course.png'),
-  appetizer: require('../../assets/icons/appetizer.png'),
-  dessert: require('../../assets/icons/dessert.png'),
-  drink: require('../../assets/icons/drink.png'),
-  scale: require('../../assets/icons/scale.png'),
-  close: require('../../assets/icons/close.png'),
-  checkOutline: require('../../assets/icons/check_outline.png'),
-  chevronDown: require('../../assets/icons/chevron_down.png'),
-  plusWhite: require('../../assets/icons/plus_white.png'),
-};
+import { 
+  Plus, Edit3, Trash2, X, Check, CheckCircle2, 
+  ChevronDown, UtensilsCrossed, Soup, CakeSlice, 
+  CupSoda, Scale, SearchX, DollarSign, Info
+} from 'lucide-react-native';
 
 type MenuItem = {
   id: string;
@@ -32,10 +25,10 @@ type MenuItem = {
 };
 
 const CATEGORIES = [
-  { key: 'main_course', label: 'Main Course', icon: ICONS.mainCourse, color: Colors.orange },
-  { key: 'appetizer',   label: 'Appetizer',   icon: ICONS.appetizer,  color: '#16A34A' },
-  { key: 'dessert',     label: 'Dessert',     icon: ICONS.dessert,    color: '#EC4899' },
-  { key: 'drink',       label: 'Drink',       icon: ICONS.drink,      color: '#2563EB' },
+  { key: 'main_course', label: 'Main Course', icon: UtensilsCrossed, color: Colors.orange },
+  { key: 'appetizer',   label: 'Appetizer',   icon: Soup,            color: '#16A34A' },
+  { key: 'dessert',     label: 'Dessert',     icon: CakeSlice,       color: '#EC4899' },
+  { key: 'drink',       label: 'Drink',       icon: CupSoda,         color: '#2563EB' },
 ];
 
 const SERVING_UNITS = [
@@ -80,16 +73,13 @@ export default function MenuScreen() {
       .eq('caterer_id', catererData.id)
       .order('category')
       .order('name');
-    if (error) {
-      console.warn('menu_items load error:', error.message);
-    }
+    if (error) console.warn('menu_items load error:', error.message);
     setItems(data ?? []);
     setLoading(false);
   };
 
   useEffect(() => {
     let cancelled = false;
-
     const run = async () => {
       if (!catererData?.id) return;
       setLoading(true);
@@ -99,12 +89,11 @@ export default function MenuScreen() {
         .eq('caterer_id', catererData.id)
         .order('category')
         .order('name');
-      if (cancelled) return; // avoid setting state if screen unmounted mid-fetch
+      if (cancelled) return; 
       if (error) console.warn('menu_items load error:', error.message);
       setItems(data ?? []);
       setLoading(false);
     };
-
     run();
     return () => { cancelled = true; };
   }, [catererData?.id]);
@@ -185,51 +174,52 @@ export default function MenuScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <View>
           <Text style={styles.pageTitle}>Menu Items</Text>
           <Text style={styles.pageSub}>{items.length} items across all categories</Text>
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.85}>
-          <Image source={ICONS.plusWhite} style={styles.iconAddBtn} />
+          <Plus size={18} color={Colors.white} strokeWidth={3} />
           <Text style={styles.addBtnText}>Add</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Category tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryTabs}
-      >
-        {CATEGORIES.map(cat => {
-          const count = items.filter(i => i.category === cat.key).length;
-          const isActive = activeCategory === cat.key;
-          return (
-            <TouchableOpacity
-              key={cat.key}
-              style={[styles.catTab, isActive && { backgroundColor: cat.color, borderColor: cat.color }]}
-              onPress={() => setActiveCategory(cat.key)}
-              activeOpacity={0.85}
-            >
-              <Image
-                source={cat.icon}
-                style={[styles.iconCatTab, isActive && { tintColor: Colors.white }]}
-              />
-              <Text style={[styles.catTabLabel, isActive && styles.catTabLabelActive]}>
-                {cat.label}
-              </Text>
-              {count > 0 && (
-                <View style={[styles.catTabCount, isActive && styles.catTabCountActive]}>
-                  <Text style={[styles.catTabCountText, isActive && styles.catTabCountTextActive]}>
-                    {count}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.tabsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryTabs}
+        >
+          {CATEGORIES.map(cat => {
+            const count = items.filter(i => i.category === cat.key).length;
+            const isActive = activeCategory === cat.key;
+            return (
+              <TouchableOpacity
+                key={cat.key}
+                style={[
+                  styles.catTab,
+                  isActive && { backgroundColor: cat.color, borderColor: cat.color }
+                ]}
+                onPress={() => setActiveCategory(cat.key)}
+                activeOpacity={0.85}
+              >
+                <cat.icon size={16} color={isActive ? Colors.white : Colors.textSecondary} />
+                <Text style={[styles.catTabLabel, isActive && styles.catTabLabelActive]}>
+                  {cat.label}
+                </Text>
+                {count > 0 && (
+                  <View style={[styles.catTabCount, isActive && styles.catTabCountActive]}>
+                    <Text style={[styles.catTabCountText, isActive && styles.catTabCountTextActive]}>
+                      {count}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {loading ? (
         <View style={styles.center}>
@@ -237,54 +227,58 @@ export default function MenuScreen() {
         </View>
       ) : filteredItems.length === 0 ? (
         <View style={styles.center}>
-          <View style={[styles.emptyIconWrap, { backgroundColor: (catInfo?.color ?? Colors.orange) + '18' }]}>
-            <Image source={catInfo?.icon} style={[styles.emptyIcon, { tintColor: catInfo?.color ?? Colors.orange }]} />
+          <View style={[styles.emptyIconWrap, { backgroundColor: (catInfo?.color ?? Colors.orange) + '15' }]}>
+            {catInfo && <catInfo.icon size={42} color={catInfo.color} strokeWidth={1.5} />}
           </View>
           <Text style={styles.emptyTitle}>No {catInfo?.label} yet</Text>
-          <Text style={styles.emptySub}>Tap "Add" to add your first item</Text>
+          <Text style={styles.emptySub}>Tap "Add" to create your first {catInfo?.label?.toLowerCase()} item.</Text>
           <TouchableOpacity style={styles.emptyAddBtn} onPress={openAdd} activeOpacity={0.85}>
-            <Text style={styles.emptyAddBtnText}>Add {catInfo?.label}</Text>
+            <Plus size={18} color={Colors.white} />
+            <Text style={styles.emptyAddBtnText}>Add Item</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView
           style={styles.list}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: 40, gap: 12 }}
         >
           {filteredItems.map(item => {
             const serving = formatServing(item);
+            const itemColor = getCategoryColor(item.category);
+            
             return (
               <View key={item.id} style={styles.itemCard}>
-                <View style={[styles.itemColorBar, { backgroundColor: getCategoryColor(item.category) }]} />
+                <View style={[styles.itemColorBar, { backgroundColor: itemColor }]} />
 
                 <View style={styles.itemBody}>
                   <View style={styles.itemTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemName}>{item.name}</Text>
+                    <View style={{ flex: 1, paddingRight: 12 }}>
+                      <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                       {item.description && (
                         <Text style={styles.itemDesc} numberOfLines={2}>{item.description}</Text>
                       )}
                     </View>
                     <View style={styles.itemActions}>
-                      <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)} activeOpacity={0.8}>
-                        <Text style={styles.editBtnText}>Edit</Text>
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(item)} activeOpacity={0.8}>
+                        <Edit3 size={16} color={Colors.textSecondary} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.8}>
-                        <Image source={ICONS.close} style={[styles.iconDeleteBtn, { tintColor: Colors.error }]} />
+                      <TouchableOpacity style={styles.actionBtnDelete} onPress={() => handleDelete(item)} activeOpacity={0.8}>
+                        <Trash2 size={16} color={Colors.error} />
                       </TouchableOpacity>
                     </View>
                   </View>
 
                   <View style={styles.itemBottom}>
                     <View style={styles.priceBadge}>
+                      <DollarSign size={14} color={Colors.orange} />
                       <Text style={styles.priceValue}>₱{item.price_per_guest.toLocaleString()}</Text>
                       <Text style={styles.pricePer}>/guest</Text>
                     </View>
 
                     {serving && (
                       <View style={styles.servingBadge}>
-                        <Image source={ICONS.scale} style={styles.iconServing} />
+                        <Scale size={12} color={Colors.textSecondary} />
                         <Text style={styles.servingText}>{serving}</Text>
                       </View>
                     )}
@@ -296,16 +290,17 @@ export default function MenuScreen() {
         </ScrollView>
       )}
 
+      {/* --- ADD / EDIT MODAL --- */}
       <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalRoot}>
-          <View style={[styles.modalHeader, { paddingTop: Platform.OS === 'ios' ? 52 : 16 }]}>
-            <TouchableOpacity onPress={() => setShowForm(false)}>
+          <View style={[styles.modalHeader, { paddingTop: Platform.OS === 'ios' ? 24 : 16 }]}>
+            <TouchableOpacity onPress={() => setShowForm(false)} style={styles.modalHeaderBtn}>
               <Text style={styles.modalCancel}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>
-              {editing ? 'Edit Menu Item' : 'New Menu Item'}
+              {editing ? 'Edit Item' : 'New Item'}
             </Text>
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
+            <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.modalHeaderBtn}>
               {saving
                 ? <ActivityIndicator size="small" color={Colors.orange} />
                 : <Text style={styles.modalSave}>Save</Text>
@@ -318,151 +313,152 @@ export default function MenuScreen() {
             contentContainerStyle={styles.modalBody}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Item Name *</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="e.g. Lechon Baboy, Kare-Kare"
-                placeholderTextColor={Colors.textMuted}
-                value={form.name}
-                onChangeText={v => setForm(f => ({ ...f, name: v }))}
-              />
-            </View>
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>ITEM DETAILS</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Item Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g. Beef Caldereta, Lechon..."
+                  placeholderTextColor={Colors.textMuted}
+                  value={form.name}
+                  onChangeText={v => setForm(f => ({ ...f, name: v }))}
+                />
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Category *</Text>
-              <View style={styles.categoryGrid}>
-                {CATEGORIES.map(cat => {
-                  const isActive = form.category === cat.key;
-                  return (
-                    <TouchableOpacity
-                      key={cat.key}
-                      style={[styles.catChip, isActive && { backgroundColor: cat.color + '18', borderColor: cat.color }]}
-                      onPress={() => setForm(f => ({ ...f, category: cat.key }))}
-                      activeOpacity={0.85}
-                    >
-                      <Image source={cat.icon} style={[styles.iconCatChip, isActive && { tintColor: cat.color }]} />
-                      <Text style={[styles.catChipLabel, isActive && { color: cat.color, fontWeight: '800' }]}>
-                        {cat.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Category *</Text>
+                <View style={styles.categoryGrid}>
+                  {CATEGORIES.map(cat => {
+                    const isActive = form.category === cat.key;
+                    return (
+                      <TouchableOpacity
+                        key={cat.key}
+                        style={[
+                          styles.catChip,
+                          isActive && { backgroundColor: cat.color + '12', borderColor: cat.color }
+                        ]}
+                        onPress={() => setForm(f => ({ ...f, category: cat.key }))}
+                        activeOpacity={0.85}
+                      >
+                        <cat.icon size={18} color={isActive ? cat.color : Colors.textSecondary} />
+                        <Text style={[styles.catChipLabel, isActive && { color: cat.color, fontWeight: '800' }]}>
+                          {cat.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Description</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formTextarea]}
+                  placeholder="Describe the dish — ingredients, flavor, preparation..."
+                  placeholderTextColor={Colors.textMuted}
+                  value={form.description}
+                  onChangeText={v => setForm(f => ({ ...f, description: v }))}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
               </View>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Description</Text>
-              <TextInput
-                style={[styles.formInput, styles.formTextarea]}
-                placeholder="Describe the dish — ingredients, flavor, how it's cooked..."
-                placeholderTextColor={Colors.textMuted}
-                value={form.description}
-                onChangeText={v => setForm(f => ({ ...f, description: v }))}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Price per Guest (₱) *</Text>
-              <Text style={styles.formHint}>How much this item adds per guest to the total</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="e.g. 120"
-                placeholderTextColor={Colors.textMuted}
-                value={form.price_per_guest}
-                onChangeText={v => setForm(f => ({ ...f, price_per_guest: v }))}
-                keyboardType="decimal-pad"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Serving Size</Text>
-              <Text style={styles.formHint}>
-                Tell customers how much they get — e.g. "1 kg per 10 guests", "1 tub serves 20"
-              </Text>
-              <View style={styles.servingRow}>
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>PRICING & SERVING</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Price per Guest (₱) *</Text>
+                <Text style={styles.formHint}>Added to total when this item is selected</Text>
                 <TextInput
-                  style={[styles.formInput, styles.servingSizeInput]}
-                  placeholder="Amount"
+                  style={styles.formInput}
+                  placeholder="e.g. 120"
                   placeholderTextColor={Colors.textMuted}
-                  value={form.serving_size}
-                  onChangeText={v => setForm(f => ({ ...f, serving_size: v }))}
+                  value={form.price_per_guest}
+                  onChangeText={v => setForm(f => ({ ...f, price_per_guest: v }))}
                   keyboardType="decimal-pad"
                 />
-
-                <TouchableOpacity
-                  style={styles.unitPickerBtn}
-                  onPress={() => setShowUnitPicker(true)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.unitPickerBtnText}>{form.serving_unit}</Text>
-                  <Image source={ICONS.chevronDown} style={styles.iconUnitChevron} />
-                </TouchableOpacity>
               </View>
 
-              {(form.serving_size || form.serving_unit) && (
-                <View style={styles.servingPreview}>
-                  <Text style={styles.servingPreviewLabel}>Preview:</Text>
-                  <Text style={styles.servingPreviewValue}>
-                    {form.serving_size ? `${form.serving_size} ` : ''}{form.serving_unit}
-                  </Text>
-                </View>
-              )}
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Serving Size Overview</Text>
+                <Text style={styles.formHint}>
+                  Tell customers how much they get — e.g. "1 kg per 10 guests", "1 tub serves 20"
+                </Text>
+                <View style={styles.servingRow}>
+                  <TextInput
+                    style={[styles.formInput, styles.servingSizeInput]}
+                    placeholder="Amount"
+                    placeholderTextColor={Colors.textMuted}
+                    value={form.serving_size}
+                    onChangeText={v => setForm(f => ({ ...f, serving_size: v }))}
+                    keyboardType="decimal-pad"
+                  />
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Quick Examples</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {[
-                  { size: '1',   unit: 'kg',         label: '1 kg'         },
-                  { size: '500', unit: 'grams',       label: '500g'         },
-                  { size: '1',   unit: 'tub',         label: '1 tub'        },
-                  { size: '1',   unit: 'tray',        label: '1 tray'       },
-                  { size: '1',   unit: 'liter',       label: '1 liter'      },
-                  { size: '',    unit: 'per person',   label: 'Per person'   },
-                  { size: '1',   unit: 'platter',     label: '1 platter'    },
-                  { size: '1',   unit: 'dozen',       label: '1 dozen'      },
-                ].map(ex => (
                   <TouchableOpacity
-                    key={ex.label}
-                    style={[
-                      styles.exampleChip,
-                      form.serving_size === ex.size && form.serving_unit === ex.unit && styles.exampleChipActive,
-                    ]}
-                    onPress={() => setForm(f => ({
-                      ...f,
-                      serving_size: ex.size,
-                      serving_unit: ex.unit,
-                    }))}
+                    style={styles.unitPickerBtn}
+                    onPress={() => setShowUnitPicker(true)}
                     activeOpacity={0.85}
                   >
-                    <Text style={[
-                      styles.exampleChipText,
-                      form.serving_size === ex.size && form.serving_unit === ex.unit && styles.exampleChipTextActive,
-                    ]}>
-                      {ex.label}
-                    </Text>
+                    <Text style={styles.unitPickerBtnText}>{form.serving_unit}</Text>
+                    <ChevronDown size={16} color={Colors.textMuted} />
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
+                </View>
+
+                {(form.serving_size || form.serving_unit) && (
+                  <View style={styles.servingPreview}>
+                    <Text style={styles.servingPreviewLabel}>Preview:</Text>
+                    <Text style={styles.servingPreviewValue}>
+                      {form.serving_size ? `${form.serving_size} ` : ''}{form.serving_unit}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Quick Serving Examples</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+                  {[
+                    { size: '1',   unit: 'kg',         label: '1 kg'        },
+                    { size: '500', unit: 'grams',      label: '500g'        },
+                    { size: '1',   unit: 'tub',        label: '1 tub'       },
+                    { size: '1',   unit: 'tray',       label: '1 tray'      },
+                    { size: '1',   unit: 'liter',      label: '1 liter'     },
+                    { size: '',    unit: 'per person', label: 'Per person'  },
+                    { size: '1',   unit: 'platter',    label: '1 platter'   },
+                    { size: '1',   unit: 'dozen',      label: '1 dozen'     },
+                  ].map(ex => {
+                    const isActive = form.serving_size === ex.size && form.serving_unit === ex.unit;
+                    return (
+                      <TouchableOpacity
+                        key={ex.label}
+                        style={[styles.exampleChip, isActive && styles.exampleChipActive]}
+                        onPress={() => setForm(f => ({
+                          ...f,
+                          serving_size: ex.size,
+                          serving_unit: ex.unit,
+                        }))}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[styles.exampleChipText, isActive && styles.exampleChipTextActive]}>
+                          {ex.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
             </View>
+
           </ScrollView>
 
-          {/* ── Unit picker — rendered as an in-modal overlay, NOT a second
-              stacked <Modal>. iOS handles two simultaneously-visible native
-              Modals poorly (the second one's touch events can get swallowed
-              by the first), which is why tapping the unit button/options was
-              unreliable before. This overlay lives inside the same Modal as
-              the form, so there's only ever one native modal window. ── */}
+          {/* Unit Overlay */}
           {showUnitPicker && (
             <View style={styles.unitOverlay} pointerEvents="box-none">
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={() => setShowUnitPicker(false)}
-              />
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowUnitPicker(false)} />
               <View style={styles.unitSheet}>
                 <View style={styles.unitSheetHandle} />
                 <Text style={styles.unitSheetTitle}>Select Unit</Text>
@@ -479,15 +475,10 @@ export default function MenuScreen() {
                         }}
                         activeOpacity={0.8}
                       >
-                        <Text style={[
-                          styles.unitOptionText,
-                          isActive && styles.unitOptionTextActive,
-                        ]}>
+                        <Text style={[styles.unitOptionText, isActive && styles.unitOptionTextActive]}>
                           {unit.label}
                         </Text>
-                        {isActive && (
-                          <Image source={ICONS.checkOutline} style={[styles.iconUnitCheck, { tintColor: Colors.orange }]} />
-                        )}
+                        {isActive && <Check size={20} color={Colors.orange} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -512,155 +503,151 @@ function getCategoryColor(cat: string) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, gap: 10 },
+  root: { flex: 1, backgroundColor: '#F8FAFC' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, paddingBottom: 40 },
 
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
-    paddingHorizontal: 20, paddingBottom: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 24, paddingBottom: 20,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    zIndex: 10
   },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black },
-  pageSub:   { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
+  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageSub:   { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
   addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    backgroundColor: Colors.orange, borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.orange, borderRadius: 24,
     paddingHorizontal: 16, paddingVertical: 10,
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
-  iconAddBtn: { width: 13, height: 13 },
-  addBtnText: { color: Colors.white, fontWeight: '900', fontSize: 14 },
+  addBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
 
-  categoryTabs: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  tabsContainer: { backgroundColor: Colors.white, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  categoryTabs: { paddingHorizontal: 20, gap: 8 },
   catTab: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
-    backgroundColor: Colors.white,
-    borderWidth: 1.5, borderColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1, borderColor: '#E2E8F0',
   },
-  iconCatTab:   { width: 17, height: 17 },
   catTabLabel:  { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
   catTabLabelActive: { color: Colors.white, fontWeight: '800' },
-  catTabCount:  { backgroundColor: Colors.bgInput, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  catTabCount:  { backgroundColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 2 },
   catTabCountActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  catTabCountText: { fontSize: 11, fontWeight: '800', color: Colors.textSecondary },
+  catTabCountText: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary },
   catTabCountTextActive: { color: Colors.white },
 
-  list: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+  list: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   itemCard: {
     flexDirection: 'row', backgroundColor: Colors.white,
-    borderRadius: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: Colors.border,
+    borderRadius: 20, 
+    borderWidth: 1, borderColor: '#F1F5F9',
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2,
   },
-  itemColorBar: { width: 5 },
-  itemBody:     { flex: 1, padding: 14 },
-  itemTop:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  itemName:     { fontSize: 15, fontWeight: '800', color: Colors.black, marginBottom: 3 },
-  itemDesc:     { fontSize: 12, color: Colors.textSecondary, lineHeight: 17 },
-  itemActions:  { flexDirection: 'row', gap: 6 },
-  editBtn: {
-    backgroundColor: Colors.bgInput, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1, borderColor: Colors.border,
+  itemColorBar: { width: 6 },
+  itemBody:     { flex: 1, padding: 16 },
+  itemTop:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
+  itemName:     { fontSize: 16, fontWeight: '800', color: Colors.black, marginBottom: 4 },
+  itemDesc:     { fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },
+  itemActions:  { flexDirection: 'row', gap: 8 },
+  actionBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: '#F1F5F9'
   },
-  editBtnText:   { fontSize: 12, fontWeight: '700', color: Colors.black },
-  deleteBtn: {
-    backgroundColor: '#FEE2E2', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: '#FECACA',
-    justifyContent: 'center', alignItems: 'center',
+  actionBtnDelete: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: '#FEE2E2'
   },
-  iconDeleteBtn: { width: 12, height: 12 },
+  
   itemBottom:    { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   priceBadge: {
-    flexDirection: 'row', alignItems: 'baseline', gap: 2,
-    backgroundColor: Colors.orangeLight, borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderWidth: 1, borderColor: '#FFB26B',
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: '#FFF7ED', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#FFEDD5',
   },
-  priceValue:  { fontSize: 15, fontWeight: '900', color: Colors.orange },
-  pricePer:    { fontSize: 11, color: Colors.orange, fontWeight: '600' },
+  priceValue:  { fontSize: 14, fontWeight: '900', color: Colors.orange },
+  pricePer:    { fontSize: 11, color: Colors.orange, fontWeight: '600', marginLeft: 2 },
   servingBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.bgInput, borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: '#F8FAFC', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#F1F5F9',
   },
-  iconServing: { width: 12, height: 12, tintColor: Colors.textSecondary },
   servingText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
 
-  emptyIconWrap:  { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-  emptyIcon:      { width: 38, height: 38 },
-  emptyTitle:     { fontSize: 18, fontWeight: '800', color: Colors.black },
-  emptySub:       { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
+  emptyIconWrap:  { width: 96, height: 96, borderRadius: 48, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  emptyTitle:     { fontSize: 20, fontWeight: '800', color: Colors.black, marginBottom: 8 },
+  emptySub:       { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', marginBottom: 24 },
   emptyAddBtn: {
-    marginTop: 16, backgroundColor: Colors.orange,
-    borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.orange, borderRadius: 16, 
+    paddingHorizontal: 24, paddingVertical: 14,
   },
-  emptyAddBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
+  emptyAddBtnText: { color: Colors.white, fontWeight: '800', fontSize: 15 },
 
-  modalRoot:   { flex: 1, backgroundColor: Colors.bg },
+  modalRoot:   { flex: 1, backgroundColor: '#F8FAFC' },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingBottom: 16,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
   },
-  modalCancel: { fontSize: 15, color: Colors.textSecondary, fontWeight: '700' },
-  modalTitle:  { fontSize: 17, fontWeight: '900', color: Colors.black },
-  modalSave:   { fontSize: 15, color: Colors.orange, fontWeight: '900' },
-  modalBody:   { padding: 20, paddingBottom: 48 },
+  modalHeaderBtn: { paddingVertical: 8, paddingHorizontal: 4 },
+  modalCancel: { fontSize: 16, color: Colors.textSecondary, fontWeight: '600' },
+  modalTitle:  { fontSize: 18, fontWeight: '900', color: Colors.black },
+  modalSave:   { fontSize: 16, color: Colors.orange, fontWeight: '800' },
+  modalBody:   { padding: 20, paddingBottom: 60, gap: 24 },
 
-  formGroup:   { marginBottom: 22 },
-  formLabel:   { fontSize: 13, fontWeight: '800', color: Colors.black, marginBottom: 4 },
+  formSection: { backgroundColor: Colors.white, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#F1F5F9' },
+  sectionTitle: { fontSize: 12, fontWeight: '900', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 16 },
+
+  formGroup:   { marginBottom: 20 },
+  formLabel:   { fontSize: 13, fontWeight: '800', color: Colors.black, marginBottom: 6 },
   formHint:    { fontSize: 11, color: Colors.textMuted, marginBottom: 10, lineHeight: 16 },
   formInput: {
-    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0',
+    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
     fontSize: 15, color: Colors.black,
   },
-  formTextarea: { minHeight: 90, textAlignVertical: 'top', paddingTop: 12 },
+  formTextarea: { minHeight: 100, textAlignVertical: 'top', paddingTop: 14 },
 
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   catChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
-    backgroundColor: Colors.white,
-    borderWidth: 1.5, borderColor: Colors.border,
+    flex: 1, minWidth: '45%',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1, borderColor: '#E2E8F0',
   },
-  iconCatChip:        { width: 18, height: 18 },
-  catChipLabel:       { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
+  catChipLabel:       { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
 
   servingRow:        { flexDirection: 'row', gap: 10 },
   servingSizeInput:  { flex: 1 },
   unitPickerBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    minWidth: 130,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0',
+    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
+    minWidth: 140,
   },
-  unitPickerBtnText: { flex: 1, fontSize: 15, fontWeight: '700', color: Colors.black },
-  iconUnitChevron: { width: 11, height: 11, tintColor: Colors.textMuted },
+  unitPickerBtnText: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  
   servingPreview: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.orangeLight, borderRadius: 10,
-    padding: 12, marginTop: 10,
-    borderWidth: 1, borderColor: '#FFB26B',
+    backgroundColor: '#FFF7ED', borderRadius: 10,
+    padding: 12, marginTop: 12,
   },
   servingPreviewLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
   servingPreviewValue: { fontSize: 14, fontWeight: '900', color: Colors.orange },
 
   exampleChip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: Colors.white,
-    borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1, borderColor: '#E2E8F0',
   },
   exampleChipActive:    { backgroundColor: Colors.orange, borderColor: Colors.orange },
   exampleChipText:      { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
@@ -673,24 +660,24 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   unitSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    backgroundColor: Colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     maxHeight: '70%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 10,
   },
   unitSheetHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: 'center', marginTop: 12, marginBottom: 16,
+    width: 40, height: 5, borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+    alignSelf: 'center', marginTop: 12, marginBottom: 20,
   },
   unitSheetTitle: {
-    fontSize: 17, fontWeight: '900', color: Colors.black,
-    marginBottom: 12, textAlign: 'center',
+    fontSize: 18, fontWeight: '900', color: Colors.black,
+    marginBottom: 16, textAlign: 'center',
   },
   unitOption: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.divider,
+    paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
   },
-  unitOptionText:      { fontSize: 16, color: Colors.black, fontWeight: '500' },
+  unitOptionText:      { fontSize: 16, color: Colors.black, fontWeight: '600' },
   unitOptionTextActive:{ color: Colors.orange, fontWeight: '800' },
-  iconUnitCheck:       { width: 16, height: 16 },
 });

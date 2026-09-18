@@ -46,7 +46,8 @@
         {
           "photosPermission": "CaterConnect needs access to your photos to upload your profile picture and business images."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -10,7 +10,7 @@ export default function StaffLayout() {
         marginLeft: 'var(--sidebar-w)',
         padding: '32px 36px',
         minHeight: '100vh',
-        background: '#F4F6F9',
+        background: '#FAF8F5',
       }}>
         <Outlet />
       </main>

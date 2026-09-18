@@ -6,6 +6,11 @@ import {
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import {
+  ShieldAlert, FileText, History, Send,
+  Building2, AlignLeft, AlertCircle, Info, Inbox,
+  Clock, Sparkles, CheckCircle2, XCircle
+} from 'lucide-react-native';
 
 const COMPLAINT_TYPES = [
   'Caterer No-Show',
@@ -83,8 +88,8 @@ export default function CustomerComplaints() {
     }
 
     Alert.alert(
-      '✅ Complaint Submitted',
-      'Our platform staff will review your complaint and get back to you.',
+      'Complaint Submitted',
+      'Our platform staff will review your complaint and get back to you promptly.',
       [{ text: 'OK', onPress: () => {
         setComplaintType(''); setAgainst(''); setSubject('');
         setDescription(''); setPriority('medium');
@@ -93,11 +98,11 @@ export default function CustomerComplaints() {
     );
   };
 
-  const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
-    open:      { bg: '#F3F4F6', color: '#374151' },
-    in_review: { bg: '#DBEAFE', color: '#1D4ED8' },
-    resolved:  { bg: '#DCFCE7', color: '#15803D' },
-    closed:    { bg: '#E5E7EB', color: '#6B7280' },
+  const statusConfig: Record<string, { bg: string; color: string; label: string; icon: any }> = {
+    open:      { bg: '#F3F4F6', color: '#374151', label: 'Open', icon: Clock },
+    in_review: { bg: '#EFF6FF', color: '#2563EB', label: 'In Review', icon: Sparkles },
+    resolved:  { bg: '#DCFCE7', color: '#166534', label: 'Resolved', icon: CheckCircle2 },
+    closed:    { bg: '#E5E7EB', color: '#4B5563', label: 'Closed', icon: XCircle },
   };
 
   return (
@@ -107,9 +112,14 @@ export default function CustomerComplaints() {
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
-        <Text style={styles.pageTitle}>Complaints</Text>
-        <Text style={styles.pageSub}>Report issues with caterers or platform experiences</Text>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 44 }]}>
+        <View style={styles.headerIconWrap}>
+          <ShieldAlert size={22} color={Colors.orange} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageTitle}>Complaints & Issues</Text>
+          <Text style={styles.pageSub}>Report issues securely to platform moderation</Text>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -117,139 +127,167 @@ export default function CustomerComplaints() {
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'new' && styles.tabBtnActive]}
           onPress={() => setTab('new')}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.tabText, tab === 'new' && styles.tabTextActive]}>📝 New Complaint</Text>
+          <FileText size={16} color={tab === 'new' ? Colors.white : Colors.textSecondary} />
+          <Text style={[styles.tabText, tab === 'new' && styles.tabTextActive]}>New Complaint</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}
           onPress={() => setTab('history')}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>📋 My Complaints</Text>
+          <History size={16} color={tab === 'history' ? Colors.white : Colors.textSecondary} />
+          <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>My Reports</Text>
         </TouchableOpacity>
       </View>
 
       {/* ── NEW COMPLAINT FORM ── */}
       {tab === 'new' && (
         <View style={styles.formWrap}>
-          {/* Complaint type */}
-          <Text style={styles.fieldLabel}>Complaint Type *</Text>
-          <View style={styles.typeGrid}>
-            {COMPLAINT_TYPES.map((t) => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.typeChip, complaintType === t && styles.typeChipActive]}
-                onPress={() => setComplaintType(t)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.typeChipText, complaintType === t && styles.typeChipTextActive]}>
-                  {t}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.formCard}>
+            {/* Complaint type */}
+            <Text style={styles.fieldLabel}>COMPLAINT TYPE *</Text>
+            <View style={styles.typeGrid}>
+              {COMPLAINT_TYPES.map((t) => {
+                const isSelected = complaintType === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeChip, isSelected && styles.typeChipActive]}
+                    onPress={() => setComplaintType(t)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.typeChipText, isSelected && styles.typeChipTextActive]}>
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Against */}
+            <Text style={styles.fieldLabel}>AGAINST (CATERER / BUSINESS NAME)</Text>
+            <View style={styles.inputWrap}>
+              <Building2 size={18} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Maria's Catering Services"
+                placeholderTextColor={Colors.textMuted}
+                value={against}
+                onChangeText={setAgainst}
+              />
+            </View>
+
+            {/* Subject */}
+            <Text style={styles.fieldLabel}>SUBJECT</Text>
+            <View style={styles.inputWrap}>
+              <FileText size={18} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.input}
+                placeholder="Brief title summarizing the issue"
+                placeholderTextColor={Colors.textMuted}
+                value={subject}
+                onChangeText={setSubject}
+              />
+            </View>
+
+            {/* Description */}
+            <Text style={styles.fieldLabel}>DESCRIPTION *</Text>
+            <View style={[styles.inputWrap, { alignItems: 'flex-start', paddingVertical: 12 }]}>
+              <AlignLeft size={18} color={Colors.textSecondary} style={{ marginTop: 2 }} />
+              <TextInput
+                style={[styles.input, styles.textarea]}
+                placeholder="Describe the issue in comprehensive detail. Include dates, specific amounts, or transaction numbers..."
+                placeholderTextColor={Colors.textMuted}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+              />
+            </View>
+
+            {/* Priority */}
+            <Text style={styles.fieldLabel}>PRIORITY LEVEL</Text>
+            <View style={styles.priorityRow}>
+              {(['low', 'medium', 'high'] as const).map((p) => {
+                const colors = { low: '#16A34A', medium: '#D97706', high: '#DC2626' };
+                const bgs    = { low: '#DCFCE7', medium: '#FEF3C7', high: '#FEE2E2' };
+                const active = priority === p;
+                return (
+                  <TouchableOpacity
+                    key={p}
+                    style={[styles.priorityBtn, active && { backgroundColor: bgs[p], borderColor: colors[p] }]}
+                    onPress={() => setPriority(p)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.priorityText, active && { color: colors[p], fontWeight: '900' }]}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Info box */}
+            <View style={styles.infoBox}>
+              <Info size={16} color="#2563EB" style={{ marginTop: 2 }} />
+              <Text style={styles.infoBoxText}>
+                Your report will be reviewed by our platform staff within 24–48 hours. Providing accurate details ensures a faster investigation.
+              </Text>
+            </View>
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
+              onPress={handleSubmit}
+              disabled={submitting}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Send size={16} color={Colors.white} />
+                  <Text style={styles.submitBtnText}>Submit Complaint</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
-
-          {/* Against */}
-          <Text style={styles.fieldLabel}>Against (Caterer / Business Name)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Maria's Catering Services"
-            placeholderTextColor={Colors.textMuted}
-            value={against}
-            onChangeText={setAgainst}
-          />
-
-          {/* Subject */}
-          <Text style={styles.fieldLabel}>Subject</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Brief title for your complaint"
-            placeholderTextColor={Colors.textMuted}
-            value={subject}
-            onChangeText={setSubject}
-          />
-
-          {/* Description */}
-          <Text style={styles.fieldLabel}>Description *</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            placeholder="Describe the issue in detail. Include dates, amounts, or other relevant information..."
-            placeholderTextColor={Colors.textMuted}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
-          />
-
-          {/* Priority */}
-          <Text style={styles.fieldLabel}>Priority</Text>
-          <View style={styles.priorityRow}>
-            {(['low', 'medium', 'high'] as const).map((p) => {
-              const colors = { low: '#16A34A', medium: '#D97706', high: '#DC2626' };
-              const bgs    = { low: '#DCFCE7', medium: '#FEF3C7', high: '#FEE2E2' };
-              const active = priority === p;
-              return (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.priorityBtn, active && { backgroundColor: bgs[p], borderColor: colors[p] }]}
-                  onPress={() => setPriority(p)}
-                >
-                  <Text style={[styles.priorityText, active && { color: colors[p], fontWeight: '800' }]}>
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Info box */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoBoxText}>
-              ℹ️ Your complaint will be reviewed by our platform staff within 24–48 hours. Please provide as much detail as possible.
-            </Text>
-          </View>
-
-          {/* Submit */}
-          <TouchableOpacity
-            style={[styles.submitBtn, submitting && { opacity: 0.65 }]}
-            onPress={handleSubmit}
-            disabled={submitting}
-            activeOpacity={0.85}
-          >
-            {submitting
-              ? <ActivityIndicator color="white" />
-              : <Text style={styles.submitBtnText}>Submit Complaint</Text>
-            }
-          </TouchableOpacity>
         </View>
       )}
 
       {/* ── HISTORY ── */}
       {tab === 'history' && (
-        <View style={{ padding: 20 }}>
+        <View style={{ paddingHorizontal: 20 }}>
           {loadingHistory ? (
             <ActivityIndicator color={Colors.orange} style={{ marginTop: 40 }} />
           ) : complaints.length === 0 ? (
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyIcon}>📭</Text>
-              <Text style={styles.emptyTitle}>No complaints yet</Text>
-              <Text style={styles.emptySub}>Your submitted complaints will appear here.</Text>
+              <View style={styles.emptyIconWrap}>
+                <Inbox size={36} color={Colors.orange} />
+              </View>
+              <Text style={styles.emptyTitle}>No complaints filed</Text>
+              <Text style={styles.emptySub}>Your submitted moderation reports and their resolutions will appear here.</Text>
             </View>
           ) : (
             complaints.map((c) => {
-              const ss = STATUS_COLOR[c.status] ?? STATUS_COLOR.open;
+              const sc = statusConfig[c.status] ?? statusConfig.open;
+              const StatusIcon = sc.icon;
               return (
                 <View key={c.id} style={styles.historyCard}>
                   <View style={styles.historyTop}>
-                    <Text style={styles.historyType}>{c.complaint_type}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: ss.bg }]}>
-                      <Text style={[styles.statusText, { color: ss.color }]}>{c.status.replace('_', ' ')}</Text>
+                    <Text style={styles.historyType} numberOfLines={1}>{c.complaint_type}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                      <StatusIcon size={12} color={sc.color} />
+                      <Text style={[styles.statusText, { color: sc.color }]}>{sc.label}</Text>
                     </View>
                   </View>
                   {c.subject && <Text style={styles.historySubject}>{c.subject}</Text>}
                   <Text style={styles.historyDesc} numberOfLines={2}>{c.description}</Text>
                   <Text style={styles.historyDate}>
-                    {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    Filed on {new Date(c.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </Text>
                   {c.resolution_notes && (
                     <View style={styles.resolutionBox}>
@@ -268,84 +306,122 @@ export default function CustomerComplaints() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  header: { paddingHorizontal: 20, paddingBottom: 16 },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, marginBottom: 4 },
-  pageSub: { fontSize: 14, color: Colors.textSecondary },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  header: { 
+    paddingHorizontal: 20, 
+    paddingBottom: 16, 
+    backgroundColor: Colors.white, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  pageTitle: { fontSize: 22, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
 
-  tabRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 20 },
+  tabRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginVertical: 16 },
   tabBtn: {
-    flex: 1, paddingVertical: 11, borderRadius: 12,
-    alignItems: 'center', backgroundColor: Colors.white,
-    borderWidth: 1.5, borderColor: Colors.border,
+    flex: 1, paddingVertical: 12, borderRadius: 14,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02, shadowRadius: 6, elevation: 1,
   },
   tabBtnActive: { backgroundColor: Colors.black, borderColor: Colors.black },
   tabText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
-  tabTextActive: { color: Colors.white },
+  tabTextActive: { color: Colors.white, fontWeight: '800' },
 
   formWrap: { paddingHorizontal: 20 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: Colors.black, marginBottom: 8, marginTop: 16 },
+  formCard: {
+    backgroundColor: Colors.white, borderRadius: 20,
+    padding: 20, borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03, shadowRadius: 10, elevation: 2,
+  },
+  fieldLabel: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary, letterSpacing: 1, marginBottom: 8, marginTop: 16 },
 
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14,
+    backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB',
   },
-  typeChipActive: { backgroundColor: Colors.orangeLight, borderColor: Colors.orange },
-  typeChipText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },
-  typeChipTextActive: { color: Colors.orange, fontWeight: '800' },
+  typeChipActive: { backgroundColor: '#FFF7ED', borderColor: Colors.orange },
+  typeChipText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '700' },
+  typeChipTextActive: { color: Colors.orange, fontWeight: '900' },
 
-  input: {
-    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 14, color: Colors.black,
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F9FAFB', borderRadius: 12,
+    borderWidth: 1.5, borderColor: '#E5E7EB',
+    paddingHorizontal: 12, gap: 10,
   },
-  textarea: { minHeight: 120, textAlignVertical: 'top', paddingTop: 12 },
+  input: { flex: 1, fontSize: 14, color: Colors.black, paddingVertical: 12, fontWeight: '600' },
+  textarea: { minHeight: 110, textAlignVertical: 'top', paddingTop: 2 },
 
-  priorityRow: { flexDirection: 'row', gap: 10 },
+  priorityRow: { flexDirection: 'row', gap: 8 },
   priorityBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10,
-    alignItems: 'center', backgroundColor: Colors.white,
-    borderWidth: 1.5, borderColor: Colors.border,
+    flex: 1, paddingVertical: 10, borderRadius: 12,
+    alignItems: 'center', backgroundColor: '#F9FAFB',
+    borderWidth: 1.5, borderColor: '#E5E7EB',
   },
-  priorityText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  priorityText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
 
   infoBox: {
+    flexDirection: 'row', gap: 10,
     backgroundColor: '#EFF6FF', borderRadius: 12,
-    padding: 14, marginTop: 20,
+    padding: 12, marginTop: 20,
     borderWidth: 1, borderColor: '#BFDBFE',
+    alignItems: 'flex-start',
   },
-  infoBoxText: { fontSize: 13, color: '#1D4ED8', lineHeight: 20 },
+  infoBoxText: { fontSize: 12, color: '#1E40AF', lineHeight: 18, flex: 1, fontWeight: '600' },
 
   submitBtn: {
     backgroundColor: Colors.orange, borderRadius: 14,
-    paddingVertical: 16, alignItems: 'center', marginTop: 20,
+    paddingVertical: 16, alignItems: 'center', justifyContent: 'center', marginTop: 20,
     shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
   },
-  submitBtnText: { color: Colors.white, fontWeight: '900', fontSize: 16 },
+  submitBtnText: { color: Colors.white, fontWeight: '900', fontSize: 15 },
 
-  emptyWrap: { alignItems: 'center', paddingVertical: 60 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: Colors.black, marginBottom: 6 },
-  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
+  emptyWrap: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 20 },
+  emptyIconWrap: {
+    width: 72, height: 72, borderRadius: 24,
+    backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center',
+    marginBottom: 16, borderWidth: 1, borderColor: '#FED7AA',
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', fontWeight: '500' },
 
   historyCard: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 16, marginBottom: 12,
+    backgroundColor: Colors.white, borderRadius: 18,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    padding: 16, marginBottom: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03, shadowRadius: 10, elevation: 2,
   },
   historyTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   historyType: { fontSize: 14, fontWeight: '800', color: Colors.black, flex: 1, marginRight: 8 },
-  statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadge: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 5 },
   statusText: { fontSize: 11, fontWeight: '800' },
-  historySubject: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary, marginBottom: 4 },
-  historyDesc: { fontSize: 13, color: Colors.textMuted, lineHeight: 19, marginBottom: 8 },
-  historyDate: { fontSize: 11, color: Colors.textMuted },
+  historySubject: { fontSize: 13, fontWeight: '700', color: Colors.black, marginBottom: 4 },
+  historyDesc: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19, marginBottom: 8, fontWeight: '500' },
+  historyDate: { fontSize: 11, color: Colors.textMuted, fontWeight: '500' },
   resolutionBox: {
-    marginTop: 10, backgroundColor: '#F0FDF4',
-    borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#86EFAC',
+    marginTop: 12, backgroundColor: '#F0FDF4',
+    borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#86EFAC',
   },
-  resolutionLabel: { fontSize: 11, fontWeight: '800', color: '#15803D', marginBottom: 4 },
-  resolutionText: { fontSize: 13, color: '#166534', lineHeight: 19 },
+  resolutionLabel: { fontSize: 11, fontWeight: '900', color: '#15803D', marginBottom: 4 },
+  resolutionText: { fontSize: 13, color: '#166534', lineHeight: 19, fontWeight: '500' },
 });

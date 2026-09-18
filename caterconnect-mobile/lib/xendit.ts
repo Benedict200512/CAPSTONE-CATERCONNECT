@@ -2,7 +2,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './supabase';
 
-export type PaymentType = 'subscription' | 'booking';
+export type PaymentType = 'subscription' | 'booking' | 'debt';
 
 type XenditPaymentOptions = {
   type: PaymentType;
@@ -108,7 +108,7 @@ export async function openGCashCheckout(
     // On Android this opens a Chrome Custom Tab
     // On iOS this opens an in-app Safari
     await WebBrowser.openBrowserAsync(checkoutUrl, {
-      showTitle:           false,
+      showTitle:             false,
       toolbarColor:        '#F97316',
       enableBarCollapsing: false,
       presentationStyle:   WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,

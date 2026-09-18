@@ -6,7 +6,11 @@ export async function signUp(
   email: string,
   password: string,
   fullName: string,
-  role: AppRole
+  role: AppRole,
+  phone?: string,
+  address?: string,
+  businessName?: string, // Added argument 7
+  city?: string          // Added argument 8
 ) {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -15,6 +19,10 @@ export async function signUp(
       data: {
         full_name: fullName,
         role: role,
+        phone_number: phone,
+        address: address,
+        business_name: businessName,
+        city: city,
       },
     },
   });
