@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import {
-  ArrowLeft, Plus, MessageSquare, Clock, CheckCircle2,
+  ChevronLeft, Plus, MessageSquare, Clock, CheckCircle2,
   AlertCircle, ChevronRight, HelpCircle, Send, Sparkles, User, ShieldCheck
 } from 'lucide-react-native';
 
@@ -109,7 +109,7 @@ export default function ConsultationScreen() {
   };
 
   const statusConfig: Record<string, { bg: string; text: string; label: string; icon: any }> = {
-    open:      { bg: '#EFF6FF', text: '#2563EB', label: 'Open', icon: Clock },
+    open:       { bg: '#EFF6FF', text: '#2563EB', label: 'Open', icon: Clock },
     in_review: { bg: '#FEF3C7', text: '#D97706', label: 'In Review', icon: Sparkles },
     resolved:  { bg: '#DCFCE7', text: '#166534', label: 'Resolved', icon: CheckCircle2 },
     closed:    { bg: '#F3F4F6', text: '#4B5563', label: 'Closed', icon: AlertCircle },
@@ -123,7 +123,7 @@ export default function ConsultationScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setSelected(null)} style={styles.backBtn} activeOpacity={0.7}>
-            <ArrowLeft size={20} color={Colors.black} />
+            <ChevronLeft size={20} color={Colors.black} />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Consultation Details</Text>
@@ -195,7 +195,7 @@ export default function ConsultationScreen() {
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setView('list')} style={styles.backBtn} activeOpacity={0.7}>
-            <ArrowLeft size={20} color={Colors.black} />
+            <ChevronLeft size={20} color={Colors.black} />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>New Consultation</Text>
@@ -363,11 +363,14 @@ export default function ConsultationScreen() {
                   <View style={styles.consultCardLeft}>
                     <Text style={styles.consultSubject} numberOfLines={1}>{c.subject}</Text>
                   </View>
-                  <View style={[styles.consultStatusBadge, { backgroundColor: sc.bg }]}>
-                    <StatusIcon size={12} color={sc.text} />
-                    <Text style={[styles.consultStatusText, { color: sc.text }]}>
-                      {sc.label}
-                    </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={[styles.consultStatusBadge, { backgroundColor: sc.bg }]}>
+                      <StatusIcon size={12} color={sc.text} />
+                      <Text style={[styles.consultStatusText, { color: sc.text }]}>
+                        {sc.label}
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color={Colors.textMuted} />
                   </View>
                 </View>
 

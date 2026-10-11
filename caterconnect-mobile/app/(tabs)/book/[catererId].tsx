@@ -15,7 +15,7 @@ import * as Location from 'expo-location';
 
 // ── Lucide React Native Icons ──
 import {
-  ArrowLeft,
+  ChevronLeft,
   Medal,
   Check,
   Package as PackageIcon,
@@ -46,7 +46,7 @@ const { width, height } = Dimensions.get('window');
 
 type Package = {
   id: string; name: string; tier: string; description: string | null;
-  price: number; min_guests: number; image_url: string | null;
+  price: number; min_guests: number; guest_capacity: number; image_url: string | null;
   includes: string[] | null;
   food_inclusions: string[] | null;
   event_types: string[];
@@ -193,7 +193,6 @@ export default function BookingWizard() {
       if (packagesRes.data) setPackages(packagesRes.data as any);
       if (menuRes.data) setMenuItems(menuRes.data);
       if (bookingsRes.data) {
-        // Normalize dates to YYYY-MM-DD format regardless of whether DB returns timestamp or date
         const normalizedDates = bookingsRes.data
           .map(b => b.event_date ? String(b.event_date).split('T')[0] : '')
           .filter(Boolean);
@@ -221,7 +220,9 @@ export default function BookingWizard() {
     [customItems, guests]
   );
 
-  const baseTotal = selectedPkg ? selectedPkg.price * Math.ceil(guests / selectedPkg.min_guests) : 0;
+  const packageMultiplier = selectedPkg ? Math.ceil(guests / (selectedPkg.guest_capacity || 1)) : 0;
+  const baseTotal = selectedPkg ? selectedPkg.price * packageMultiplier : 0;
+  
   const totalCost = baseTotal + customizationTotal;
   const downpayment = caterer ? totalCost * (caterer.downpayment_percent / 100) : 0;
 
@@ -245,7 +246,6 @@ export default function BookingWizard() {
   const getQty = (itemId: string) =>
     customItems.find(c => c.menuItem.id === itemId)?.quantity ?? 0;
 
-  // Local date formatting
   const formattedDateString = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`;
   const formattedTimeString = eventTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -257,7 +257,6 @@ export default function BookingWizard() {
       if (!eventDate) {
         Alert.alert('Invalid Date', 'Please select a valid event date.'); return false;
       }
-      // Check if selected date is fully booked
       if (fullyBookedDates.includes(formattedDateString)) {
         Alert.alert(
           'Date Unavailable',
@@ -270,13 +269,6 @@ export default function BookingWizard() {
       }
       if (guests <= 0) {
         Alert.alert('Guest Count', 'Please enter a valid number of guests.'); return false;
-      }
-      if (selectedPkg && guests < selectedPkg.min_guests) {
-        Alert.alert(
-          'Minimum Guest Requirement',
-          `This package requires a minimum of ${selectedPkg.min_guests} guests. Please adjust your guest count.`
-        );
-        return false;
       }
       if (!eventType) {
         Alert.alert('Event Type', 'Please select an event type.'); return false;
@@ -362,7 +354,6 @@ export default function BookingWizard() {
   const handleSubmit = async () => {
     if (!session?.user?.id || !selectedPkg || !caterer) return;
 
-    // Final database check right before saving to prevent race conditions
     setSubmitting(true);
     try {
       const { data: conflicting, error: checkError } = await supabase
@@ -460,7 +451,7 @@ export default function BookingWizard() {
         </View>
         <Text style={styles.emptyTitle}>Caterer not found</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.85}>
-          <ArrowLeft size={16} color={Colors.white} />
+          <ChevronLeft size={16} color={Colors.white} />
           <Text style={styles.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -468,12 +459,13 @@ export default function BookingWizard() {
   }
 
   const isCurrentDateBooked = fullyBookedDates.includes(formattedDateString);
+  const isGuestBelowMinimum = Boolean(selectedPkg && guests > 0 && guests < (selectedPkg?.min_guests ?? 0));
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
         <TouchableOpacity onPress={() => step === 0 ? router.back() : prevStep()} style={styles.headerBack}>
-          <ArrowLeft size={18} color={Colors.black} />
+          <ChevronLeft size={20} color={Colors.black} />
         </TouchableOpacity>
         <View style={styles.headerMid}>
           {caterer.logo_url ? (
@@ -512,7 +504,7 @@ export default function BookingWizard() {
               packages.map(pkg => {
                 const tier = TIER_CONFIG[pkg.tier] ?? TIER_CONFIG.bronze;
                 const isSelected = selectedPkg?.id === pkg.id;
-                const pricePerGuest = pkg.min_guests > 0 ? pkg.price / pkg.min_guests : 0;
+                const pricePerGuest = pkg.guest_capacity > 0 ? pkg.price / pkg.guest_capacity : 0;
 
                 return (
                   <TouchableOpacity
@@ -551,15 +543,14 @@ export default function BookingWizard() {
                       <View style={styles.pkgPricing}>
                         <View>
                           <Text style={styles.pkgPrice}>₱{pkg.price.toLocaleString()}</Text>
-                          <Text style={styles.pkgPriceSub}>per {pkg.min_guests} guests</Text>
+                          <Text style={styles.pkgPriceSub}>capacity: up to {pkg.guest_capacity} pax</Text>
                         </View>
                         <View style={styles.pkgPricePerGuest}>
                           <Text style={styles.pkgPricePerGuestNum}>₱{pricePerGuest.toFixed(0)}</Text>
-                          <Text style={styles.pkgPricePerGuestLabel}>/guest</Text>
+                          <Text style={styles.pkgPricePerGuestLabel}>per head</Text>
                         </View>
                       </View>
 
-                      {/* ── FOOD INCLUSIONS ── */}
                       {pkg.food_inclusions && pkg.food_inclusions.length > 0 && (
                         <View style={styles.includesWrap}>
                           <Text style={styles.includesLabel}>FOOD INCLUSIONS</Text>
@@ -572,7 +563,6 @@ export default function BookingWizard() {
                         </View>
                       )}
 
-                      {/* ── PACKAGE / SERVICE INCLUSIONS ── */}
                       {pkg.includes && pkg.includes.length > 0 && (
                         <View style={styles.includesWrap}>
                           <Text style={styles.includesLabel}>PACKAGE INCLUSIONS</Text>
@@ -618,7 +608,7 @@ export default function BookingWizard() {
                   </Text>
                 </View>
                 <Text style={styles.selectedPkgName}>{selectedPkg.name}</Text>
-                <Text style={styles.selectedPkgPrice}>₱{selectedPkg.price.toLocaleString()} / {selectedPkg.min_guests} guests</Text>
+                <Text style={styles.selectedPkgPrice}>₱{selectedPkg.price.toLocaleString()} / up to {selectedPkg.guest_capacity} guests (Min recommendation: {selectedPkg.min_guests} pax)</Text>
               </View>
             )}
 
@@ -673,35 +663,35 @@ export default function BookingWizard() {
               />
             </View>
 
+            {/* Number of Guests Field with Polite Soft Warning */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Number of Guests *</Text>
               <TextInput
                 style={styles.fieldInput}
-                placeholder="e.g. 100"
+                placeholder={`e.g. ${selectedPkg?.min_guests || 50}`}
                 placeholderTextColor={Colors.textMuted}
                 value={guestCount}
                 onChangeText={setGuestCount}
                 keyboardType="number-pad"
               />
-              {selectedPkg && guests > 0 && guests < selectedPkg.min_guests && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                  <AlertTriangle size={14} color={Colors.error} />
-                  <Text style={{ fontSize: 12, color: Colors.error, fontWeight: '700' }}>
-                    This package requires a minimum of {selectedPkg.min_guests} guests.
+              {isGuestBelowMinimum ? (
+                <View style={styles.inlineNoticeBox}>
+                  <Info size={16} color={Colors.orange} />
+                  <Text style={styles.inlineNoticeText}>
+                    Note: This package is optimized for at least {selectedPkg?.min_guests} guests. You can proceed, but pricing is calculated based on the baseline package capacity.
                   </Text>
                 </View>
-              )}
-              {selectedPkg && guests >= selectedPkg.min_guests && (
+              ) : selectedPkg && guests > 0 ? (
                 <View style={styles.guestCalc}>
                   <View style={styles.guestCalcTextRow}>
                     <PackageIcon size={14} color="#92400E" />
                     <Text style={styles.guestCalcText}>
-                      {Math.ceil(guests / selectedPkg.min_guests)} × {selectedPkg.name} needed
+                      {packageMultiplier} × {selectedPkg.name} ({selectedPkg.guest_capacity} pax capacity)
                     </Text>
                   </View>
-                  <Text style={styles.guestCalcPrice}>₱{(selectedPkg.price * Math.ceil(guests / selectedPkg.min_guests)).toLocaleString()}</Text>
+                  <Text style={styles.guestCalcPrice}>₱{baseTotal.toLocaleString()}</Text>
                 </View>
-              )}
+              ) : null}
             </View>
 
             <View style={styles.fieldGroup}>
@@ -900,7 +890,6 @@ export default function BookingWizard() {
                 <Text style={styles.reviewPkgName}>{selectedPkg.name}</Text>
                 {selectedPkg.description && <Text style={styles.reviewPkgDesc}>{selectedPkg.description}</Text>}
 
-                {/* Food Inclusions in Review */}
                 {selectedPkg.food_inclusions && selectedPkg.food_inclusions.length > 0 && (
                   <View style={[styles.includesWrap, { marginTop: 12, marginBottom: selectedPkg.includes && selectedPkg.includes.length > 0 ? 12 : 0 }]}>
                     <Text style={styles.includesLabel}>FOOD INCLUSIONS</Text>
@@ -913,7 +902,6 @@ export default function BookingWizard() {
                   </View>
                 )}
 
-                {/* Package Inclusions in Review */}
                 {selectedPkg.includes && selectedPkg.includes.length > 0 && (
                   <View style={[styles.includesWrap, { marginBottom: 0 }]}>
                     <Text style={styles.includesLabel}>PACKAGE INCLUSIONS</Text>
@@ -983,7 +971,7 @@ export default function BookingWizard() {
               </View>
               <View style={styles.reviewCard}>
                 <View style={styles.reviewRow}>
-                  <Text style={styles.reviewRowLabel}>Package cost</Text>
+                  <Text style={styles.reviewRowLabel}>Package cost ({packageMultiplier}x)</Text>
                   <Text style={styles.reviewRowValue}>₱{baseTotal.toLocaleString()}</Text>
                 </View>
                 {customizationTotal > 0 && (
@@ -1086,7 +1074,7 @@ export default function BookingWizard() {
       <View style={styles.bottomBar}>
         {step > 0 && (
           <TouchableOpacity style={styles.prevBtn} onPress={prevStep}>
-            <ArrowLeft size={14} color={Colors.textSecondary} />
+            <ChevronLeft size={16} color={Colors.textSecondary} />
             <Text style={styles.prevBtnText}>Back</Text>
           </TouchableOpacity>
         )}
@@ -1213,6 +1201,12 @@ const styles = StyleSheet.create({
   guestCalcTextRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1 },
   guestCalcText: { fontSize: 13, color: '#92400E', fontWeight: '600', flex: 1 },
   guestCalcPrice: { fontSize: 16, fontWeight: '900', color: Colors.orange },
+  inlineNoticeBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA',
+    borderRadius: 10, padding: 12, marginTop: 8,
+  },
+  inlineNoticeText: { fontSize: 12, color: '#9A3412', fontWeight: '600', flex: 1, lineHeight: 17 },
   eventTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   eventTypeChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.border },
   eventTypeChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },

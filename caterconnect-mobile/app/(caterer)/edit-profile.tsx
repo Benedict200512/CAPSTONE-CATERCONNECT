@@ -25,11 +25,19 @@ type CatererDoc = {
 };
 
 const REQUIRED_DOCS = [
-  { type: 'business_permit',       label: 'Business Permit',                    icon: Building2 },
-  { type: 'sanitary_permit',       label: 'Sanitary Permit',                    icon: ShieldCheck },
-  { type: 'government_id',         label: 'Government-issued ID',               icon: IdCard },
+  { type: 'business_permit',      label: 'Business Permit',                    icon: Building2 },
+  { type: 'sanitary_permit',      label: 'Sanitary Permit',                    icon: ShieldCheck },
+  { type: 'government_id',        label: 'Government-issued ID',               icon: IdCard },
   { type: 'business_registration', label: 'Business Registration Certificate', icon: ClipboardType },
   { type: 'proof_of_address',      label: 'Proof of Address',                   icon: MapPin },
+];
+
+const PAYMENT_OPTIONS = [
+  { key: 'gcash', label: 'GCash', desc: 'Instant mobile wallet payment' },
+  { key: 'maya', label: 'Maya', desc: 'Instant mobile wallet payment' },
+  { key: 'bpi', label: 'BPI Online / QR', desc: 'Bank transfer via BPI' },
+  { key: 'bdo', label: 'BDO Online / QR', desc: 'Bank transfer via BDO' },
+  { key: 'card', label: 'Credit / Debit Card', desc: 'Visa, Mastercard, JCB' },
 ];
 
 export default function CatererEditProfile() {
@@ -46,6 +54,12 @@ export default function CatererEditProfile() {
   const [contactEmail, setContactEmail] = useState(catererData?.contact_email ?? profile?.email ?? '');
   const [address, setAddress]           = useState(catererData?.address ?? (profile as any)?.address ?? '');
   const [downpayment, setDownpayment]   = useState(String(catererData?.downpayment_percent ?? '25'));
+  const [acceptedMethods, setAcceptedMethods] = useState<string[]>(
+    catererData?.accepted_payment_methods ?? ['gcash', 'maya', 'bpi', 'bdo', 'card']
+  );
+  const [paymentDetails, setPaymentDetails] = useState<Record<string, string>>(
+    catererData?.accepted_payment_details ?? {}
+  );
   const [logoUrl, setLogoUrl]           = useState(catererData?.logo_url ?? '');
   const [coverUrl, setCoverUrl]         = useState(catererData?.cover_photo_url ?? '');
   const [uploadingLogo, setUploadingLogo]   = useState(false);
@@ -65,6 +79,8 @@ export default function CatererEditProfile() {
     setContactEmail(catererData?.contact_email ?? profile?.email ?? '');
     setAddress(catererData?.address ?? (profile as any)?.address ?? '');
     setDownpayment(String(catererData?.downpayment_percent ?? '25'));
+    setAcceptedMethods(catererData?.accepted_payment_methods ?? ['gcash', 'maya', 'bpi', 'bdo', 'card']);
+    setPaymentDetails(catererData?.accepted_payment_details ?? {});
     setLogoUrl(catererData?.logo_url ?? '');
     setCoverUrl(catererData?.cover_photo_url ?? '');
     if (catererData?.id) loadDocs(catererData.id);
@@ -81,14 +97,36 @@ export default function CatererEditProfile() {
   const ensureCatererId = async (): Promise<string | null> => {
     if (catererData?.id) return catererData.id;
     if (!session?.user?.id || !businessName.trim()) return null;
+
+    const { data: existing } = await supabase
+      .from('caterers')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .single();
+
+    if (existing?.id) return existing.id;
+
     const { data, error } = await supabase.from('caterers').insert({
       user_id: session.user.id,
       business_name: businessName.trim(),
       city: city.trim() || null,
       verification_status: 'pending',
     }).select('id').single();
+    
     if (error) { Alert.alert('Error', error.message); return null; }
     return data.id;
+  };
+
+  const togglePaymentMethod = (methodKey: string) => {
+    if (acceptedMethods.includes(methodKey)) {
+      if (acceptedMethods.length <= 1) {
+        Alert.alert('Required', 'Please keep at least one payment method enabled.');
+        return;
+      }
+      setAcceptedMethods(acceptedMethods.filter(m => m !== methodKey));
+    } else {
+      setAcceptedMethods([...acceptedMethods, methodKey]);
+    }
   };
 
   const handlePickLogo = async () => {
@@ -205,6 +243,7 @@ export default function CatererEditProfile() {
       }
 
       await loadDocs(catererId);
+      await reloadProfile();
       Alert.alert('Uploaded!', `${docLabel} has been uploaded successfully.`);
     } catch (err: any) {
       Alert.alert('Upload failed', err.message);
@@ -218,39 +257,44 @@ export default function CatererEditProfile() {
     if (!businessName.trim()) { Alert.alert('Required', 'Business name is required.'); return; }
     setSaving(true);
 
-    // Update profiles table
     await supabase.from('profiles').update({
-      full_name:     fullName.trim() || profile?.full_name,
+      full_name:    fullName.trim() || profile?.full_name,
       phone_number:  phone.trim() || null,
       business_name: businessName.trim() || null,
       city:          city.trim() || null,
     }).eq('id', session.user.id);
 
-    const catererId = catererData?.id ?? null;
-    const payload = {
-      user_id:              session.user.id,
-      business_name:        businessName.trim(),
-      business_description: description.trim() || null,
-      city:                 city.trim() || null,
-      contact_phone:        contactPhone.trim() || null,
-      contact_email:        contactEmail.trim() || null,
-      address:              address.trim() || null,
-      downpayment_percent:  parseFloat(downpayment) || 25,
-    };
+    const catererId = await ensureCatererId();
 
-    if (catererId) {
-      const { error } = await supabase.from('caterers').update(payload).eq('id', catererId);
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
-    } else {
-      const { error } = await supabase.from('caterers').insert({ ...payload, verification_status: 'pending' });
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
+    if (!catererId) {
+      setSaving(false);
+      return; 
     }
 
-    await reloadProfile();
+    const payload = {
+      business_name:            businessName.trim(),
+      business_description:     description.trim() || null,
+      city:                     city.trim() || null,
+      contact_phone:            contactPhone.trim() || null,
+      contact_email:            contactEmail.trim() || null,
+      address:                  address.trim() || null,
+      downpayment_percent:      parseFloat(downpayment) || 25,
+      accepted_payment_methods: acceptedMethods,
+      accepted_payment_details: paymentDetails,
+    };
+
+    const { error } = await supabase.from('caterers').update(payload).eq('id', catererId);
+
+    if (error) { 
+      Alert.alert('Error', error.message); 
+    } else {
+      await reloadProfile();
+      Alert.alert('Saved', 'Your business profile has been updated.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    }
+    
     setSaving(false);
-    Alert.alert('Saved', 'Your business profile has been updated.', [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
   };
 
   const uploadedCount = REQUIRED_DOCS.filter(d =>
@@ -384,6 +428,61 @@ export default function CatererEditProfile() {
             </View>
           </View>
         </View>
+
+        <Text style={styles.sectionTitle}>ACCEPTED PAYMENT METHODS</Text>
+        <Text style={styles.sectionSubText}>Choose which automated Xendit payment channels you wish to support for client bookings.</Text>
+        <View style={styles.card}>
+          {PAYMENT_OPTIONS.map((opt, index) => {
+            const isSelected = acceptedMethods.includes(opt.key);
+            return (
+              <View key={opt.key}>
+                <TouchableOpacity
+                  style={styles.paymentRow}
+                  activeOpacity={0.7}
+                  onPress={() => togglePaymentMethod(opt.key)}
+                >
+                  <View style={styles.paymentInfo}>
+                    <Text style={styles.paymentLabel}>{opt.label}</Text>
+                    <Text style={styles.paymentDesc}>{opt.desc}</Text>
+                  </View>
+                  <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+                {index < PAYMENT_OPTIONS.length - 1 && <View style={styles.divider} />}
+              </View>
+            );
+          })}
+        </View>
+
+        {acceptedMethods.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>PAYMENT ACCOUNT DETAILS</Text>
+            <Text style={styles.sectionSubText}>Provide the account numbers or details clients should reference for your enabled channels.</Text>
+            <View style={styles.card}>
+              {acceptedMethods.map((methodKey, index) => {
+                const opt = PAYMENT_OPTIONS.find(o => o.key === methodKey);
+                if (!opt) return null;
+
+                return (
+                  <View key={methodKey}>
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>{opt.label} Account / Number</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={paymentDetails[methodKey] ?? ''}
+                        onChangeText={(text) => setPaymentDetails(prev => ({ ...prev, [methodKey]: text }))}
+                        placeholder={`e.g. 0917XXXXXXX or Account #`}
+                        placeholderTextColor={Colors.textMuted}
+                      />
+                    </View>
+                    {index < acceptedMethods.length - 1 && <View style={styles.divider} />}
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         <Text style={styles.sectionTitle}>PERSONAL INFORMATION</Text>
         <View style={styles.card}>
@@ -557,6 +656,7 @@ const styles = StyleSheet.create({
 
   formSection: { paddingHorizontal: 20 },
   sectionTitle: { fontSize: 12, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 12, marginTop: 12 },
+  sectionSubText: { fontSize: 13, color: Colors.textSecondary, marginBottom: 10, paddingHorizontal: 4, lineHeight: 18 },
 
   card: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 8, elevation: 1 },
   field: { padding: 18 },
@@ -576,6 +676,14 @@ const styles = StyleSheet.create({
   dpBtnActive: { backgroundColor: '#FFF7ED', borderColor: Colors.orange },
   dpBtnText: { fontSize: 16, fontWeight: '800', color: Colors.textSecondary },
   dpBtnTextActive: { color: Colors.orange },
+
+  paymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
+  paymentInfo: { flex: 1, paddingRight: 12 },
+  paymentLabel: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 2 },
+  paymentDesc: { fontSize: 12, color: Colors.textMuted },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
+  checkboxSelected: { backgroundColor: Colors.orange, borderColor: Colors.orange },
+  checkmark: { color: Colors.white, fontSize: 14, fontWeight: '900' },
 
   docProgressCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 8, elevation: 1 },
   docProgressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },

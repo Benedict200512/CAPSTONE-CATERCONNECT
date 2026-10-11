@@ -11,7 +11,7 @@ export default function StaffDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ 
-    pending: 0, consultations: 0, complaints: 0, bookings: 0, approved: 0, rejected: 0, refunds: 0 
+    pending: 0, consultations: 0, complaints: 0, bookings: 0, approved: 0, rejected: 0, refunds: 0, pendingBookings: 0 
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +20,7 @@ export default function StaffDashboard() {
     const load = async () => {
       const [
         pendingRes, consultRes, complaintRes, bookingRes, 
-        approvedRes, rejectedRes, refundRes, recentBookings, recentConsult
+        approvedRes, rejectedRes, refundRes, pendingBookingsRes, recentBookings, recentConsult
       ] = await Promise.all([
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
         supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('status', 'open'),
@@ -29,6 +29,7 @@ export default function StaffDashboard() {
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'approved'),
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'rejected'),
         supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('refund_status', 'pending'),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'), // Fetch actual pending bookings
         supabase.from('bookings').select('id, status, created_at, profiles(full_name), caterers(business_name)').order('created_at', { ascending: false }).limit(4),
         supabase.from('consultations').select('id, subject, from_name, status, created_at').eq('status', 'open').order('created_at', { ascending: false }).limit(4),
       ]);
@@ -41,6 +42,7 @@ export default function StaffDashboard() {
         approved: approvedRes.count ?? 0,
         rejected: rejectedRes.count ?? 0,
         refunds: refundRes.count ?? 0,
+        pendingBookings: pendingBookingsRes.count ?? 0,
       });
 
       const activity = [
@@ -83,7 +85,7 @@ export default function StaffDashboard() {
     { Icon: CheckCircle2, title: 'Review Applications', desc: 'Process pending caterer verification queues', path: '/staff/verification', color: '#D97706', bg: '#FEF3C7', count: stats.pending },
     { Icon: AlertTriangle, title: 'Handle Complaints', desc: 'Investigate and resolve active platform disputes', path: '/staff/complaints', color: '#DC2626', bg: '#FEE2E2', count: stats.complaints },
     { Icon: MessageCircle, title: 'Answer Consultations', desc: 'Respond to customer and vendor inquiries', path: '/staff/consultations', color: '#2563EB', bg: '#DBEAFE', count: stats.consultations },
-    { Icon: Calendar, title: 'Monitor Bookings', desc: 'Track event statuses across the marketplace', path: '/staff/bookings', color: '#16A34A', bg: '#DCFCE7', count: stats.bookings },
+    { Icon: Calendar, title: 'Monitor Bookings', desc: 'Track event statuses across the marketplace', path: '/staff/bookings', color: '#16A34A', bg: '#DCFCE7', count: stats.pendingBookings }, // Now uses actual pending bookings count
     { Icon: Banknote, title: 'Process Refunds', desc: 'Manage and disburse pending customer refunds', path: '/staff/refunds', color: '#9333EA', bg: '#F3E8FF', count: stats.refunds },
   ];
 
@@ -105,7 +107,7 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      {/* Primary KPI Row - Adjusted Grid Columns and Gap to fit 5 items */}
+      {/* Primary KPI Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
         {cards.map((card, i) => {
           const Icon = card.Icon;
@@ -141,7 +143,7 @@ export default function StaffDashboard() {
       {/* Main Content Split Layout */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
         
-        {/* Left Column: Quick Actions Grid */}
+        {/* Left Column: Quick Operations Grid */}
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, letterSpacing: '-0.5px' }}>Quick Operations</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

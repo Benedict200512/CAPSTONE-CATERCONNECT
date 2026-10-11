@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
   Wallet, Search, Clock, CheckCircle2, XCircle, 
-  Loader2, X, Building2, User, FileText, DollarSign, ShieldAlert, CheckCircle 
+  Loader2, X, Building2, User, FileText, DollarSign, ShieldAlert, CheckCircle, Receipt
 } from 'lucide-react';
 
 type RefundBooking = {
@@ -17,7 +17,14 @@ type RefundBooking = {
   cancelled_at: string | null;
   cancelled_by: string | null;
   profiles: { full_name: string; email: string; phone_number: string | null } | null;
-  caterers: { id: string; business_name: string; logo_url: string | null; account_standing: string } | null;
+  caterers: { 
+    id: string; 
+    business_name: string; 
+    logo_url: string | null; 
+    account_standing: string;
+    user_id?: string;
+    last_payment_reference: any | null; 
+  } | null;
 };
 
 export default function RefundManagement() {
@@ -31,11 +38,12 @@ export default function RefundManagement() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [transferRef, setTransferRef] = useState('');
 
-  const loadRefunds = async () => {
+  const loadData = async () => {
     setLoading(true);
+    
     let query = supabase
       .from('bookings')
-      .select('id, event_date, total_cost, downpayment_amount, refund_status, refund_amount, refund_account_details, cancellation_reason, cancelled_at, cancelled_by, profiles(full_name, email, phone_number), caterers(id, business_name, logo_url, account_standing)')
+      .select('id, event_date, total_cost, downpayment_amount, refund_status, refund_amount, refund_account_details, cancellation_reason, cancelled_at, cancelled_by, profiles(full_name, email, phone_number), caterers(id, business_name, logo_url, account_standing, user_id, last_payment_reference)')
       .neq('refund_status', 'none')
       .order('cancelled_at', { ascending: false });
 
@@ -43,16 +51,17 @@ export default function RefundManagement() {
       query = query.eq('refund_status', filter);
     }
 
-    const { data, error } = await query;
-    if (error) {
-      console.error('Error loading refunds:', error);
+    const { data: bookingData, error: bookingError } = await query;
+    if (bookingError) {
+      console.error('Error loading refunds:', bookingError);
     }
-    setRefunds((data as any) ?? []);
+    setRefunds((bookingData as any) ?? []);
+
     setLoading(false);
   };
 
   useEffect(() => {
-    loadRefunds();
+    loadData();
   }, [filter]);
 
   const handleProcessRefund = async (bookingId: string, catererId: string) => {
@@ -61,11 +70,10 @@ export default function RefundManagement() {
       return;
     }
 
-    if (!confirm(`Confirm GCash transfer with Ref: "${transferRef.trim()}"? This will mark the refund as processed and flag the caterer with a debt.`)) return;
+    if (!confirm(`Confirm GCash transfer with Ref: "${transferRef.trim()}"? This will mark the refund as processed and flag the caterer with an outstanding balance.`)) return;
     
     setProcessing(true);
     
-    // 1. Mark booking refund as processed
     const { error: refundError } = await supabase
       .from('bookings')
       .update({
@@ -81,7 +89,6 @@ export default function RefundManagement() {
       return;
     }
 
-    // 2. Automatically flag the caterer as 'owing_debt' for the Pay-or-Get-Banned workflow
     if (catererId) {
       const { error: catererError } = await supabase
         .from('caterers')
@@ -96,35 +103,68 @@ export default function RefundManagement() {
     setProcessing(false);
     setTransferRef('');
     setSelected(null);
-    
-    // Automatically switch filter to 'processed' so you see the result instantly in the table
     setFilter('processed');
-    loadRefunds();
-    
-    alert('Refund successfully processed and caterer flagged with debt!');
+    loadData();
+    alert('Refund successfully processed and caterer flagged with an outstanding balance!');
   };
 
-  const handleUpdateCatererStanding = async (catererId: string, newStanding: 'good_standing' | 'suspended' | 'banned', actionLabel: string) => {
+  const handleUpdateCatererStanding = async (catererId: string, userId: string | undefined, newStanding: 'good_standing' | 'suspended', actionLabel: string) => {
     if (!confirm(`Are you sure you want to change this caterer's standing to "${actionLabel.toUpperCase()}"?`)) return;
 
     setProcessing(true);
-    const { error } = await supabase
+    const updatePayload: any = { account_standing: newStanding };
+    
+    if (newStanding === 'good_standing') {
+      updatePayload.last_payment_reference = {
+        method: 'STAFF MANUAL CLEARANCE',
+        reference: 'ADMIN-OVERRIDE',
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    const { error: catererError } = await supabase
       .from('caterers')
-      .update({ account_standing: newStanding })
+      .update(updatePayload)
       .eq('id', catererId);
 
-    setProcessing(false);
-    if (error) {
-      alert('Failed to update caterer standing: ' + error.message);
-    } else {
-      alert(`Caterer successfully marked as ${actionLabel}.`);
-      loadRefunds();
-      if (selected && selected.caterers) {
-        setSelected({
-          ...selected,
-          caterers: { ...selected.caterers, account_standing: newStanding }
-        });
+    if (catererError) {
+      setProcessing(false);
+      alert('Failed to update caterer standing: ' + catererError.message);
+      return;
+    }
+
+    if (newStanding === 'suspended' && userId) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ status: 'suspended' })
+        .eq('id', userId);
+
+      if (profileError) {
+        console.error('Error suspending user profile:', profileError);
       }
+    } else if (newStanding === 'good_standing' && userId) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ status: 'active' })
+        .eq('id', userId);
+
+      if (profileError) {
+        console.error('Error activating user profile:', profileError);
+      }
+    }
+
+    setProcessing(false);
+    alert(`Caterer successfully marked as ${actionLabel}.`);
+    loadData();
+    if (selected && selected.caterers) {
+      setSelected({
+        ...selected,
+        caterers: { 
+          ...selected.caterers, 
+          account_standing: newStanding,
+          last_payment_reference: updatePayload.last_payment_reference || selected.caterers.last_payment_reference
+        }
+      });
     }
   };
 
@@ -153,10 +193,10 @@ export default function RefundManagement() {
     setRejectReason('');
     setSelected(null);
     setFilter('failed');
-    loadRefunds();
+    loadData();
   };
 
-  const filtered = refunds.filter(r => {
+  const filteredRefunds = refunds.filter(r => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -174,17 +214,30 @@ export default function RefundManagement() {
     .filter(r => r.refund_status === 'processed')
     .reduce((sum, r) => sum + Number(r.refund_amount || r.downpayment_amount || 0), 0);
 
+  const parseSettlementData = (rawRef: any) => {
+    if (!rawRef) return null;
+    if (typeof rawRef === 'object') {
+      return rawRef;
+    }
+    try {
+      if (typeof rawRef === 'string' && rawRef.startsWith('{')) {
+        return JSON.parse(rawRef);
+      }
+    } catch (e) {
+      // fallback
+    }
+    return { method: 'ONLINE GATEWAY', reference: rawRef, timestamp: null };
+  };
+
   return (
     <div style={{ paddingBottom: 40, fontFamily: "'Inter', system-ui, sans-serif" }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Process Refunds & Vendor Debts</h1>
-          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>Verify GCash accounts, disburse customer refunds, and manage vendor account standings.</p>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Process Refunds & Vendor Balances</h1>
+          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>Verify GCash accounts, disburse customer refunds, and audit vendor balance settlements.</p>
         </div>
       </div>
 
-      {/* Financial Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
         <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -234,7 +287,6 @@ export default function RefundManagement() {
         })}
       </div>
 
-      {/* Search Input */}
       <div style={{ position: 'relative', marginBottom: 24, maxWidth: 420 }}>
         <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
         <input 
@@ -246,14 +298,13 @@ export default function RefundManagement() {
         />
       </div>
 
-      {/* Refunds Table */}
       <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <Loader2 size={36} color="#F97316" className="animate-spin" />
             <span style={{ fontSize: 14, fontWeight: 600 }}>Loading refund requests...</span>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filteredRefunds.length === 0 ? (
           <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E5E7EB' }}>
               <Wallet size={32} color="#D1D5DB" />
@@ -277,7 +328,7 @@ export default function RefundManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, i) => {
+                {filteredRefunds.map((r, i) => {
                   const isProcessed = r.refund_status === 'processed';
                   const isPending = r.refund_status === 'pending';
                   const statusBg = isProcessed ? '#DCFCE7' : isPending ? '#FEF3C7' : '#FEE2E2';
@@ -288,7 +339,7 @@ export default function RefundManagement() {
                   const standingColor = standing === 'good_standing' ? '#166534' : standing === 'owing_debt' ? '#92400E' : '#991B1B';
 
                   return (
-                    <tr key={r.id} style={{ cursor: 'pointer', borderBottom: i === filtered.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.15s' }}
+                    <tr key={r.id} style={{ cursor: 'pointer', borderBottom: i === filteredRefunds.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.15s' }}
                       onClick={() => { setSelected(selected?.id === r.id ? null : r); setTransferRef(''); setShowRejectModal(false); }}
                       onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -329,12 +380,11 @@ export default function RefundManagement() {
         )}
       </div>
 
-      {/* Detailed Review Card Drawer */}
       {selected && (
         <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', borderLeft: '4px solid #F97316', marginTop: 24, padding: 32, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: '#111', marginBottom: 4 }}>Refund Verification & Vendor Debt Enforcement</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: '#111', marginBottom: 4 }}>Refund Verification & Vendor Balance Enforcement</div>
               <div style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'monospace' }}>Booking ID: {selected.id}</div>
             </div>
             <button style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#4B5563' }}
@@ -391,36 +441,59 @@ export default function RefundManagement() {
             </div>
           </div>
 
-          {/* Pay or Get Banned Management Controls for Staff (Only shown if standing is NOT good_standing) */}
+          {selected.caterers?.last_payment_reference && (() => {
+            const settlement = parseSettlementData(selected.caterers.last_payment_reference);
+            if (!settlement) return null;
+            return (
+              <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 16, padding: 20, marginBottom: 24 }}>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#166534', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Receipt size={18} color="#16A34A" /> Caterer Balance Settlement Audit Log
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: '#15803D', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Payment Method</span>
+                    <span style={{ fontSize: 14, fontWeight: 900, color: '#14532D' }}>{settlement.method || 'Online Gateway'}</span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 11, color: '#15803D', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Transaction Reference</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#14532D', fontFamily: 'monospace' }}>{settlement.reference || 'N/A'}</span>
+                  </div>
+                  {settlement.timestamp && (
+                    <div>
+                      <span style={{ fontSize: 11, color: '#15803D', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Settled Timestamp</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#14532D' }}>
+                        {new Date(settlement.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Account Standing Controls for Staff: Display only if owing_debt or suspended */}
           {(selected.caterers as any)?.id && (selected.caterers as any)?.account_standing !== 'good_standing' && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 16, padding: 20, marginBottom: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 900, color: '#92400E', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ShieldAlert size={16} /> Pay-or-Get-Banned Enforcement Panel
+                <ShieldAlert size={16} /> Outstanding Balance & Account Standing Panel
               </div>
               <div style={{ fontSize: 13, color: '#B45309', marginBottom: 14, lineHeight: 1.5 }}>
-                If the caterer has transferred their debt to the platform staff's GCash account, clear their debt. If they refuse to pay within 48-72 hours, suspend or ban their account.
+                If the caterer has successfully transferred their outstanding balance, clear their balance below, or suspend their account login profile.
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => handleUpdateCatererStanding((selected.caterers as any).id, 'good_standing', 'Good Standing')}
+                  onClick={() => handleUpdateCatererStanding((selected.caterers as any).id, (selected.caterers as any).user_id, 'good_standing', 'Good Standing')}
                   disabled={processing}
                   style={{ background: '#16A34A', color: '#FFF', border: 'none', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                 >
-                  <CheckCircle size={14} /> Clear Debt (Restore Good Standing)
+                  <CheckCircle size={14} /> Clear Balance (Restore Good Standing)
                 </button>
                 <button
-                  onClick={() => handleUpdateCatererStanding((selected.caterers as any).id, 'suspended', 'Suspended')}
+                  onClick={() => handleUpdateCatererStanding((selected.caterers as any).id, (selected.caterers as any).user_id, 'suspended', 'Suspended')}
                   disabled={processing}
                   style={{ background: '#D97706', color: '#FFF', border: 'none', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
                 >
-                  Suspend Account
-                </button>
-                <button
-                  onClick={() => handleUpdateCatererStanding((selected.caterers as any).id, 'banned', 'Permanently Banned')}
-                  disabled={processing}
-                  style={{ background: '#DC2626', color: '#FFF', border: 'none', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
-                >
-                  Ban Permanently
+                  Suspend Account Profile
                 </button>
               </div>
             </div>
@@ -434,7 +507,7 @@ export default function RefundManagement() {
                     Step 1: Execute manual GCash transfer to customer <span style={{ color: '#F97316', fontFamily: 'monospace' }}>{selected.refund_account_details || 'Customer Number'}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>
-                    Step 2: Enter the GCash transaction reference number below. This marks the refund as processed and flags the caterer with a debt.
+                    Step 2: Enter the GCash transaction reference number below. This marks the refund as processed and flags the caterer with an outstanding balance.
                   </div>
                   
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -450,7 +523,7 @@ export default function RefundManagement() {
                       disabled={processing || !transferRef.trim()}
                       style={{ background: '#16A34A', color: '#FFF', border: 'none', borderRadius: 12, padding: '12px 24px', fontSize: 14, fontWeight: 800, cursor: processing || !transferRef.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, opacity: transferRef.trim() ? 1 : 0.6 }}
                     >
-                      {processing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Pay Customer & Flag Debt
+                      {processing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Pay Customer & Flag Balance
                     </button>
                     <button
                       onClick={() => setShowRejectModal(true)}

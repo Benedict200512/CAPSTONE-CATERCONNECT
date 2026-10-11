@@ -1,3 +1,4 @@
+// app/(tabs)/CatererBookings.tsx
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, Platform,
@@ -14,8 +15,20 @@ import {
   Clock, CheckCircle, CreditCard, RefreshCw, PartyPopper,
   XCircle, Ban, Inbox, Calendar, Users, Package, User,
   Phone, Sparkles, Star, MessageSquare, Zap, X, Check,
-  MapPin, ExternalLink, ShieldCheck, AlertTriangle, ShieldAlert
+  MapPin, ExternalLink, ShieldCheck, AlertTriangle, ShieldAlert,
+  MessageSquareText, FileText, Shield, Smartphone, Building
 } from 'lucide-react-native';
+
+type Review = {
+  id: string;
+  food_quality: number;
+  service_quality: number;
+  timeliness: number;
+  overall: number;
+  comment: string | null;
+  caterer_reply: string | null;
+  created_at: string;
+};
 
 type Booking = {
   id: string;
@@ -30,6 +43,7 @@ type Booking = {
   downpayment_deadline: string | null;
   venue: string | null;
   special_requests: string | null;
+  payment_method: string | null;
   payment_receipt_url: string | null;
   payment_submitted_at: string | null;
   payment_verified_at: string | null;
@@ -39,17 +53,17 @@ type Booking = {
   cancelled_by: string | null;
   cancellation_reason: string | null;
   cancelled_at: string | null;
-  // --- Refund Tracking & Account Fields ---
   refund_status: 'none' | 'pending' | 'processed' | 'failed';
   refund_amount: number;
   refunded_at: string | null;
   refund_account_details: string | null;
   profiles: { full_name: string; email: string; avatar_url: string | null; phone_number: string | null } | null;
   packages: { name: string; tier: string } | null;
+  reviews: Review[] | null;
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  pending:   { label: 'Pending',   color: '#B45309', bg: '#FEF3C7', icon: Clock },
+  pending:   { label: 'Pending',    color: '#B45309', bg: '#FEF3C7', icon: Clock },
   confirmed: { label: 'Confirmed', color: '#15803D', bg: '#DCFCE7', icon: CheckCircle },
   paid:      { label: 'Paid',      color: '#15803D', bg: '#DCFCE7', icon: ShieldCheck },
   ongoing:   { label: 'Ongoing',   color: '#C2410C', bg: '#FFEDD5', icon: RefreshCw },
@@ -60,7 +74,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 
 const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed', 'cancelled', 'rejected'];
 
-// Caterer-specific preset cancellation reasons
 const CATERER_CANCEL_REASONS = [
   "Equipment or kitchen failure",
   "Staffing emergency",
@@ -69,7 +82,6 @@ const CATERER_CANCEL_REASONS = [
   "Other"
 ];
 
-// Helper to calculate 7-Day Rule warning message from Caterer POV
 const getCancelWarningMessage = (booking: Booking | null) => {
   if (!booking) return '';
   const eventDate = new Date(booking.event_date);
@@ -79,32 +91,33 @@ const getCancelWarningMessage = (booking: Booking | null) => {
   const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
   if (diffDays <= 7) {
-    return "⚠️ CRITICAL: This event is less than 7 days away. Cancelling now leaves the client in a very difficult position. Platform staff will process the client refund and your account will be marked with a penalty debt.";
+    return "⚠️ CRITICAL: This event is less than 7 days away. Cancelling now leaves the client in a very difficult position. Platform staff will process the client refund and your account will be marked with an outstanding balance.";
   }
   return "Since the client has already booked, platform staff will handle the refund disbursement. Note that sudden cancellations may impact your vendor standing.";
 };
 
 export default function CatererBookings() {
   const { catererData, refreshCatererData } = useAuth() as any;
-  const [bookings, setBookings]        = useState<Booking[]>([]);
-  const [loading, setLoading]          = useState(true);
-  const [filter, setFilter]            = useState('all');
-  const [selected, setSelected]        = useState<Booking | null>(null);
-  const [updating, setUpdating]        = useState(false);
+  const [bookings, setBookings]         = useState<Booking[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [filter, setFilter]             = useState('all');
+  const [selected, setSelected]         = useState<Booking | null>(null);
+  const [updating, setUpdating]         = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
   
-  // States for Caterer Emergency Cancellation
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  // State for Xendit Debt Payment & Tracking Amount
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payingDebt, setPayingDebt] = useState(false);
   const [localStanding, setLocalStanding] = useState<string | null>(null);
   const [totalDebt, setTotalDebt] = useState(0);
 
-  // Counts and Chat States
+  const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+
   const [counts, setCounts]            = useState<Record<string, number>>({});
   const [chatBooking, setChatBooking] = useState<Booking | null>(null);
 
@@ -126,7 +139,6 @@ export default function CatererBookings() {
     const { data } = await query;
     setBookings((data as any) ?? []);
 
-    // Calculate total outstanding debt from processed refunds
     const { data: processedRefunds } = await supabase
       .from('bookings')
       .select('refund_amount, downpayment_amount')
@@ -253,8 +265,11 @@ export default function CatererBookings() {
     load();
   };
 
-  const handlePayDebt = async () => {
+  const handlePayDebt = async (paymentMethod: string) => {
     if (!catererData?.id) return;
+    
+    setShowPaymentModal(false);
+    
     try {
       setPayingDebt(true);
 
@@ -270,8 +285,9 @@ export default function CatererBookings() {
         referenceId: `DEBT-${catererData.id}-${Date.now()}`,
         customerName: catererData.business_name || 'Caterer Partner',
         customerEmail: catererData.email || 'caterer@example.com',
-        description: `Settlement of outstanding platform debt for ${catererData.business_name}`,
-      });
+        description: `Settlement of outstanding platform balance for ${catererData.business_name}`,
+        paymentMethod: paymentMethod 
+      } as any); 
 
       if (!paymentResult.success || !paymentResult.checkoutUrl || !paymentResult.chargeId) {
         throw new Error(paymentResult.error || 'Failed to initialize payment gateway.');
@@ -284,9 +300,19 @@ export default function CatererBookings() {
       );
 
       if (checkoutOutcome === 'success') {
+        const settlementDetails = {
+          method: paymentMethod.toUpperCase(),
+          amount: totalDebt,
+          timestamp: new Date().toISOString(),
+          reference: paymentResult.chargeId || `XND-${Date.now()}`
+        };
+
         const { error: updateError } = await supabase
           .from('caterers')
-          .update({ account_standing: 'good_standing' })
+          .update({ 
+            account_standing: 'good_standing',
+            last_payment_reference: settlementDetails
+          })
           .eq('id', catererData.id);
 
         if (updateError) throw updateError;
@@ -297,11 +323,11 @@ export default function CatererBookings() {
 
         Alert.alert(
           'Payment Successful! 🎉', 
-          'Your debt has been settled and your account standing has been automatically restored to Good Standing.'
+          'Your balance has been settled and your account standing has been automatically restored to Good Standing.'
         );
         load();
       } else if (checkoutOutcome === 'failed') {
-        Alert.alert('Payment Failed', 'The GCash transaction failed or was declined. Please try again.');
+        Alert.alert('Payment Failed', 'The transaction failed or was declined. Please try again.');
       } else {
         Alert.alert('Payment Cancelled', 'You closed the payment window before completion.');
       }
@@ -311,6 +337,37 @@ export default function CatererBookings() {
     } finally {
       setPayingDebt(false);
     }
+  };
+
+  const handleReplyReview = async (reviewId: string) => {
+    const text = replyText[reviewId]?.trim();
+    if (!text) {
+      Alert.alert('Required', 'Please enter a reply message.');
+      return;
+    }
+    setUpdating(true);
+    const { error } = await supabase
+      .from('reviews')
+      .update({ caterer_reply: text })
+      .eq('id', reviewId);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      Alert.alert('Success', 'Reply sent successfully!');
+      setReplyText(prev => ({ ...prev, [reviewId]: '' }));
+      setReplyingId(null);
+      load();
+      if (selected) {
+        const { data: updatedBooking } = await supabase
+          .from('bookings')
+          .select('*, customer_id, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, created_at)')
+          .eq('id', selected.id)
+          .single();
+        if (updatedBooking) setSelected(updatedBooking as any);
+      }
+    }
+    setUpdating(false);
   };
 
   const formatDate = (d: string) =>
@@ -346,7 +403,6 @@ export default function CatererBookings() {
 
   return (
     <View style={styles.root}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <View>
           <Text style={styles.pageTitle}>Bookings</Text>
@@ -357,7 +413,6 @@ export default function CatererBookings() {
         </TouchableOpacity>
       </View>
 
-      {/* Caterer Account Standing / Debt Flag Banner */}
       {accountStanding !== 'good_standing' && (
         <View style={[
           styles.debtBanner, 
@@ -369,22 +424,21 @@ export default function CatererBookings() {
               styles.debtBannerTitle,
               { color: accountStanding === 'owing_debt' ? '#92400E' : '#991B1B' }
             ]}>
-              {accountStanding === 'owing_debt' ? 'Action Required: Outstanding Platform Debt' : 'Account Restricted'}
+              {accountStanding === 'owing_debt' ? 'Action Required: Outstanding Platform Balance' : 'Account Restricted'}
             </Text>
             <Text style={[
               styles.debtBannerText,
               { color: accountStanding === 'owing_debt' ? '#B45309' : '#B91C1C' }
             ]}>
               {accountStanding === 'owing_debt'
-                ? `Your account is flagged with an outstanding balance of ₱${totalDebt.toLocaleString()} due to a recent cancellation refund. Settle your balance via Xendit GCash below to instantly restore your good standing.`
+                ? `Your account is flagged with an outstanding balance of ₱${totalDebt.toLocaleString()} due to a recent cancellation refund. Settle your balance securely to instantly restore your good standing.`
                 : `Your caterer account has been ${accountStanding}. Please contact platform administration to resolve your account standing.`}
             </Text>
 
-            {/* Xendit Payment Button */}
             {accountStanding === 'owing_debt' && (
               <TouchableOpacity
                 style={styles.payDebtBtn}
-                onPress={handlePayDebt}
+                onPress={() => setShowPaymentModal(true)}
                 disabled={payingDebt}
                 activeOpacity={0.85}
               >
@@ -393,7 +447,7 @@ export default function CatererBookings() {
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <CreditCard size={16} color="#FFF" />
-                    <Text style={styles.payDebtBtnText}>Pay Debt of ₱{totalDebt.toLocaleString()} via GCash (Xendit)</Text>
+                    <Text style={styles.payDebtBtnText}>Settle Balance of ₱{totalDebt.toLocaleString()}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -402,7 +456,6 @@ export default function CatererBookings() {
         </View>
       )}
 
-      {/* Filter Tabs */}
       <View style={styles.filterOuterWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {FILTERS.map(f => {
@@ -522,7 +575,51 @@ export default function CatererBookings() {
         </ScrollView>
       )}
 
-      {/* Booking Detail Modal */}
+      <Modal visible={showPaymentModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.paymentModalContainer}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={styles.paymentModalTitle}>Select Payment Method</Text>
+              <TouchableOpacity onPress={() => setShowPaymentModal(false)} style={{ padding: 4 }}>
+                <X size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.paymentOptionBtn} onPress={() => handlePayDebt('gcash')}>
+              <View style={styles.paymentOptionIcon}><Smartphone size={20} color="#005CEE" /></View>
+              <View>
+                <Text style={styles.paymentOptionText}>GCash</Text>
+                <Text style={styles.paymentOptionSub}>Pay instantly via GCash e-wallet</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.paymentOptionBtn} onPress={() => handlePayDebt('paymaya')}>
+              <View style={styles.paymentOptionIcon}><Smartphone size={20} color="#16A34A" /></View>
+              <View>
+                <Text style={styles.paymentOptionText}>Maya</Text>
+                <Text style={styles.paymentOptionSub}>Pay using your Maya account</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.paymentOptionBtn} onPress={() => handlePayDebt('bank_transfer')}>
+              <View style={styles.paymentOptionIcon}><Building size={20} color="#D97706" /></View>
+              <View>
+                <Text style={styles.paymentOptionText}>Bank Transfer</Text>
+                <Text style={styles.paymentOptionSub}>InstaPay or PESONet transfer</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.paymentOptionBtn, { borderBottomWidth: 0 }]} onPress={() => handlePayDebt('credit_card')}>
+              <View style={styles.paymentOptionIcon}><CreditCard size={20} color="#4F46E5" /></View>
+              <View>
+                <Text style={styles.paymentOptionText}>Credit / Debit Card</Text>
+                <Text style={styles.paymentOptionSub}>Visa, Mastercard, JCB</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet">
         {selected && (
           <View style={styles.modal}>
@@ -563,7 +660,64 @@ export default function CatererBookings() {
                 );
               })()}
 
-              {/* Cancellation Details Banner */}
+              {['paid', 'ongoing', 'completed'].includes(selected.status) && (
+                <View style={styles.receiptViewerBox}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <ShieldCheck size={18} color="#15803D" />
+                    <Text style={styles.receiptViewerTitle}>Verified Downpayment E-Receipt</Text>
+                  </View>
+                  
+                  <View style={styles.receiptDetailRow}>
+                    <Text style={styles.receiptLabel}>Payment Channel:</Text>
+                    <Text style={styles.receiptVal}>{selected.payment_method?.toUpperCase() || 'ONLINE GATEWAY'}</Text>
+                  </View>
+
+                  <View style={styles.receiptDetailRow}>
+                    <Text style={styles.receiptLabel}>Added to Account:</Text>
+                    <Text style={[styles.receiptVal, { color: '#15803D', fontWeight: '900' }]}>
+                      ₱{Number(selected.downpayment_amount).toLocaleString()} ({selected.payment_method?.toUpperCase() || 'GCASH'} · {catererData?.business_name || 'Account'})
+                    </Text>
+                  </View>
+
+                  <View style={styles.receiptDetailRow}>
+                    <Text style={styles.receiptLabel}>Payment Status:</Text>
+                    <Text style={[styles.receiptVal, { color: '#15803D', fontWeight: '900' }]}>
+                      SECURED & VERIFIED ✓
+                    </Text>
+                  </View>
+
+                  {selected.payment_verified_at && (
+                    <View style={styles.receiptDetailRow}>
+                      <Text style={styles.receiptLabel}>Verified Timestamp:</Text>
+                      <Text style={styles.receiptVal}>
+                        {new Date(selected.payment_verified_at).toLocaleString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric',
+                          hour: 'numeric', minute: '2-digit', hour12: true
+                        })}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={[styles.receiptRefContainer, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#BBF7D0' }]}>
+                    <Text style={styles.receiptLabel}>Transaction Reference:</Text>
+                    <Text 
+                      style={[
+                        styles.receiptVal, 
+                        { 
+                          fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', 
+                          fontSize: 11, 
+                          textAlign: 'left', 
+                          marginTop: 4, 
+                          flexWrap: 'wrap' 
+                        }
+                      ]}
+                    >
+                      {selected.payment_receipt_url || `XENDIT-BK-${selected.id.slice(0, 8).toUpperCase()}`}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               {selected.status === 'cancelled' && (
                 <View style={styles.alertBox}>
                   <Ban size={16} color="#4B5563" />
@@ -576,7 +730,6 @@ export default function CatererBookings() {
                       <Text style={styles.alertBoxText}>Reason: {selected.cancellation_reason}</Text>
                     )}
                     
-                    {/* Refund Tracking Status */}
                     {selected.refund_status && selected.refund_status !== 'none' && (
                       <View style={{ marginTop: 8, padding: 10, backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}>
                         <Text style={{ fontSize: 12, fontWeight: '800', color: Colors.black, marginBottom: 4 }}>
@@ -588,7 +741,7 @@ export default function CatererBookings() {
                         </Text>
                         <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>
                           {selected.refund_status === 'processed' 
-                            ? 'Platform staff successfully disbursed this refund. Your account standing has been flagged with an outstanding debt.'
+                            ? 'Platform staff successfully disbursed this refund. Your account standing has been flagged with an outstanding balance.'
                             : 'Platform staff are reviewing and processing this refund disbursement.'}
                         </Text>
                       </View>
@@ -607,7 +760,6 @@ export default function CatererBookings() {
                 </View>
               )}
 
-              {/* Customer Section */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>CUSTOMER DETAILS</Text>
                 <View style={styles.modalCard}>
@@ -633,7 +785,6 @@ export default function CatererBookings() {
                 </View>
               </View>
 
-              {/* Event & Location Section */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>EVENT & LOCATION</Text>
                 <View style={styles.modalCard}>
@@ -682,7 +833,6 @@ export default function CatererBookings() {
                 </View>
               </View>
 
-              {/* Financials */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>FINANCIAL BREAKDOWN</Text>
                 <View style={styles.modalCard}>
@@ -707,7 +857,89 @@ export default function CatererBookings() {
                 </View>
               </View>
 
-              {/* Action Suite */}
+              {selected.reviews && selected.reviews.length > 0 && (
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionHeaderLabel}>CUSTOMER REVIEW</Text>
+                  {selected.reviews.map(rev => (
+                    <View key={rev.id} style={styles.modalCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <View style={{ flexDirection: 'row', gap: 2 }}>
+                          {[1, 2, 3, 4, 5].map(i => (
+                            <Star
+                              key={i}
+                              size={14}
+                              color={i <= Math.round(rev.overall) ? '#F59E0B' : '#E5E7EB'}
+                              fill={i <= Math.round(rev.overall) ? '#F59E0B' : 'transparent'}
+                            />
+                          ))}
+                        </View>
+                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>
+                          {formatDate(rev.created_at)}
+                        </Text>
+                      </View>
+
+                      {rev.comment && (
+                        <Text style={{ fontSize: 14, color: Colors.black, fontStyle: 'italic', marginBottom: 12 }}>
+                          "{rev.comment}"
+                        </Text>
+                      )}
+
+                      {rev.caterer_reply ? (
+                        <View style={styles.catererReply}>
+                          <View style={styles.catererReplyHeader}>
+                            <MessageSquareText size={14} color="#2563EB" />
+                            <Text style={styles.catererReplyLabel}>Your Response</Text>
+                          </View>
+                          <Text style={styles.catererReplyText}>{rev.caterer_reply}</Text>
+                        </View>
+                      ) : (
+                        <View style={{ marginTop: 8 }}>
+                          {replyingId === rev.id ? (
+                            <View style={{ gap: 8 }}>
+                              <TextInput
+                                style={styles.fieldInput}
+                                placeholder="Write a professional reply..."
+                                placeholderTextColor={Colors.textMuted}
+                                value={replyText[rev.id] || ''}
+                                onChangeText={(t) => setReplyText(prev => ({ ...prev, [rev.id]: t }))}
+                                multiline
+                                numberOfLines={3}
+                                textAlignVertical="top"
+                              />
+                              <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <TouchableOpacity
+                                  style={[styles.actionBtn, styles.actionBtnConfirm, { flex: 1, paddingVertical: 12 }]}
+                                  onPress={() => handleReplyReview(rev.id)}
+                                  disabled={updating}
+                                >
+                                  {updating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.actionBtnText}>Send Reply</Text>}
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.actionBtn, { backgroundColor: '#F1F5F9', flex: 1, paddingVertical: 12 }]}
+                                  onPress={() => setReplyingId(null)}
+                                >
+                                  <Text style={[styles.actionBtnText, { color: Colors.black }]}>Cancel</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={[styles.actionBtn, { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', paddingVertical: 12 }]}
+                              onPress={() => setReplyingId(rev.id)}
+                            >
+                              <View style={styles.btnRow}>
+                                <MessageSquare size={16} color="#1D4ED8" />
+                                <Text style={[styles.actionBtnText, { color: '#1D4ED8', fontSize: 13 }]}>Reply to Review</Text>
+                              </View>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>MANAGEMENT ACTIONS</Text>
 
@@ -787,7 +1019,6 @@ export default function CatererBookings() {
                   </TouchableOpacity>
                 )}
 
-                {/* Caterer Emergency Cancellation Button */}
                 {['confirmed', 'paid'].includes(selected.status) && !showCancelModal && (
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FCA5A5', marginTop: 10 }]}
@@ -802,7 +1033,6 @@ export default function CatererBookings() {
                   </TouchableOpacity>
                 )}
 
-                {/* Structured Caterer Cancellation Input Box */}
                 {showCancelModal && (
                   <View style={[styles.rejectContainer, { marginTop: 10, borderColor: '#FCA5A5' }]}>
                     <Text style={styles.fieldLabel}>Emergency Reason for Cancellation *</Text>
@@ -871,7 +1101,6 @@ export default function CatererBookings() {
         )}
       </Modal>
 
-      {/* Chat Screen Modal */}
       <Modal visible={!!chatBooking} animationType="slide" presentationStyle="fullScreen">
         {chatBooking && (
           <ChatScreen
@@ -901,94 +1130,34 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
   pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
   refreshBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
-
-  debtBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  debtBannerWarning: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FDE68A',
-  },
-  debtBannerDanger: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
-  },
-  debtBannerTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  debtBannerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  payDebtBtn: {
-    backgroundColor: '#16A34A',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  payDebtBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-
-  filterOuterWrap: {
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    marginTop: 12,
-  },
-  filterRow: { 
-    paddingHorizontal: 16, 
-    paddingVertical: 10, 
-    gap: 8, 
-    alignItems: 'center',
-  },
-  filterChip: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 7, 
-    borderRadius: 16, 
-    backgroundColor: '#F1F5F9', 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0',
-  },
-  filterChipActive: { 
-    backgroundColor: Colors.orange, 
-    borderColor: Colors.orange,
-  },
-  filterText: { 
-    fontSize: 12, 
-    fontWeight: '700', 
-    color: Colors.textSecondary,
-  },
-  filterTextActive: { 
-    color: Colors.white, 
-    fontWeight: '800',
-  },
-
+  debtBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, marginHorizontal: 16, marginTop: 12, borderRadius: 16, borderWidth: 1 },
+  debtBannerWarning: { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
+  debtBannerDanger: { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' },
+  debtBannerTitle: { fontSize: 14, fontWeight: '900', marginBottom: 4 },
+  debtBannerText: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  payDebtBtn: { backgroundColor: '#16A34A', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', marginTop: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  payDebtBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  paymentModalContainer: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
+  paymentModalTitle: { fontSize: 18, fontWeight: '900', color: Colors.black },
+  paymentOptionBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  paymentOptionIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  paymentOptionText: { fontSize: 15, fontWeight: '800', color: Colors.black },
+  paymentOptionSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  receiptViewerBox: { backgroundColor: '#DCFCE7', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#86EFAC' },
+  receiptViewerTitle: { fontSize: 13, fontWeight: '900', color: '#15803D' },
+  receiptDetailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#BBF7D0' },
+  receiptLabel: { fontSize: 12, color: '#166534', fontWeight: '600' },
+  receiptVal: { fontSize: 12, color: '#14532D', fontWeight: '800', textAlign: 'right' },
+  receiptRefContainer: { paddingVertical: 4 },
+  filterOuterWrap: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginTop: 12 },
+  filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  filterChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
+  filterText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  filterTextActive: { color: Colors.white, fontWeight: '800' },
   list: { flex: 1 },
-  bookingCard: {
-    backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9',
-    overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 12, elevation: 2,
-  },
+  bookingCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 12, elevation: 2 },
   cardStripe: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   cardStripeLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cardStripeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
@@ -1003,47 +1172,26 @@ const styles = StyleSheet.create({
   cardAmount: { alignItems: 'flex-end' },
   cardAmountValue: { fontSize: 17, fontWeight: '900', color: Colors.orange },
   cardAmountSub: { fontSize: 10, color: Colors.textMuted, fontWeight: '600' },
-  
   cardMetaGrid: { flexDirection: 'row', gap: 16, marginBottom: 10, backgroundColor: '#F8FAFC', padding: 10, borderRadius: 12 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   metaText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
-
   venueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   venueText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
-
   pkgTag: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F8FAFC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
   pkgTagText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '700' },
-
   quickActions: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 },
   quickBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, borderRadius: 12, paddingVertical: 12 },
   quickBtnConfirm: { backgroundColor: Colors.orange },
   quickBtnText: { color: Colors.white, fontWeight: '800', fontSize: 13 },
-
   modal: { flex: 1, backgroundColor: '#F8FAFC' },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingTop: Platform.OS === 'ios' ? 60 : 16,
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingTop: Platform.OS === 'ios' ? 60 : 16 },
   modalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   modalTitle: { fontSize: 17, fontWeight: '900', color: Colors.black },
-  
   statusBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 16 },
   statusBannerText: { fontSize: 14, fontWeight: '900' },
-
-  alertBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 16,
-    padding: 14,
-  },
+  alertBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 16, padding: 14 },
   alertBoxTitle: { fontSize: 13, fontWeight: '900', color: '#374151', marginBottom: 2 },
   alertBoxText: { fontSize: 12, fontWeight: '600', color: '#4B5563', lineHeight: 16 },
-
   modalSection: { gap: 8 },
   sectionHeaderLabel: { fontSize: 11, fontWeight: '900', color: Colors.textMuted, letterSpacing: 1, marginLeft: 4 },
   modalCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#F1F5F9' },
@@ -1054,41 +1202,32 @@ const styles = StyleSheet.create({
   modalCustomerName: { fontSize: 16, fontWeight: '900', color: Colors.black, marginBottom: 2 },
   modalCustomerSub: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
   phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  
   modalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   modalRowLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
   modalRowValue: { fontSize: 13, fontWeight: '800', color: Colors.black, flex: 1, textAlign: 'right' },
-
   mapPinCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FFEDD5', borderRadius: 14, padding: 12, marginTop: 12 },
   mapPinIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
   mapPinTitle: { fontSize: 11, fontWeight: '800', color: Colors.orange, marginBottom: 2, letterSpacing: 0.5 },
   mapPinAddress: { fontSize: 13, fontWeight: '700', color: Colors.black },
-
   actionBtn: { borderRadius: 16, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
   actionBtnConfirm: { backgroundColor: Colors.orange },
   actionBtnReject: { backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA' },
   actionBtnText: { fontSize: 15, fontWeight: '900', color: Colors.white },
   btnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-
   rejectContainer: { backgroundColor: Colors.white, padding: 16, borderRadius: 20, borderWidth: 1, borderColor: '#FEE2E2' },
   fieldLabel: { fontSize: 13, fontWeight: '800', color: Colors.black, marginBottom: 8 },
   fieldInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, fontSize: 14, color: Colors.black },
-
-  reasonRow: {
-    padding: 14, borderRadius: 12, borderWidth: 1, 
-    borderColor: '#E5E7EB', marginBottom: 10,
-    backgroundColor: '#F9FAFB'
-  },
-  reasonRowSelected: {
-    borderColor: '#FCA5A5', backgroundColor: '#FEF2F2'
-  },
+  reasonRow: { padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 10, backgroundColor: '#F9FAFB' },
+  reasonRowSelected: { borderColor: '#FCA5A5', backgroundColor: '#FEF2F2' },
   reasonText: { fontSize: 14, color: Colors.black, fontWeight: '600' },
   reasonTextSelected: { color: '#B91C1C', fontWeight: '800' },
-
   chatBtn: { marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: '#FFFFFF', borderRadius: 16, paddingVertical: 16, borderWidth: 1.5, borderColor: '#E2E8F0' },
   chatBtnText: { fontSize: 15, fontWeight: '900', color: Colors.black },
-
   emptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
   emptySub: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  catererReply: { backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, marginTop: 8, borderWidth: 1, borderColor: '#BFDBFE' },
+  catererReplyHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  catererReplyLabel: { fontSize: 12, fontWeight: '900', color: '#1D4ED8' },
+  catererReplyText:  { fontSize: 13, color: '#1E3A8A', lineHeight: 18 },
 });

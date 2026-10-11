@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# large build files
+caterconnect-mobile/Expo-Go-54.0.7.tar.app

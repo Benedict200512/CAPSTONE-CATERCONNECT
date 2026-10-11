@@ -1,7 +1,8 @@
+// app/(tabs)/index.tsx
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   Dimensions,
   Image,
   ImageBackground,
@@ -75,6 +76,26 @@ export default function HomeScreen() {
 
   // Caterer reviews state mapped by caterer id
   const [catererReviews, setCatererReviews] = useState<Record<string, { avg: number; count: number }>>({});
+
+  // Pulse animation for skeleton loaders
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [shimmerAnim]);
 
   const loadCaterers = async () => {
     try {
@@ -204,11 +225,63 @@ export default function HomeScreen() {
     scrollViewRef.current?.scrollTo({ y: browseAllY, animated: true });
   };
 
+  // ── SKELETON LOADER UI ──
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.orange} />
-        <Text style={styles.loadingText}>Curating best caterers...</Text>
+      <View style={styles.container}>
+        {/* Header Skeleton */}
+        <View style={styles.header}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.brandContainer}>
+              <Animated.View style={[styles.skeletonBox, { width: 30, height: 30, borderRadius: 8, opacity: shimmerAnim }]} />
+              <View style={{ gap: 4 }}>
+                <Animated.View style={[styles.skeletonBox, { width: 110, height: 16, borderRadius: 4, opacity: shimmerAnim }]} />
+                <Animated.View style={[styles.skeletonBox, { width: 160, height: 10, borderRadius: 4, opacity: shimmerAnim }]} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Animated.View style={[styles.skeletonBox, { width: 36, height: 36, borderRadius: 18, opacity: shimmerAnim }]} />
+              <Animated.View style={[styles.skeletonBox, { width: 36, height: 36, borderRadius: 18, opacity: shimmerAnim }]} />
+            </View>
+          </View>
+          <Animated.View style={[styles.skeletonBox, { width: '100%', height: 38, borderRadius: 18, opacity: shimmerAnim }]} />
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+          {/* Hero Banner Skeleton */}
+          <Animated.View style={[styles.skeletonBox, styles.heroBanner, { height: 165, opacity: shimmerAnim, marginHorizontal: 14, marginTop: 8 }]} />
+
+          {/* Categories Skeleton */}
+          <View style={styles.sectionTitleRow}>
+            <Animated.View style={[styles.skeletonBox, { width: 80, height: 16, borderRadius: 4, opacity: shimmerAnim }]} />
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catsRow}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Animated.View key={i} style={[styles.skeletonBox, { width: 60, height: 72, borderRadius: 14, opacity: shimmerAnim }]} />
+            ))}
+          </ScrollView>
+
+          {/* Featured Caterers Skeleton */}
+          <View style={styles.sectionTitleRow}>
+            <Animated.View style={[styles.skeletonBox, { width: 120, height: 16, borderRadius: 4, opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonBox, { width: 50, height: 14, borderRadius: 4, opacity: shimmerAnim }]} />
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredRow}>
+            {[1, 2, 3].map((i) => (
+              <Animated.View key={i} style={[styles.skeletonBox, styles.featCard, { height: 210, opacity: shimmerAnim }]} />
+            ))}
+          </ScrollView>
+
+          {/* Browse All List Skeleton */}
+          <View style={styles.sectionTitleRow}>
+            <Animated.View style={[styles.skeletonBox, { width: 100, height: 16, borderRadius: 4, opacity: shimmerAnim }]} />
+          </View>
+          <View style={styles.listPad}>
+            {[1, 2, 3, 4].map((i) => (
+              <Animated.View key={i} style={[styles.skeletonBox, styles.listCard, { opacity: shimmerAnim }]} />
+            ))}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -677,7 +750,7 @@ export default function HomeScreen() {
           {[
             { step: '1', icon: Compass, title: 'Browse & Compare', desc: 'Find verified caterers in Cebu tailored to your needs.' },
             { step: '2', icon: ClipboardList, title: 'Customize Package', desc: 'Select a package and tailor it to your guest list.' },
-            { step: '3', icon: CreditCard, title: 'Secure Payment', desc: 'Pay downpayments easily and safely via GCash.' },
+            { step: '3', icon: CreditCard, title: 'Secure Payment', desc: 'Pay downpayments easily and safely via online payments.' },
             { step: '4', icon: PartyPopper, title: 'Enjoy the Event', desc: 'Relax and let the professionals handle the feast.' },
           ].map((s) => {
             const Icon = s.icon;
@@ -702,8 +775,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF', gap: 12 },
-  loadingText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '500' },
+  skeletonBox: { backgroundColor: '#E5E7EB' },
 
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 

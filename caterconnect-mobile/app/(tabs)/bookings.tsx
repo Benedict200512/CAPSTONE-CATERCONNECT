@@ -1,3 +1,4 @@
+// app/(tabs)/CustomerBookings.tsx
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, Platform,
@@ -8,12 +9,12 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
-import PaymentScreen from '../../screens/auth/PaymentScreen';
+import { initiateGCashPayment, openGCashCheckout } from '../../lib/xendit';
 import ReviewScreen from '../../screens/auth/ReviewScreen';
 import ChatScreen from '../../screens/auth/ChatScreen';
 import {
   Clock, CheckCircle2, CreditCard, RefreshCw, PartyPopper,
-  XCircle, Ban, ClipboardList, MapPin, AlertTriangle, MessageSquare, Star, AlertCircle, Check, Wallet
+  XCircle, Ban, ClipboardList, MapPin, AlertTriangle, MessageSquare, Star, AlertCircle, Check, Wallet, Smartphone, Building2, ShieldCheck, Lock
 } from 'lucide-react-native';
 
 type Booking = {
@@ -26,13 +27,23 @@ type Booking = {
   cancelled_by: string | null;
   cancellation_reason: string | null;
   cancelled_at: string | null;
+  payment_method: string | null;
+  payment_submitted_at: string | null;
+  payment_receipt_url: string | null;
   // --- Refund Tracking Fields ---
   refund_status: 'none' | 'pending' | 'processed' | 'failed';
   refund_amount: number;
   refunded_at: string | null;
   refund_account_details: string | null;
   caterer_notes: string | null;
-  caterers: { business_name: string; logo_url: string | null; city: string | null; user_id: string } | null;
+  caterers: { 
+    business_name: string; 
+    logo_url: string | null; 
+    city: string | null; 
+    user_id: string;
+    accepted_payment_methods?: string[] | null;
+    accepted_payment_details?: Record<string, string> | null;
+  } | null;
   packages: { name: string; tier: string } | null;
 };
 
@@ -44,6 +55,14 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   completed: { label: 'Completed',        color: '#15803D', bg: '#DCFCE7', icon: PartyPopper },
   rejected:  { label: 'Rejected',         color: '#B91C1C', bg: '#FEE2E2', icon: XCircle },
   cancelled: { label: 'Cancelled',        color: '#4B5563', bg: '#F3F4F6', icon: Ban },
+};
+
+const PAYMENT_CHANNEL_CONFIG: Record<string, { label: string; sub: string; icon: any }> = {
+  gcash: { label: 'GCash', sub: 'Instant E-Wallet', icon: Smartphone },
+  maya: { label: 'Maya', sub: 'E-Wallet / QR', icon: Wallet },
+  bpi: { label: 'BPI Online', sub: 'Bank Transfer', icon: Building2 },
+  bdo: { label: 'BDO Online', sub: 'Bank Transfer', icon: Building2 },
+  card: { label: 'Credit / Debit Card', sub: 'Visa, Mastercard, JCB', icon: CreditCard },
 };
 
 const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed', 'rejected', 'cancelled'];
@@ -137,7 +156,12 @@ export default function CustomerBookings() {
   const [bookings, setBookings]            = useState<Booking[]>([]);
   const [loading, setLoading]              = useState(true);
   const [filter, setFilter]                = useState('all');
+  
+  // Payment Modal States
   const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('gcash');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
   const [reviewBooking, setReviewBooking]   = useState<Booking | null>(null);
   const [chatBooking, setChatBooking]       = useState<Booking | null>(null);
 
@@ -145,8 +169,12 @@ export default function CustomerBookings() {
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
-  const [refundAccount, setRefundAccount] = useState(''); // 👈 GCash Account Input State
+  const [refundAccount, setRefundAccount] = useState(''); 
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Caterer Cancelled Direct Refund Input State
+  const [catererRefundInput, setCatererRefundInput] = useState('');
+  const [submittingCatererRefundId, setSubmittingCatererRefundId] = useState<string | null>(null);
 
   const load = async () => {
     if (!session?.user?.id) return;
@@ -155,15 +183,44 @@ export default function CustomerBookings() {
       .from('bookings')
       .select(`
         *,
-        caterers(id, business_name, logo_url, city, user_id),
+        caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details),
         packages(name, tier),
         reviews(id)
       `)
       .eq('customer_id', session.user.id)
       .order('created_at', { ascending: false });
+    
     if (filter !== 'all') query = query.eq('status', filter);
     const { data } = await query;
-    setBookings((data as any) ?? []);
+    let fetchedBookings = (data as any) ?? [];
+
+    const now = new Date();
+    const overdueBookings = fetchedBookings.filter((b: Booking) => 
+      b.status === 'confirmed' && 
+      b.downpayment_deadline && 
+      new Date(b.downpayment_deadline) < now
+    );
+
+    if (overdueBookings.length > 0) {
+      for (const ob of overdueBookings) {
+        await supabase
+          .from('bookings')
+          .update({ 
+            status: 'cancelled',
+            cancelled_by: 'system',
+            cancellation_reason: 'System Auto-Cancel: Payment deadline exceeded.',
+            cancelled_at: new Date().toISOString()
+          })
+          .eq('id', ob.id);
+          
+        ob.status = 'cancelled';
+        ob.cancelled_by = 'system';
+        ob.cancellation_reason = 'System Auto-Cancel: Payment deadline exceeded.';
+        ob.cancelled_at = new Date().toISOString();
+      }
+    }
+
+    setBookings(fetchedBookings);
     setLoading(false);
   };
 
@@ -174,6 +231,64 @@ export default function CustomerBookings() {
 
   const deadlinePassed = (d: string | null) =>
     d ? new Date(d) < new Date() : false;
+
+  const handleProcessPayment = async () => {
+    if (!payingBookingId) return;
+    const targetBooking = bookings.find(b => b.id === payingBookingId);
+    if (!targetBooking) return;
+
+    setIsProcessingPayment(true);
+
+    try {
+      const paymentResult = await initiateGCashPayment({
+        type: 'booking',
+        amount: Number(targetBooking.downpayment_amount),
+        referenceId: `booking_${targetBooking.id}_${Date.now()}`,
+        customerName: session?.user?.user_metadata?.full_name || session?.user?.email || 'Customer',
+        customerEmail: session?.user?.email || '',
+        description: `Downpayment for Booking #${targetBooking.id.slice(0, 8)}`,
+        paymentMethod: selectedPaymentMethod,
+      });
+
+      if (!paymentResult.success || !paymentResult.checkoutUrl || !paymentResult.chargeId) {
+        throw new Error(paymentResult.error || 'Failed to initialize Xendit checkout.');
+      }
+
+      const checkoutStatus = await openGCashCheckout(
+        paymentResult.checkoutUrl,
+        paymentResult.chargeId,
+        paymentResult.webUrl
+      );
+
+      if (checkoutStatus === 'success') {
+        const nowISO = new Date().toISOString();
+        const automatedReceiptRef = `Xendit Automated E-Receipt (${selectedPaymentMethod.toUpperCase()}) - ChargeID: ${paymentResult.chargeId}`;
+
+        await supabase
+          .from('bookings')
+          .update({
+            status: 'paid',
+            payment_method: selectedPaymentMethod,
+            payment_submitted_at: nowISO,
+            payment_verified_at: nowISO,
+            payment_receipt_url: automatedReceiptRef,
+          })
+          .eq('id', payingBookingId);
+
+        Alert.alert('Payment Successful!', `Downpayment verified automatically via Xendit (${selectedPaymentMethod.toUpperCase()}). Your booking is now secured!`);
+        setPayingBookingId(null);
+        load();
+      } else if (checkoutStatus === 'failed') {
+        Alert.alert('Payment Failed', 'The Xendit transaction failed or was declined.');
+      } else {
+        Alert.alert('Payment Cancelled', 'The payment session was closed or cancelled.');
+      }
+    } catch (err: any) {
+      Alert.alert('Payment Error', err.message || 'An unexpected error occurred.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
 
   const getCancelWarningMessage = (booking: Booking | null) => {
     if (!booking) return '';
@@ -191,7 +306,7 @@ export default function CustomerBookings() {
         : 'Since this is more than 7 days before your event, you can cancel freely with no penalty.';
     } else {
       return booking.status === 'paid'
-        ? '⚠️ Warning: This is less than 7 days before your event. Per our policy, your downpayment is non-refundable because ingredients and staff have already been prepared.'
+        ? '⚠️️ Warning: This is less than 7 days before your event. Per our policy, your downpayment is non-refundable because ingredients and staff have already been prepared.'
         : '⚠️ Warning: This is less than 7 days before your event. Are you sure you want to cancel?';
     }
   };
@@ -241,7 +356,6 @@ export default function CustomerBookings() {
     setIsCancelling(false);
 
     if (error) {
-      console.error("Supabase Cancel Error:", error);
       Alert.alert('Cancellation Failed', `Error: ${error.message}`);
     } else {
       if (isEligibleForRefund) {
@@ -260,13 +374,157 @@ export default function CustomerBookings() {
     }
   };
 
+  const activePaymentBooking = bookings.find(b => b.id === payingBookingId);
+  const availableMethods = activePaymentBooking?.caterers?.accepted_payment_methods?.length 
+    ? activePaymentBooking.caterers.accepted_payment_methods 
+    : ['gcash', 'maya', 'bpi', 'bdo', 'card'];
+
   return (
     <View style={styles.root}>
-      {/* Payment modal */}
-      <Modal visible={!!payingBookingId} animationType="slide" presentationStyle="pageSheet">
-        {payingBookingId && (
-          <PaymentScreen bookingId={payingBookingId} onClose={() => { setPayingBookingId(null); load(); }} />
-        )}
+      {/* ── Secure Xendit Payment Modal with Rectangular Vertical List Payment UI/UX ── */}
+      <Modal visible={!!payingBookingId} animationType="slide" presentationStyle="pageSheet" onShow={() => {
+        if (activePaymentBooking) {
+          const allowed = activePaymentBooking.caterers?.accepted_payment_methods;
+          if (allowed && allowed.length > 0 && !allowed.includes(selectedPaymentMethod)) {
+            setSelectedPaymentMethod(allowed[0]);
+          }
+        }
+      }}>
+        <View style={styles.paymentModalRoot}>
+          <View style={styles.paymentModalHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ShieldCheck size={22} color={Colors.orange} />
+              <Text style={styles.paymentModalTitle}>Pay Downpayment</Text>
+            </View>
+            <TouchableOpacity onPress={() => setPayingBookingId(null)} style={styles.paymentCloseBtn}>
+              <Text style={styles.paymentCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          {activePaymentBooking && (
+            <ScrollView contentContainerStyle={styles.paymentModalBody} showsVerticalScrollIndicator={false}>
+              {/* Booking Summary Box */}
+              <View style={styles.paySummaryCard}>
+                <Text style={styles.paySectionTitle}>Booking Summary</Text>
+                <View style={styles.paySummaryRow}>
+                  <Text style={styles.paySummaryLabel}>Caterer</Text>
+                  <Text style={styles.paySummaryVal}>{(activePaymentBooking.caterers as any)?.business_name ?? 'Caterer'}</Text>
+                </View>
+                <View style={styles.paySummaryRow}>
+                  <Text style={styles.paySummaryLabel}>Package</Text>
+                  <Text style={styles.paySummaryVal}>{(activePaymentBooking.packages as any)?.name ?? 'Catering Package'}</Text>
+                </View>
+                <View style={styles.paySummaryRow}>
+                  <Text style={styles.paySummaryLabel}>Event Date</Text>
+                  <Text style={styles.paySummaryVal}>{formatDate(activePaymentBooking.event_date)}</Text>
+                </View>
+                <View style={styles.paySummaryRow}>
+                  <Text style={styles.paySummaryLabel}>Guest Count</Text>
+                  <Text style={styles.paySummaryVal}>{activePaymentBooking.guest_count} pax</Text>
+                </View>
+                {activePaymentBooking.venue && (
+                  <View style={styles.paySummaryRow}>
+                    <Text style={styles.paySummaryLabel}>Venue</Text>
+                    <Text style={styles.paySummaryVal} numberOfLines={1}>{activePaymentBooking.venue}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Payment Breakdown Box */}
+              <View style={styles.paySummaryCard}>
+                <Text style={styles.paySectionTitle}>Payment Breakdown</Text>
+                <View style={styles.paySummaryRow}>
+                  <Text style={styles.paySummaryLabel}>Total Cost</Text>
+                  <Text style={styles.paySummaryVal}>₱{Number(activePaymentBooking.total_cost).toLocaleString()}</Text>
+                </View>
+                <View style={styles.paySummaryRow}>
+                  <Text style={styles.paySummaryLabel}>Required Downpayment</Text>
+                  <Text style={[styles.paySummaryVal, { color: Colors.orange, fontWeight: '900' }]}>
+                    ₱{Number(activePaymentBooking.downpayment_amount).toLocaleString()}
+                  </Text>
+                </View>
+                <View style={[styles.paySummaryRow, { borderBottomWidth: 0, marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' }]}>
+                  <Text style={[styles.paySummaryLabel, { color: Colors.textSecondary }]}>Remaining Balance (Event Day)</Text>
+                  <Text style={[styles.paySummaryVal, { color: Colors.textSecondary }]}>
+                    ₱{(Number(activePaymentBooking.total_cost) - Number(activePaymentBooking.downpayment_amount)).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              {/* ── Improvised Rectangular Vertical Payment Method List ── */}
+              <View style={styles.paymentSectionHeaderWrap}>
+                <Text style={styles.paySectionTitle}>Select Payment Method</Text>
+                <Text style={styles.methodInfoSub}>Choose a secure payment channel supported by this caterer.</Text>
+              </View>
+              
+              <View style={styles.paymentMethodsList}>
+                {availableMethods.map((methodKey) => {
+                  const channel = PAYMENT_CHANNEL_CONFIG[methodKey];
+                  if (!channel) return null;
+                  const IconComponent = channel.icon;
+                  const isSelected = selectedPaymentMethod === methodKey;
+                  const customAccountVal = activePaymentBooking.caterers?.accepted_payment_details?.[methodKey];
+
+                  return (
+                    <TouchableOpacity
+                      key={methodKey}
+                      style={[
+                        styles.rectangularMethodRow, 
+                        isSelected && styles.rectangularMethodRowActive
+                      ]}
+                      onPress={() => setSelectedPaymentMethod(methodKey)}
+                      activeOpacity={0.85}
+                    >
+                      <View style={[styles.methodIconBadge, isSelected && styles.methodIconBadgeActive]}>
+                        <IconComponent size={20} color={isSelected ? Colors.orange : Colors.textSecondary} />
+                      </View>
+
+                      <View style={styles.rectangularMethodDetails}>
+                        <Text style={[styles.rectangularMethodName, isSelected && styles.rectangularMethodNameActive]} numberOfLines={1}>
+                          {channel.label}
+                        </Text>
+                        <Text style={styles.rectangularMethodSub} numberOfLines={1}>{channel.sub}</Text>
+                        
+                        {customAccountVal ? (
+                          <Text style={styles.customAccountRowText} selectable numberOfLines={1}>
+                            Acct: {customAccountVal}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
+                        {isSelected && <View style={styles.radioInnerDot} />}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Xendit Gateway Checkout Button */}
+              <TouchableOpacity
+                style={styles.confirmPayBtn}
+                onPress={handleProcessPayment}
+                disabled={isProcessingPayment}
+                activeOpacity={0.85}
+              >
+                {isProcessingPayment ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <>
+                    <Lock size={16} color={Colors.white} />
+                    <Text style={styles.confirmPayBtnText}>
+                      Pay ₱{Number(activePaymentBooking.downpayment_amount).toLocaleString()} via Xendit
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <Text style={styles.secureNotice}>
+                🔒 Secure payment processing via Xendit gateway. E-receipt is generated automatically upon successful payment.
+              </Text>
+            </ScrollView>
+          )}
+        </View>
       </Modal>
 
       {/* Review Modal */}
@@ -337,7 +595,6 @@ export default function CustomerBookings() {
               />
             )}
 
-            {/* --- GCash Account Input for Refund-Eligible Bookings --- */}
             {cancellingBooking?.status === 'paid' && (() => {
               const eventDate = new Date(cancellingBooking.event_date);
               const today = new Date();
@@ -449,7 +706,9 @@ export default function CustomerBookings() {
 
             let displayLabel = sc.label;
             if (b.status === 'cancelled') {
-              displayLabel = b.cancelled_by === 'caterer' ? 'Cancelled by Caterer' : 'Cancelled by You';
+              if (b.cancelled_by === 'caterer') displayLabel = 'Cancelled by Caterer';
+              else if (b.cancelled_by === 'system') displayLabel = 'Auto-Cancelled by System';
+              else displayLabel = 'Cancelled by You';
             }
 
             return (
@@ -533,13 +792,66 @@ export default function CustomerBookings() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.cancelledTitle}>Booking Cancelled</Text>
                         <Text style={styles.cancelledText}>
-                          Initiated by: {b.cancelled_by === 'caterer' ? 'Caterer' : 'You (Customer)'}
+                          Initiated by: {
+                            b.cancelled_by === 'caterer' ? 'Caterer' : 
+                            b.cancelled_by === 'system' ? 'System (Overdue)' : 
+                            'You (Customer)'
+                          }
                         </Text>
                         {b.cancellation_reason && (
                           <Text style={styles.cancelledText}>Reason: {b.cancellation_reason}</Text>
                         )}
                         
-                        {/* --- REFUND STATUS TRACKER FOR CUSTOMER --- */}
+                        {/* ── If Caterer Cancelled & Downpayment was paid, let customer enter account details ── */}
+                        {b.cancelled_by === 'caterer' && Number(b.downpayment_amount) > 0 && (!b.refund_account_details || b.refund_status === 'none') && (
+                          <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#FED7AA' }}>
+                            <Text style={{ fontSize: 12, fontWeight: '900', color: Colors.orange, marginBottom: 4 }}>
+                              Downpayment Refund Available (₱{Number(b.downpayment_amount).toLocaleString()})
+                            </Text>
+                            <Text style={{ fontSize: 11.5, color: Colors.textSecondary, marginBottom: 8, lineHeight: 16 }}>
+                              The caterer cancelled your booking. Please enter your GCash details so platform staff can disburse your refund.
+                            </Text>
+                            <TextInput
+                              style={[styles.customInput, { height: 44, padding: 10, marginBottom: 8, fontSize: 13 }]}
+                              placeholder="e.g., 09123456789 - Juan Dela Cruz"
+                              placeholderTextColor={Colors.textMuted}
+                              value={catererRefundInput}
+                              onChangeText={setCatererRefundInput}
+                            />
+                            <TouchableOpacity
+                              style={{ backgroundColor: Colors.orange, paddingVertical: 10, borderRadius: 10, alignItems: 'center' }}
+                              onPress={async () => {
+                                if (!catererRefundInput.trim()) {
+                                  Alert.alert("Missing Details", "Please enter your GCash account details.");
+                                  return;
+                                }
+                                setSubmittingCatererRefundId(b.id);
+                                const { error } = await supabase
+                                  .from('bookings')
+                                  .update({
+                                    refund_status: 'pending',
+                                    refund_amount: b.downpayment_amount,
+                                    refund_account_details: catererRefundInput.trim()
+                                  })
+                                  .eq('id', b.id);
+                                setSubmittingCatererRefundId(null);
+
+                                if (error) {
+                                  Alert.alert("Error", error.message);
+                                } else {
+                                  Alert.alert("Submitted", "Your GCash refund details have been submitted to platform staff.");
+                                  setCatererRefundInput('');
+                                  load();
+                                }
+                              }}
+                            >
+                              <Text style={{ color: Colors.white, fontWeight: '800', fontSize: 12.5 }}>
+                                {submittingCatererRefundId === b.id ? 'Submitting...' : 'Submit Refund Account Details'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
                         {b.refund_status && b.refund_status !== 'none' && (
                           <View style={{ marginTop: 10, padding: 12, backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -599,22 +911,38 @@ export default function CustomerBookings() {
                         </Text>
                       </View>
 
-                      <TouchableOpacity
-                        style={styles.payBtn}
-                        onPress={() => setPayingBookingId(b.id)}
-                        activeOpacity={0.85}
-                      >
-                        <CreditCard size={16} color={Colors.white} />
-                        <Text style={styles.payBtnText}>Pay ₱{Number(b.downpayment_amount).toLocaleString()} Downpayment</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.payNote}>Secure processing via GCash / Xendit. Instant confirmation upon verification.</Text>
+                      {paymentOverdue ? (
+                        <TouchableOpacity
+                          style={[styles.payBtn, { backgroundColor: '#9CA3AF', shadowOpacity: 0 }]}
+                          activeOpacity={1}
+                          onPress={() => Alert.alert('Overdue', 'The payment deadline has passed. This booking is being cancelled by the system.')}
+                        >
+                          <Ban size={16} color={Colors.white} />
+                          <Text style={styles.payBtnText}>Deadline Passed</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.payBtn}
+                          onPress={() => setPayingBookingId(b.id)}
+                          activeOpacity={0.85}
+                        >
+                          <CreditCard size={16} color={Colors.white} />
+                          <Text style={styles.payBtnText}>Pay ₱{Number(b.downpayment_amount).toLocaleString()} Downpayment</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      <Text style={styles.payNote}>
+                        {paymentOverdue 
+                          ? 'System is currently processing the auto-cancellation.' 
+                          : 'Secure processing via Xendit gateway with automated e-receipt.'}
+                      </Text>
                     </View>
                   )}
 
                   {b.status === 'paid' && (
                     <View style={styles.statusMessageBox}>
                       <CheckCircle2 size={16} color="#15803D" />
-                      <Text style={styles.statusMessageText}>Downpayment secured. Your booking is completely locked in!</Text>
+                      <Text style={styles.statusMessageText}>Downpayment secured via Xendit ({b.payment_method?.toUpperCase() || 'ONLINE'}). E-receipt generated automatically!</Text>
                     </View>
                   )}
 
@@ -683,6 +1011,137 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F9FAFB' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   
+  // Payment Modal Styling
+  paymentModalRoot: { flex: 1, backgroundColor: '#F9FAFB' },
+  paymentModalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 16,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  paymentModalTitle: { fontSize: 18, fontWeight: '900', color: Colors.black },
+  paymentCloseBtn: { paddingVertical: 6, paddingHorizontal: 12 },
+  paymentCloseText: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
+  paymentModalBody: { padding: 20, paddingBottom: 40 },
+  
+  paySummaryCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1
+  },
+  paySectionTitle: { fontSize: 14, fontWeight: '900', color: Colors.black, marginBottom: 4 },
+  paymentSectionHeaderWrap: { marginBottom: 12, marginTop: 4 },
+  methodInfoSub: { fontSize: 12, color: Colors.textSecondary },
+  paySummaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  paySummaryLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  paySummaryVal: { fontSize: 13, color: Colors.black, fontWeight: '800', maxWidth: '60%', textAlign: 'right' },
+
+  // --- Rectangular Vertical Payment Method List UI ---
+  paymentMethodsList: { gap: 10, marginBottom: 20 },
+  rectangularMethodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  rectangularMethodRowActive: {
+    borderColor: Colors.orange,
+    backgroundColor: '#FFF7ED',
+  },
+  methodIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  methodIconBadgeActive: {
+    backgroundColor: '#FFEDD5',
+  },
+  rectangularMethodDetails: {
+    flex: 1,
+  },
+  rectangularMethodName: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: Colors.black,
+    marginBottom: 2,
+  },
+  rectangularMethodNameActive: {
+    color: Colors.orange,
+  },
+  rectangularMethodSub: {
+    fontSize: 11.5,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  customAccountRowText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.orange,
+    marginTop: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  radioCircleActive: {
+    borderColor: Colors.orange,
+  },
+  radioInnerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.orange,
+  },
+
+  confirmPayBtn: {
+    backgroundColor: Colors.orange,
+    borderRadius: 14,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: Colors.orange,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: 12,
+  },
+  confirmPayBtnText: { color: Colors.white, fontSize: 15, fontWeight: '900' },
+  secureNotice: { textAlign: 'center', fontSize: 11, color: Colors.textMuted, fontWeight: '600', lineHeight: 16 },
+
   header: { 
     backgroundColor: Colors.white, 
     borderBottomWidth: 1, 

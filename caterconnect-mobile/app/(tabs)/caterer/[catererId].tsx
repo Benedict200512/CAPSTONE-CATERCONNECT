@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 // ── Lucide Icons ──
 import {
-  ArrowLeft, ArrowRight, MapPin, Star, UtensilsCrossed,
+  ChevronLeft, ChevronRight, MapPin, Star, UtensilsCrossed,
   Soup, Cake, Wine, Package, Utensils, CheckCircle2,
   Phone, Mail, Scale, SearchX, Store, 
   MessageSquareText, StarIcon
@@ -194,7 +194,7 @@ export default function CatererDetailScreen() {
         </View>
         <Text style={s.emptyTitle}>Caterer not found</Text>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.85}>
-          <ArrowLeft size={18} color={Colors.white} />
+          <ChevronLeft size={18} color={Colors.white} />
           <Text style={s.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -231,7 +231,7 @@ export default function CatererDetailScreen() {
             onPress={() => router.back()}
             activeOpacity={0.8}
           >
-            <ArrowLeft size={20} color={Colors.white} />
+            <ChevronLeft size={20} color={Colors.white} />
           </TouchableOpacity>
 
           {/* Plan badge */}
@@ -465,7 +465,7 @@ export default function CatererDetailScreen() {
                         activeOpacity={0.85}
                       >
                         <Text style={s.bookPkgBtnText}>Book This Package</Text>
-                        <ArrowRight size={16} color={Colors.white} />
+                        <ChevronRight size={16} color={Colors.white} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -718,7 +718,7 @@ const s = StyleSheet.create({
   quickStatDivider:{ width: 1, backgroundColor: '#F3F4F6', marginVertical: 12 },
 
   // Description & General Section
-  section:      { paddingHorizontal: 20, paddingTop: 24 },
+  section:       { paddingHorizontal: 20, paddingTop: 24 },
   sectionTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 12, letterSpacing: -0.3 },
   descText:     { fontSize: 15, color: Colors.textSecondary, lineHeight: 24, fontWeight: '400' },
 

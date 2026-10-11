@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Platform,
+  ActivityIndicator, Alert, Modal, Platform,
   ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
@@ -10,10 +10,10 @@ import { initiateGCashPayment, openGCashCheckout } from '@/lib/xendit';
 import { supabase } from '@/lib/supabase';
 import { 
   X, Tag, BadgeCheck, Zap, Crown, CheckCircle2, 
-  ChevronDown, ChevronUp, Lock, ArrowRight, ShieldCheck 
+  ChevronDown, ChevronUp, Lock, ArrowRight, ShieldCheck,
+  Smartphone, Wallet, Building2, CreditCard
 } from 'lucide-react-native';
 
-// Matches the Supabase table structure from your image
 const PLANS = [
   {
     id: 'free',
@@ -77,13 +77,23 @@ const PLANS = [
   },
 ];
 
+const PAYMENT_CHANNELS = [
+  { key: 'gcash', label: 'GCash', sub: 'Instant E-Wallet', icon: Smartphone },
+  { key: 'maya', label: 'Maya', sub: 'E-Wallet / QR', icon: Wallet },
+  { key: 'bpi', label: 'BPI Online', sub: 'Bank Transfer', icon: Building2 },
+  { key: 'bdo', label: 'BDO Online', sub: 'Bank Transfer', icon: Building2 },
+  { key: 'card', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, JCB', icon: CreditCard },
+];
+
 type SubscriptionScreenProps = {
   onClose?: () => void;
 };
 
 export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps) {
-  const { catererData, session, profile } = useAuth();
-  const [paying, setPaying] = useState<string | null>(null);
+  const { catererData, session, profile, reloadProfile } = useAuth() as any;
+  const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
+  const [selectedPlanForUpgrade, setSelectedPlanForUpgrade] = useState<typeof PLANS[0] | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('gcash');
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -102,56 +112,87 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
     setPaymentHistory(data ?? []);
   };
 
-  const handleUpgrade = async (plan: typeof PLANS[0]) => {
-    if (plan.id === 'free') return;
-    if (plan.id === catererData?.subscription_plan) {
-      Alert.alert('Already Subscribed', 'You are currently on this plan.');
+  const handleConfirmUpgrade = async () => {
+    if (!selectedPlanForUpgrade) return;
+    const plan = selectedPlanForUpgrade;
+
+    if (!catererData?.id || !session?.user || !profile) {
+      Alert.alert('Error', 'Missing user profile or caterer session data.');
       return;
     }
-    if (!catererData?.id || !session?.user || !profile) return;
 
-    Alert.alert(
-      `Upgrade to ${plan.name}`,
-      `You will be charged ₱${plan.price}/month via GCash. Proceed?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Pay with GCash',
-          onPress: async () => {
-            setPaying(plan.id);
-            const referenceId = `sub_${catererData.id}_${plan.id}_${Date.now()}`;
+    const channel = PAYMENT_CHANNELS.find(c => c.key === selectedPaymentMethod);
+    setPayingPlanId(plan.id);
 
-            const result = await initiateGCashPayment({
-              type: 'subscription',
+    try {
+      const referenceId = `sub_${catererData.id}_${plan.id}_${Date.now()}`;
+
+      const result = await initiateGCashPayment({
+        type: 'subscription',
+        amount: plan.price,
+        referenceId,
+        customerName: profile.full_name,
+        customerEmail: session.user.email ?? '',
+        description: `CaterConnect ${plan.name} - Monthly Subscription`,
+        paymentMethod: selectedPaymentMethod,
+      });
+
+      if (!result.success || !result.checkoutUrl) {
+        throw new Error(result.error ?? 'Failed to initiate payment gateway.');
+      }
+
+      const outcome = await openGCashCheckout(result.checkoutUrl!, result.chargeId!, result.webUrl);
+
+      if (outcome === 'success') {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
+
+        // 1. Instantly update caterer's subscription plan and expiration
+        const { error: updateErr } = await supabase
+          .from('caterers')
+          .update({
+            subscription_plan: plan.id,
+            subscription_expires_at: expiresAt.toISOString(),
+          })
+          .eq('id', catererData.id);
+
+        if (updateErr) {
+          console.error('Failed to update caterer plan:', updateErr);
+          Alert.alert('Warning', 'Payment successful, but plan update sync failed. Contact support.');
+        } else {
+          // 2. Log subscription payment
+          try {
+            await supabase.from('subscription_payments').insert({
+              caterer_id: catererData.id,
+              plan_id: plan.id,
               amount: plan.price,
-              referenceId,
-              customerName: profile.full_name,
-              customerEmail: session.user.email ?? '',
-              description: `CaterConnect ${plan.name} - Monthly Subscription`,
+              status: 'confirmed',
+              payment_method: selectedPaymentMethod,
+              payment_reference: result.chargeId ?? referenceId,
+              confirmed_at: new Date().toISOString(),
             });
+          } catch (logErr) {
+            console.warn('Subscription payment log restricted by RLS or skipped:', logErr);
+          }
 
-            if (!result.success || !result.checkoutUrl) {
-              Alert.alert('Payment Error', result.error ?? 'Failed to initiate payment.');
-              setPaying(null);
-              return;
-            }
-
-            const outcome = await openGCashCheckout(result.checkoutUrl!, result.chargeId!, result.webUrl);
-            setPaying(null);
-
-            if (outcome === 'success') {
-              Alert.alert(
-                'Payment Successful! 🎉',
-                `Your ${plan.name} has been activated! It may take a moment to reflect.`
-              );
-              loadHistory();
-            } else if (outcome === 'failed') {
-              Alert.alert('Payment Failed', 'Your GCash payment was not completed. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+          Alert.alert(
+            'Payment Successful! 🎉',
+            `Your plan has been automatically upgraded to ${plan.name}!`
+          );
+          if (typeof reloadProfile === 'function') {
+            reloadProfile();
+          }
+        }
+        setSelectedPlanForUpgrade(null);
+        loadHistory();
+      } else if (outcome === 'failed') {
+        Alert.alert('Payment Failed', 'Your transaction was not completed. Please try again.');
+      }
+    } catch (err: any) {
+      Alert.alert('Payment Error', err.message || 'An unexpected error occurred.');
+    } finally {
+      setPayingPlanId(null);
+    }
   };
 
   const currentPlanId = catererData?.subscription_plan ?? 'free';
@@ -159,14 +200,103 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
   const expiresAt = (catererData as any)?.subscription_expires_at;
   const usedBookings = catererData?.monthly_booking_count ?? 0;
   
-  // Calculate Usage Progress
   const bookingLimit = currentPlan.max_bookings;
   const progressPercent = bookingLimit ? Math.min((usedBookings / bookingLimit) * 100, 100) : 100;
   const progressColor = progressPercent > 90 ? Colors.error : currentPlan.ui.color;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
+      {/* ── Checkout Modal for Payment Method Selection ── */}
+      <Modal
+        visible={!!selectedPlanForUpgrade}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedPlanForUpgrade(null)}
+      >
+        <View style={styles.modalRoot}>
+          <View style={styles.modalHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ShieldCheck size={22} color={Colors.orange} />
+              <Text style={styles.modalTitle}>Complete Subscription</Text>
+            </View>
+            <TouchableOpacity onPress={() => setSelectedPlanForUpgrade(null)} style={styles.modalCloseBtn}>
+              <Text style={styles.modalCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          {selectedPlanForUpgrade && (
+            <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryCardTitle}>Selected Plan</Text>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Plan Tier</Text>
+                  <Text style={styles.summaryVal}>{selectedPlanForUpgrade.name}</Text>
+                </View>
+                <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
+                  <Text style={styles.summaryLabel}>Monthly Fee</Text>
+                  <Text style={[styles.summaryVal, { color: Colors.orange, fontWeight: '900' }]}>
+                    ₱{selectedPlanForUpgrade.price} / mo
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.modalSectionTitle}>Select Payment Method</Text>
+              <Text style={styles.modalSectionSub}>Choose a secure channel for instant activation.</Text>
+
+              <View style={styles.paymentMethodsList}>
+                {PAYMENT_CHANNELS.map((channel) => {
+                  const IconComponent = channel.icon;
+                  const isSelected = selectedPaymentMethod === channel.key;
+
+                  return (
+                    <TouchableOpacity
+                      key={channel.key}
+                      style={[styles.methodRow, isSelected && styles.methodRowActive]}
+                      onPress={() => setSelectedPaymentMethod(channel.key)}
+                      activeOpacity={0.85}
+                    >
+                      <View style={[styles.methodIconBadge, isSelected && styles.methodIconBadgeActive]}>
+                        <IconComponent size={20} color={isSelected ? Colors.orange : Colors.textSecondary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.methodName, isSelected && styles.methodNameActive]}>{channel.label}</Text>
+                        <Text style={styles.methodSub}>{channel.sub}</Text>
+                      </View>
+                      <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
+                        {isSelected && <View style={styles.radioInnerDot} />}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity
+                style={styles.payNowBtn}
+                onPress={handleConfirmUpgrade}
+                disabled={payingPlanId === selectedPlanForUpgrade.id}
+                activeOpacity={0.85}
+              >
+                {payingPlanId === selectedPlanForUpgrade.id ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <>
+                    <Lock size={16} color={Colors.white} />
+                    <Text style={styles.payNowBtnText}>
+                      Pay ₱{selectedPlanForUpgrade.price} via {PAYMENT_CHANNELS.find(c => c.key === selectedPaymentMethod)?.label}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <Text style={styles.secureNotice}>
+                🔒 Secure payment processing. Subscriptions activate instantly upon successful verification.
+              </Text>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Main Screen Header */}
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <View style={styles.headerTop}>
           <View style={{ flex: 1 }}>
@@ -181,7 +311,6 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
         </View>
       </View>
 
-      {/* Active Plan Dashboard */}
       <View style={[styles.activePlanCard, { borderColor: currentPlan.ui.color }]}>
         <View style={styles.activePlanHeader}>
           <View>
@@ -215,11 +344,10 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
         )}
       </View>
 
-      {/* Plan Cards */}
+      {/* Plans List */}
       <View style={styles.plansContainer}>
         {PLANS.map((plan) => {
           const isCurrent = plan.id === currentPlanId;
-          const isPaying = paying === plan.id;
           const { ui } = plan;
 
           return (
@@ -231,7 +359,6 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
                 isCurrent && styles.planCardActive
               ]}
             >
-              {/* Badges */}
               {isCurrent ? (
                 <View style={[styles.ribbon, { backgroundColor: ui.color }]}>
                   <Text style={styles.ribbonText}>ACTIVE</Text>
@@ -247,7 +374,6 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
                 </View>
               ) : null}
 
-              {/* Header */}
               <View style={styles.planHeader}>
                 <Text style={[styles.planTitle, { color: ui.isDark ? '#FFF' : ui.color }]}>{plan.name}</Text>
                 <View style={styles.priceRow}>
@@ -262,7 +388,6 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
                 </View>
               </View>
 
-              {/* Feature List */}
               <View style={styles.featureList}>
                 {plan.features.map((feat, idx) => (
                   <View key={idx} style={styles.featureRow}>
@@ -274,25 +399,21 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
                 ))}
               </View>
 
-              {/* Action Button */}
               {plan.id !== 'free' && (
                 <TouchableOpacity
                   style={[
                     styles.upgradeBtn,
-                    { backgroundColor: isCurrent ? ui.isDark ? 'rgba(255,255,255,0.1)' : ui.color + '15' : ui.color },
-                    isPaying && { opacity: 0.7 }
+                    { backgroundColor: isCurrent ? (ui.isDark ? 'rgba(255,255,255,0.1)' : ui.color + '15') : ui.color }
                   ]}
-                  onPress={() => handleUpgrade(plan)}
-                  disabled={isCurrent || isPaying}
+                  onPress={() => setSelectedPlanForUpgrade(plan)}
+                  disabled={isCurrent}
                   activeOpacity={0.85}
                 >
-                  {isPaying ? (
-                    <ActivityIndicator color={ui.isDark && !isCurrent ? '#FFF' : ui.color} />
-                  ) : isCurrent ? (
+                  {isCurrent ? (
                     <Text style={[styles.upgradeBtnText, { color: ui.isDark ? '#FFF' : ui.color }]}>Current Plan</Text>
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={[styles.upgradeBtnText, { color: '#FFF' }]}>Upgrade via GCash</Text>
+                      <Text style={[styles.upgradeBtnText, { color: '#FFF' }]}>Upgrade to {plan.name}</Text>
                       <ArrowRight size={16} color="#FFF" />
                     </View>
                   )}
@@ -303,7 +424,6 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
         })}
       </View>
 
-      {/* Payment History Accordion */}
       <View style={styles.historySection}>
         <TouchableOpacity style={styles.historyToggle} onPress={() => setShowHistory(!showHistory)} activeOpacity={0.8}>
           <Text style={styles.historyToggleText}>Payment History</Text>
@@ -322,7 +442,7 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
                   <View>
                     <Text style={styles.historyPlan}>{p.plan_id.toUpperCase()} Plan</Text>
                     <Text style={styles.historyDate}>
-                      {new Date(p.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {new Date(p.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })} · {p.payment_method?.toUpperCase() || 'ONLINE'}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
@@ -340,11 +460,10 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
         )}
       </View>
 
-      {/* Secure Payment Note */}
       <View style={styles.secureNote}>
         <Lock size={16} color="#475569" />
         <Text style={styles.secureNoteText}>
-          Payments are securely processed via GCash & Xendit. Subscriptions activate instantly upon successful payment.
+          Payments are securely processed online. Subscriptions upgrade instantly upon successful confirmation.
         </Text>
       </View>
       <View style={{ height: 40 }} />
@@ -375,6 +494,105 @@ const styles = StyleSheet.create({
   
   renewalBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12 },
   renewalText: { fontSize: 12, fontWeight: '500', color: Colors.textSecondary },
+
+  // Modal Checkout Styles
+  modalRoot: { flex: 1, backgroundColor: '#F9FAFB' },
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 16,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: Colors.black },
+  modalCloseBtn: { paddingVertical: 6, paddingHorizontal: 12 },
+  modalCloseText: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
+  modalBody: { padding: 20, paddingBottom: 40 },
+
+  summaryCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  summaryCardTitle: { fontSize: 14, fontWeight: '900', color: Colors.black, marginBottom: 8 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  summaryLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  summaryVal: { fontSize: 13, color: Colors.black, fontWeight: '800' },
+
+  modalSectionTitle: { fontSize: 15, fontWeight: '900', color: Colors.black, marginBottom: 2 },
+  modalSectionSub: { fontSize: 12, color: Colors.textSecondary, marginBottom: 12, fontWeight: '500' },
+  paymentMethodsList: { gap: 10, marginBottom: 20 },
+  methodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    gap: 12,
+  },
+  methodRowActive: {
+    borderColor: Colors.orange,
+    backgroundColor: '#FFF7ED',
+  },
+  methodIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  methodIconBadgeActive: {
+    backgroundColor: '#FFEDD5',
+  },
+  methodName: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 2 },
+  methodNameActive: { color: Colors.orange },
+  methodSub: { fontSize: 11.5, color: Colors.textSecondary, fontWeight: '500' },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  radioCircleActive: {
+    borderColor: Colors.orange,
+  },
+  radioInnerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.orange,
+  },
+
+  payNowBtn: {
+    backgroundColor: Colors.orange,
+    borderRadius: 14,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: Colors.orange,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: 12,
+  },
+  payNowBtnText: { color: Colors.white, fontSize: 15, fontWeight: '900' },
+  secureNotice: { textAlign: 'center', fontSize: 11, color: Colors.textMuted, fontWeight: '600', lineHeight: 16 },
 
   plansContainer: { paddingHorizontal: 20, gap: 16 },
   planCard: { borderRadius: 24, padding: 24, borderWidth: 1.5, overflow: 'hidden' },

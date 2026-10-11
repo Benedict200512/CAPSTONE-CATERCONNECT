@@ -18,8 +18,13 @@ export default function Login() {
   const navigate = useNavigate();
   const { profile, loading: authLoading } = useAuth();
 
+  // Prevent auto-redirect if the profile is suspended
   useEffect(() => {
     if (!authLoading && profile) {
+      if ((profile as any).status === 'suspended') {
+        supabase.auth.signOut();
+        return;
+      }
       if (profile.role === 'admin') navigate('/admin', { replace: true });
       else if (profile.role === 'staff') navigate('/staff', { replace: true });
     }
@@ -33,27 +38,38 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    const { data, error } = await signIn(email, password);
+    const { data, error: signInError } = await signIn(email, password);
 
-    if (error) {
+    if (signInError) {
       setLoading(false);
-      setError(error.message);
+      setError(signInError.message);
       return;
     }
 
+    // Fetch both role and status from the profiles table
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', data?.user?.id)
       .single();
 
-    setLoading(false);
-
     if (profileError || !profileData) {
+      setLoading(false);
       setError('Could not load your profile. Please try again.');
       return;
     }
 
+    // Block login and force sign out if the account is suspended
+    if (profileData.status === 'suspended') {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setError('Your account has been suspended. Please contact support.');
+      return;
+    }
+
+    setLoading(false);
+
+    // Route based on role
     const role = profileData.role;
     if (role === 'admin') navigate('/admin');
     else if (role === 'staff') navigate('/staff');
@@ -174,8 +190,21 @@ export default function Login() {
             )}
 
             <button type="submit" style={styles.submitBtn} disabled={loading}>
-              <span>{loading ? 'Signing in...' : 'Log In'}</span>
-              {!loading && <ArrowRight size={16} />}
+              {loading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>Signing in</span>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', paddingTop: 2 }}>
+                    <span className="bounce-dot" style={{ animationDelay: '0s' }} />
+                    <span className="bounce-dot" style={{ animationDelay: '0.15s' }} />
+                    <span className="bounce-dot" style={{ animationDelay: '0.3s' }} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <span>Log In</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </button>
           </form>
 
@@ -188,6 +217,22 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* Scoped CSS Keyframes for the Bouncing Dots */}
+      <style>{`
+        @keyframes bounceDot {
+          0%, 80%, 100% { transform: scale(0); }
+          40% { transform: scale(1.0); }
+        }
+        .bounce-dot {
+          width: 5px;
+          height: 5px;
+          background-color: white;
+          border-radius: 50%;
+          display: inline-block;
+          animation: bounceDot 1.4s infinite ease-in-out both;
+        }
+      `}</style>
     </div>
   );
 }

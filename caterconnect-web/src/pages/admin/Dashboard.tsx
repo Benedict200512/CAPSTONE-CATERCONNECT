@@ -10,35 +10,74 @@ import { useAuth } from '../../context/AuthContext';
 export default function AdminDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ customers: 0, caterers: 0, staff: 0, verified: 0, pending: 0, bookings: 0, revenue: 0, complaints: 0 });
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    caterers: 0,
+    verified: 0,
+    pending: 0,
+    bookings: 0,
+    revenue: 0,
+    complaints: 0,
+    userTrend: '+0 this month',
+    catererTrend: '+0 this month',
+    bookingTrend: '+0 this month',
+    revenueTrend: '₱0 new',
+  });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const [customers, caterers, staffRes, verified, pending, bookings, revenue, complaints, users] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'customer'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'caterer'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'staff'),
+      // Get the start of the current calendar month
+      const now = new Date();
+      const startCurr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      const [
+        totalUsersRes,
+        caterersRes,
+        bookingsRes,
+        usersCurr,
+        caterersCurr,
+        bookingsCurr,
+        revAll,
+        revCurr,
+        verifiedRes,
+        pendingRes,
+        complaintsRes,
+        users
+      ] = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('caterers').select('id', { count: 'exact', head: true }),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }),
+        // New items added this month
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', startCurr),
+        supabase.from('caterers').select('id', { count: 'exact', head: true }).gte('created_at', startCurr),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).gte('created_at', startCurr),
+        // Revenue totals
+        supabase.from('subscription_payments').select('amount').eq('status', 'confirmed'),
+        supabase.from('subscription_payments').select('amount').eq('status', 'confirmed').gte('created_at', startCurr),
+        // Operational stats
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'approved'),
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-        supabase.from('bookings').select('id', { count: 'exact', head: true }),
-        supabase.from('subscription_payments').select('amount').eq('status', 'confirmed'),
         supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('profiles').select('id, full_name, email, role, created_at, avatar_url').order('created_at', { ascending: false }).limit(5),
       ]);
 
-      const totalRevenue = (revenue.data ?? []).reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+      const totalRevenue = (revAll.data ?? []).reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+      const revenueCurrTotal = (revCurr.data ?? []).reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
 
       setStats({
-        customers: customers.count ?? 0,
-        caterers: caterers.count ?? 0,
-        staff: staffRes.count ?? 0,
-        verified: verified.count ?? 0,
-        pending: pending.count ?? 0,
-        bookings: bookings.count ?? 0,
+        totalUsers: totalUsersRes.count ?? 0,
+        caterers: caterersRes.count ?? 0,
+        verified: verifiedRes.count ?? 0,
+        pending: pendingRes.count ?? 0,
+        bookings: bookingsRes.count ?? 0,
         revenue: totalRevenue,
-        complaints: complaints.count ?? 0,
+        complaints: complaintsRes.count ?? 0,
+        userTrend: `+${usersCurr.count ?? 0} this month`,
+        catererTrend: `+${caterersCurr.count ?? 0} this month`,
+        bookingTrend: `+${bookingsCurr.count ?? 0} this month`,
+        revenueTrend: `₱${revenueCurrTotal.toLocaleString()} new`,
       });
       setRecentUsers(users.data ?? []);
       setLoading(false);
@@ -76,13 +115,13 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Primary KPI Row */}
+      {/* Primary KPI Row with Absolute Growth Badges */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, marginBottom: 28 }}>
         {[
-          { label: 'Total Users', value: stats.customers + stats.staff, icon: Users, color: '#F97316', bg: '#FFF7ED', accent: 'linear-gradient(135deg, #F97316 0%, #FB923C 100%)', trend: '+12%', path: '/admin/users' },
-          { label: 'Registered Caterers', value: stats.caterers, icon: Store, color: '#16A34A', bg: '#DCFCE7', accent: 'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)', trend: '+8%', path: '/admin/users?role=caterer' },
-          { label: 'Total Bookings', value: stats.bookings, icon: Calendar, color: '#2563EB', bg: '#DBEAFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)', trend: '+15%', path: '/staff/bookings' },
-          { label: 'Total Revenue', value: `₱${stats.revenue.toLocaleString()}`, icon: Wallet, color: '#7C3AED', bg: '#F5F3FF', accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)', trend: '+22%', path: '/admin/revenue' },
+          { label: 'Total Users', value: stats.totalUsers, icon: Users, color: '#F97316', bg: '#FFF7ED', accent: 'linear-gradient(135deg, #F97316 0%, #FB923C 100%)', trend: stats.userTrend, path: '/admin/users' },
+          { label: 'Registered Caterers', value: stats.caterers, icon: Store, color: '#16A34A', bg: '#DCFCE7', accent: 'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)', trend: stats.catererTrend, path: '/admin/users?role=caterer' },
+          { label: 'Total Bookings', value: stats.bookings, icon: Calendar, color: '#2563EB', bg: '#DBEAFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)', trend: stats.bookingTrend, path: '/staff/bookings' },
+          { label: 'Total Revenue', value: `₱${stats.revenue.toLocaleString()}`, icon: Wallet, color: '#7C3AED', bg: '#F5F3FF', accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)', trend: stats.revenueTrend, path: '/admin/revenue' },
         ].map((card, i) => {
           const Icon = card.icon;
           return (
@@ -113,7 +152,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Content Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, alignItems: 'start' }}>
         
         {/* Left Column: Recent Registrations Table */}
         <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -249,7 +288,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Subscription Tiers Mini-Widget (Exact Database Schema Match) */}
+          {/* Subscription Tiers Mini-Widget */}
           <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>

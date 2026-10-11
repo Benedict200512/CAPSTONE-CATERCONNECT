@@ -1,9 +1,10 @@
+// app/(auth)/login.tsx
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView,
   Platform, ScrollView, StyleSheet, Text,
-  TextInput, TouchableOpacity, View, Image
+  TextInput, TouchableOpacity, View, Image, Animated
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { signIn } from '../../lib/auth';
@@ -22,6 +23,46 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Bouncing dots animation values
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (loading) {
+      const animateDot = (dot: Animated.Value, delay: number) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.timing(dot, {
+              toValue: -6,
+              duration: 300,
+              delay,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+          ])
+        );
+      };
+      const anim1 = animateDot(dot1, 0);
+      const anim2 = animateDot(dot2, 150);
+      const anim3 = animateDot(dot3, 300);
+
+      anim1.start();
+      anim2.start();
+      anim3.start();
+
+      return () => {
+        anim1.stop();
+        anim2.stop();
+        anim3.stop();
+      };
+    }
+  }, [loading, dot1, dot2, dot3]);
 
   async function handleLogin() {
     if (!email || !password) {
@@ -159,7 +200,15 @@ export default function LoginScreen() {
               activeOpacity={0.85}
             >
               {loading ? (
-                <ActivityIndicator color={Colors.white} />
+                <View style={styles.btnLoadingInner}>
+                  <ActivityIndicator color={Colors.white} size="small" />
+                  <Text style={styles.btnLoadingText}>Logging in</Text>
+                  <View style={styles.dotsContainer}>
+                    <Animated.View style={[styles.dot, { transform: [{ translateY: dot1 }] }]} />
+                    <Animated.View style={[styles.dot, { transform: [{ translateY: dot2 }] }]} />
+                    <Animated.View style={[styles.dot, { transform: [{ translateY: dot3 }] }]} />
+                  </View>
+                </View>
               ) : (
                 <View style={styles.btnInner}>
                   <Text style={styles.btnText}>LOG IN</Text>
@@ -327,8 +376,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45, shadowRadius: 16, elevation: 10,
     marginBottom: 16,
   },
-  btnDisabled: { backgroundColor: Colors.textMuted },
+  btnDisabled: { opacity: 0.9 },
   btnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  btnLoadingInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnLoadingText: { color: Colors.white, fontWeight: '900', fontSize: 15, letterSpacing: 1 },
+  dotsContainer: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 2, height: 12 },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.white },
+
   btnText: { color: Colors.white, fontWeight: '900', fontSize: 15, letterSpacing: 1, flex: 1, textAlign: 'center' },
   btnArrow: {
     width: 28, height: 28, borderRadius: 14,

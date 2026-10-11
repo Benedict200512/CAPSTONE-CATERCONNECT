@@ -1,14 +1,17 @@
+// app/(tabs)/notifications.tsx
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Platform, RefreshControl,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
+import { useRouter, Href } from 'expo-router'; 
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
   Bell, CheckCircle2, XCircle, CreditCard, PartyPopper,
-  Sparkles, Check, Inbox, Clock, AlertCircle
+  Sparkles, Check, Inbox, Clock, AlertCircle,
+  Star, MessageCircle, RefreshCw, AlertTriangle, ShieldCheck
 } from 'lucide-react-native';
 
 type Notification = {
@@ -26,15 +29,21 @@ const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: any }> = {
   booking_approved:     { color: '#166534', bg: '#DCFCE7', icon: CheckCircle2 },
   booking_rejected:     { color: '#DC2626', bg: '#FEE2E2', icon: XCircle },
   payment_submitted:    { color: '#D97706', bg: '#FEF3C7', icon: CreditCard },
+  downpayment_paid:     { color: '#166534', bg: '#DCFCE7', icon: ShieldCheck },
   payment_verified:     { color: '#166534', bg: '#DCFCE7', icon: CheckCircle2 },
   booking_completed:    { color: '#166534', bg: '#DCFCE7', icon: PartyPopper },
   booking_cancelled:    { color: '#4B5563', bg: '#F3F4F6', icon: XCircle },
   package_customized:   { color: '#7C3AED', bg: '#F5F3FF', icon: Sparkles },
   new_booking_request:  { color: '#D97706', bg: '#FEF3C7', icon: Bell },
+  new_message:          { color: '#2563EB', bg: '#EFF6FF', icon: MessageCircle },
+  new_review:           { color: '#F59E0B', bg: '#FEF3C7', icon: Star },
+  subscription:         { color: '#7C3AED', bg: '#F5F3FF', icon: RefreshCw },
+  downpayment_deadline: { color: '#DC2626', bg: '#FEE2E2', icon: AlertTriangle },
 };
 
 export default function NotificationsScreen() {
   const { session } = useAuth();
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +57,7 @@ export default function NotificationsScreen() {
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .limit(50);
+    
     setNotifications(data ?? []);
     setUnreadCount(data?.filter((n) => !n.is_read).length ?? 0);
     setLoading(false);
@@ -70,6 +80,28 @@ export default function NotificationsScreen() {
     setUnreadCount(0);
   };
 
+  const handleNotificationPress = async (notif: Notification) => {
+    if (!notif.is_read) {
+      await markRead(notif.id);
+    }
+
+    if (notif.type.includes('message')) {
+      router.push({
+        pathname: '/messages',
+        params: { booking_id: notif.booking_id }
+      } as Href);
+    } 
+    else if (notif.type.includes('review') || notif.type.includes('subscription')) {
+      router.push('/profile' as Href);
+    } 
+    else if (notif.booking_id) {
+      router.push({
+        pathname: '/bookings',
+        params: { id: notif.booking_id }
+      } as Href);
+    }
+  };
+
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -86,17 +118,17 @@ export default function NotificationsScreen() {
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 44 }]}>
         <View style={styles.headerLeft}>
           <View style={styles.headerIconWrap}>
-            <Bell size={22} color={Colors.orange} />
+            <Bell size={20} color={Colors.orange} />
           </View>
-          <View>
-            <Text style={styles.pageTitle}>Notifications</Text>
-            <Text style={styles.pageSub}>Updates on bookings & payments</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.pageTitle} numberOfLines={1}>Notifications</Text>
+            <Text style={styles.pageSub} numberOfLines={1}>Bookings, payments & messages</Text>
           </View>
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={markAllRead} style={styles.markAllBtn} activeOpacity={0.8}>
-            <Check size={14} color={Colors.orange} />
-            <Text style={styles.markAllText}>Mark all read</Text>
+            <Check size={13} color={Colors.orange} />
+            <Text style={styles.markAllText} numberOfLines={1}>Mark all read</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -125,17 +157,18 @@ export default function NotificationsScreen() {
                 <Inbox size={36} color={Colors.orange} />
               </View>
               <Text style={styles.emptyTitle}>No notifications yet</Text>
-              <Text style={styles.emptySub}>You'll be notified here about bookings, verified payments, and updates.</Text>
+              <Text style={styles.emptySub}>You'll be notified here about bookings, downpayments, messages, and subscription updates.</Text>
             </View>
           ) : (
             notifications.map((notif) => {
               const config = TYPE_CONFIG[notif.type] ?? { color: Colors.orange, bg: '#FFF7ED', icon: Bell };
               const IconComponent = config.icon;
+              
               return (
                 <TouchableOpacity
                   key={notif.id}
                   style={[styles.notifCard, !notif.is_read && styles.notifCardUnread]}
-                  onPress={() => { if (!notif.is_read) markRead(notif.id); }}
+                  onPress={() => handleNotificationPress(notif)}
                   activeOpacity={0.85}
                 >
                   <View style={[styles.notifIcon, { backgroundColor: config.bg }]}>
@@ -164,23 +197,24 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { 
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', 
-    paddingHorizontal: 20, paddingBottom: 16, backgroundColor: Colors.white, 
+    paddingHorizontal: 16, paddingBottom: 16, backgroundColor: Colors.white, 
     borderBottomWidth: 1, borderBottomColor: '#F3F4F6' 
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 },
   headerIconWrap: {
-    width: 44, height: 44, borderRadius: 14,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: '#FED7AA',
+    borderWidth: 1, borderColor: '#FED7AA', flexShrink: 0,
   },
-  pageTitle: { fontSize: 22, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
-  pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  headerTitleContainer: { flex: 1 },
+  pageTitle: { fontSize: 20, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 1, fontWeight: '500' },
 
   markAllBtn: { 
-    backgroundColor: '#FFF7ED', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, 
-    borderWidth: 1, borderColor: '#FED7AA', flexDirection: 'row', alignItems: 'center', gap: 6 
+    backgroundColor: '#FFF7ED', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, 
+    borderWidth: 1, borderColor: '#FED7AA', flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0
   },
-  markAllText: { fontSize: 12, fontWeight: '800', color: Colors.orange },
+  markAllText: { fontSize: 11.5, fontWeight: '800', color: Colors.orange },
 
   unreadBanner: { 
     backgroundColor: '#FEF3C7', borderBottomWidth: 1, borderBottomColor: '#FDE68A', 

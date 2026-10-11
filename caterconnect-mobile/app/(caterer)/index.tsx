@@ -1,7 +1,8 @@
+// app/(caterer)/index.tsx
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import NotificationsScreen from '../../screens/auth/NotificationsScreen';
@@ -22,41 +23,70 @@ export default function CatererDashboard() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // FIX: Also check if catererData is missing (!catererData?.id)
-  const isPendingVerification = 
-    !catererData?.id || 
-    catererData?.verification_status === 'pending' || 
-    catererData?.verification_status === 'rejected';
+  // Pulse animation for skeleton loaders
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
-    loadUnreadCount();
-    // Only load stats if the caterer has an ID and is actually approved
-    if (catererData?.id && !isPendingVerification) {
-      loadStats();
-    }
-  }, [catererData?.id, isPendingVerification]);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [shimmerAnim]);
+
+  // FIXED: Only check pending verification AFTER loading finishes to prevent UI flashing
+  const isPendingVerification = !loading && (
+    !catererData?.id || 
+    catererData?.verification_status === 'pending' || 
+    catererData?.verification_status === 'rejected'
+  );
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await loadUnreadCount();
+      if (catererData?.id && catererData?.verification_status === 'approved') {
+        await loadStats();
+      }
+      setLoading(false);
+    })();
+  }, [catererData?.id, catererData?.verification_status]);
 
   const loadStats = async () => {
-    const [total, completed, pending] = await Promise.all([
-      supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('caterer_id', catererData!.id),
-      supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('caterer_id', catererData!.id).eq('status', 'completed'),
-      supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('caterer_id', catererData!.id).eq('status', 'pending'),
-    ]);
+    try {
+      const [total, completed, pending] = await Promise.all([
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('caterer_id', catererData!.id),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('caterer_id', catererData!.id).eq('status', 'completed'),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('caterer_id', catererData!.id).eq('status', 'pending'),
+      ]);
 
-    const { data: recent } = await supabase
-      .from('bookings')
-      .select('id, status, event_date, guest_count, total_cost, profiles(full_name)')
-      .eq('caterer_id', catererData!.id)
-      .order('created_at', { ascending: false })
-      .limit(3);
+      const { data: recent } = await supabase
+        .from('bookings')
+        .select('id, status, event_date, guest_count, total_cost, profiles(full_name)')
+        .eq('caterer_id', catererData!.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
 
-    setStats({
-      total: total.count ?? 0,
-      completed: completed.count ?? 0,
-      pending: pending.count ?? 0,
-    });
-    setRecentBookings(recent ?? []);
+      setStats({
+        total: total.count ?? 0,
+        completed: completed.count ?? 0,
+        pending: pending.count ?? 0,
+      });
+      setRecentBookings(recent ?? []);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const loadUnreadCount = async () => {
@@ -70,13 +100,13 @@ export default function CatererDashboard() {
   };
 
   const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-    pending:          { bg: '#FEF3C7', color: '#92400E' },
-    confirmed:        { bg: '#DCFCE7', color: '#166534' },
+    pending:            { bg: '#FEF3C7', color: '#92400E' },
+    confirmed:          { bg: '#DCFCE7', color: '#166534' },
     awaiting_payment: { bg: '#DBEAFE', color: '#1E40AF' },
-    paid:             { bg: '#DCFCE7', color: '#166534' },
-    completed:        { bg: '#F0FDF4', color: '#166534' },
-    rejected:         { bg: '#FEE2E2', color: '#991B1B' },
-    cancelled:        { bg: '#F3F4F6', color: '#6B7280' },
+    paid:               { bg: '#DCFCE7', color: '#166534' },
+    completed:          { bg: '#F0FDF4', color: '#166534' },
+    rejected:           { bg: '#FEE2E2', color: '#991B1B' },
+    cancelled:          { bg: '#F3F4F6', color: '#6B7280' },
   };
 
   const planColors: Record<string, string> = {
@@ -100,6 +130,55 @@ export default function CatererDashboard() {
     { icon: MessageCircle, label: 'Consultations', path: '/(caterer)/consultation', bg: '#F5F3FF', color: '#7C3AED' },
   ];
 
+  // ── SKELETON LOADER UI ──
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        {/* Header Skeleton */}
+        <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
+          <View style={{ gap: 6 }}>
+            <Animated.View style={[styles.skeletonBox, { width: 100, height: 12, borderRadius: 4, opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonBox, { width: 180, height: 22, borderRadius: 6, opacity: shimmerAnim }]} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Animated.View style={[styles.skeletonBox, { width: 44, height: 44, borderRadius: 22, opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonBox, { width: 44, height: 44, borderRadius: 22, opacity: shimmerAnim }]} />
+          </View>
+        </View>
+
+        <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+          {/* Subscription Plan Banner Skeleton */}
+          <Animated.View style={[styles.skeletonBox, { width: '100%', height: 95, borderRadius: 24, opacity: shimmerAnim, marginBottom: 20 }]} />
+
+          {/* Stats Grid 2x2 Skeletons */}
+          <View style={styles.statsGrid}>
+            {[1, 2, 3, 4].map((i) => (
+              <Animated.View key={i} style={[styles.skeletonBox, { width: '48%', height: 110, borderRadius: 24, opacity: shimmerAnim, marginBottom: 12 }]} />
+            ))}
+          </View>
+
+          {/* Quick Actions Skeleton */}
+          <View style={{ marginTop: 12 }}>
+            <Animated.View style={[styles.skeletonBox, { width: 130, height: 18, borderRadius: 4, opacity: shimmerAnim, marginBottom: 16 }]} />
+            <View style={styles.actionsGrid}>
+              {[1, 2, 3, 4].map((i) => (
+                <Animated.View key={i} style={[styles.skeletonBox, { width: '48%', height: 90, borderRadius: 24, opacity: shimmerAnim, marginBottom: 12 }]} />
+              ))}
+            </View>
+          </View>
+
+          {/* Recent Bookings List Skeletons */}
+          <View style={{ marginTop: 16 }}>
+            <Animated.View style={[styles.skeletonBox, { width: 140, height: 18, borderRadius: 4, opacity: shimmerAnim, marginBottom: 16 }]} />
+            {[1, 2, 3].map((i) => (
+              <Animated.View key={i} style={[styles.skeletonBox, { width: '100%', height: 80, borderRadius: 20, opacity: shimmerAnim, marginBottom: 12 }]} />
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <>
       <Modal visible={showNotifs} animationType="slide" presentationStyle="pageSheet">
@@ -115,9 +194,9 @@ export default function CatererDashboard() {
 
       <View style={styles.container}>
         <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 56 : 40 }]}>
-          <View style={{ flex: 1, paddingRight: 12 }}>
+          <View style={{ flex: 1, paddingRight: 12, flexShrink: 1 }}>
             <Text style={styles.headerGreeting}>Welcome back,</Text>
-            <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.headerName}>{displayName}</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity style={styles.notifBtn} onPress={() => setShowNotifs(true)}>
@@ -297,6 +376,7 @@ export default function CatererDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
+  skeletonBox: { backgroundColor: '#E5E7EB' },
   closeNotifBtn: {
     position: 'absolute', bottom: 40, alignSelf: 'center',
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -316,7 +396,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerGreeting: { fontSize: 14, color: Colors.textSecondary, marginBottom: 2 },
-  headerName: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
+  headerName: { fontSize: 22, fontWeight: '800', color: Colors.black, letterSpacing: -0.5, lineHeight: 26 },
   headerRight: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   notifBtn: {
     width: 44, height: 44, borderRadius: 22,
@@ -433,7 +513,7 @@ const styles = StyleSheet.create({
   recentBookingLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
   recentBookingAvatar: {
     width: 48, height: 48, borderRadius: 24,
-    backgroundColor: Colors.orangeLight,
+    backgroundColor: '#FFF7ED',
     justifyContent: 'center', alignItems: 'center',
   },
   recentBookingAvatarText: { fontSize: 18, fontWeight: '800', color: Colors.orange },

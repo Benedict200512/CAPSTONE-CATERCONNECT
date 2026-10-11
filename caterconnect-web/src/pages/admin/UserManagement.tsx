@@ -1,19 +1,26 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Users, Search, Eye, Ban, X, Store, Loader2, Mail, Hash, CalendarDays, ShieldAlert } from 'lucide-react';
+import { Users, Search, Eye, Ban, X, Store, Loader2, Mail, Hash, CalendarDays, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 type User = {
-  id: string; full_name: string; email: string; role: string;
-  created_at: string; avatar_url?: string | null;
+  id: string; 
+  full_name: string; 
+  email: string; 
+  role: string;
+  created_at: string; 
+  avatar_url?: string | null;
+  status?: string;
 };
 
 export default function UserManagement() {
-  const [users, setUsers]     = useState<User[]>([]);
+  const [users, setUsers]    = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState('all');
   const [search, setSearch]   = useState('');
   const [selected, setSelected] = useState<User & { logo_url?: string; caterer_info?: any } | null>(null);
   const [counts, setCounts]   = useState<Record<string, number>>({});
+  const [confirmSuspend, setConfirmSuspend] = useState<User | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -48,6 +55,30 @@ export default function UserManagement() {
       extra = { caterer_info: data };
     }
     setSelected({ ...u, ...extra });
+  };
+
+  const handleSuspendAccount = async () => {
+    if (!confirmSuspend) return;
+    setActionLoading(true);
+
+    const newStatus = confirmSuspend.status === 'suspended' ? 'active' : 'suspended';
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ status: newStatus })
+      .eq('id', confirmSuspend.id);
+
+    if (error) {
+      alert('Failed to update account status: ' + error.message);
+    } else {
+      setUsers(users.map(u => u.id === confirmSuspend.id ? { ...u, status: newStatus } : u));
+      if (selected && selected.id === confirmSuspend.id) {
+        setSelected({ ...selected, status: newStatus });
+      }
+    }
+
+    setActionLoading(false);
+    setConfirmSuspend(null);
   };
 
   const filtered = users.filter(u =>
@@ -144,64 +175,75 @@ export default function UserManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((u, i) => (
-                  <tr key={u.id} style={{ borderBottom: i === filtered.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.2s ease' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                        {u.avatar_url ? (
-                          <img src={u.avatar_url} alt={u.full_name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '1px solid #E5E7EB', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }} />
-                        ) : (
-                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: roleBg[u.role] ?? '#F3F4F6', border: `1px solid ${roleBorder[u.role] ?? '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: roleColor[u.role] ?? '#6B7280', fontSize: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                            {(u.full_name ?? 'U').charAt(0).toUpperCase()}
+                {filtered.map((u, i) => {
+                  const isSuspended = u.status === 'suspended';
+                  return (
+                    <tr key={u.id} style={{ borderBottom: i === filtered.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.2s ease', background: isSuspended ? '#FEF2F2' : 'transparent' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = isSuspended ? '#FEE2E2' : '#F9FAFB')}
+                      onMouseLeave={e => (e.currentTarget.style.background = isSuspended ? '#FEF2F2' : 'transparent')}>
+                      <td style={{ padding: '20px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt={u.full_name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '1px solid #E5E7EB', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }} />
+                          ) : (
+                            <div style={{ width: 44, height: 44, borderRadius: '50%', background: roleBg[u.role] ?? '#F3F4F6', border: `1px solid ${roleBorder[u.role] ?? '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: roleColor[u.role] ?? '#6B7280', fontSize: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                              {(u.full_name ?? 'U').charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {u.full_name ?? '—'}
+                              {isSuspended && (
+                                <span style={{ background: '#FEE2E2', color: '#DC2626', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6, border: '1px solid #FECACA' }}>
+                                  SUSPENDED
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'monospace', background: '#F3F4F6', padding: '2px 6px', borderRadius: 6, display: 'inline-block' }}>ID: {u.id.slice(0, 10)}</div>
                           </div>
-                        )}
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>{u.full_name ?? '—'}</div>
-                          <div style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'monospace', background: '#F3F4F6', padding: '2px 6px', borderRadius: 6, display: 'inline-block' }}>ID: {u.id.slice(0, 10)}</div>
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ fontSize: 14, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Mail size={14} color="#9CA3AF" /> {u.email}
+                      </td>
+                      <td style={{ padding: '20px 24px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ fontSize: 14, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Mail size={14} color="#9CA3AF" /> {u.email}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <CalendarDays size={14} color="#9CA3AF" /> Joined {u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 12, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <CalendarDays size={14} color="#9CA3AF" /> Joined {u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, textTransform: 'capitalize', background: roleBg[u.role] ?? '#F3F4F6', color: roleColor[u.role] ?? '#6B7280', border: `1px solid ${roleBorder[u.role] ?? '#E5E7EB'}` }}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', gap: 10 }}>
-                        <button 
-                          onClick={() => handleViewUser(u)} 
-                          style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#4B5563', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#F9FAFB'; e.currentTarget.style.borderColor = '#D1D5DB'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E5E7EB'; }}
-                        >
-                          <Eye size={16} /> Profile
-                        </button>
-                        
-                        {u.role !== 'admin' && (
+                      </td>
+                      <td style={{ padding: '20px 24px' }}>
+                        <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, textTransform: 'capitalize', background: roleBg[u.role] ?? '#F3F4F6', color: roleColor[u.role] ?? '#6B7280', border: `1px solid ${roleBorder[u.role] ?? '#E5E7EB'}` }}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td style={{ padding: '20px 24px' }}>
+                        <div style={{ display: 'flex', gap: 10 }}>
                           <button 
-                            style={{ background: '#FFF5F5', border: '1px solid #FEE2E2', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; e.currentTarget.style.borderColor = '#FECACA'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#FFF5F5'; e.currentTarget.style.borderColor = '#FEE2E2'; }}
+                            onClick={() => handleViewUser(u)} 
+                            style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#4B5563', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#F9FAFB'; e.currentTarget.style.borderColor = '#D1D5DB'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E5E7EB'; }}
                           >
-                            <Ban size={16} /> Suspend
+                            <Eye size={16} /> Profile
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          
+                          {u.role !== 'admin' && (
+                            <button 
+                              onClick={() => setConfirmSuspend(u)}
+                              style={{ background: isSuspended ? '#DC2626' : '#FFF5F5', border: '1px solid #FEE2E2', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: isSuspended ? '#FFFFFF' : '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}
+                              onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
+                              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                            >
+                              <Ban size={16} /> {isSuspended ? 'Unsuspend' : 'Suspend'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -301,13 +343,48 @@ export default function UserManagement() {
               {/* Action Footer */}
               {selected.role !== 'admin' && (
                 <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid #F3F4F6' }}>
-                  <button style={{ width: '100%', padding: '14px', background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', borderRadius: 14, fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', transition: 'all 0.2s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; }}>
-                    <ShieldAlert size={18} /> Suspend Platform Access
+                  <button 
+                    onClick={() => setConfirmSuspend(selected)}
+                    style={{ width: '100%', padding: '14px', background: selected.status === 'suspended' ? '#111' : '#FEF2F2', border: `1px solid ${selected.status === 'suspended' ? '#111' : '#FECACA'}`, color: selected.status === 'suspended' ? '#FFF' : '#DC2626', borderRadius: 14, fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', transition: 'all 0.2s' }}>
+                    <ShieldAlert size={18} /> {selected.status === 'suspended' ? 'Unsuspend Platform Access' : 'Suspend Platform Access'}
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Alert Modal */}
+      {confirmSuspend && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(17, 17, 17, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 20 }} onClick={() => setConfirmSuspend(null)}>
+          <div style={{ background: '#FFFFFF', width: '100%', maxWidth: 420, borderRadius: 24, padding: 32, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', textAlign: 'center', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <AlertTriangle size={28} color="#DC2626" />
+            </div>
+            
+            <h3 style={{ fontSize: 20, fontWeight: 900, color: '#111', marginBottom: 8 }}>
+              {confirmSuspend.status === 'suspended' ? 'Unsuspend Account?' : 'Suspend Account?'}
+            </h3>
+            
+            <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5, marginBottom: 24 }}>
+              Are you sure you want to {confirmSuspend.status === 'suspended' ? 'restore platform access for' : 'suspend platform access for'} <strong style={{ color: '#111' }}>{confirmSuspend.full_name}</strong> ({confirmSuspend.email})?
+            </p>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button 
+                onClick={() => setConfirmSuspend(null)}
+                style={{ flex: 1, padding: '12px', background: '#F3F4F6', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              
+              <button 
+                onClick={handleSuspendAccount}
+                disabled={actionLoading}
+                style={{ flex: 1, padding: '12px', background: confirmSuspend.status === 'suspended' ? '#16A34A' : '#DC2626', border: 'none', color: '#FFFFFF', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {actionLoading && <Loader2 size={16} className="animate-spin" />}
+                {confirmSuspend.status === 'suspended' ? 'Yes, Unsuspend' : 'Yes, Suspend'}
+              </button>
             </div>
           </div>
         </div>

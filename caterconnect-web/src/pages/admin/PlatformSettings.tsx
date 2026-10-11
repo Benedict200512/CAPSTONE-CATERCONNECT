@@ -8,12 +8,13 @@ export default function PlatformSettings() {
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [msg, setMsg] = useState('');
 
+  const load = async () => {
+    const { data } = await supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false });
+    setStaffList(data ?? []);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false });
-      setStaffList(data ?? []);
-      setLoading(false);
-    };
     load();
   }, []);
 
@@ -25,10 +26,10 @@ export default function PlatformSettings() {
   };
 
   const planDetails = [
-    { plan: 'Free',     price: 0,   bookings: 5,  packages: 3,    color: '#6B7280', bg: '#F3F4F6', border: '#E5E7EB', accent: 'linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)' },
-    { plan: 'Basic',    price: 299, bookings: 20, packages: null, color: '#2563EB', bg: '#DBEAFE', border: '#BFDBFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)' },
-    { plan: 'Standard', price: 499, bookings: 50, packages: null, color: '#D97706', bg: '#FEF3C7', border: '#FDE68A', accent: 'linear-gradient(135deg, #D97706 0%, #FBBF24 100%)' },
-    { plan: 'Premium',  price: 999, bookings: null, packages: null, color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)' },
+    { plan: 'Free',    price: 0,   bookings: 5,  packages: 3,    color: '#6B7280', bg: '#F3F4F6', border: '#E5E7EB', accent: 'linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)' },
+    { plan: 'Basic',   price: 299, bookings: 20, packages: null, color: '#2563EB', bg: '#DBEAFE', border: '#BFDBFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)' },
+    { plan: 'Standard',price: 499, bookings: 50, packages: null, color: '#D97706', bg: '#FEF3C7', border: '#FDE68A', accent: 'linear-gradient(135deg, #D97706 0%, #FBBF24 100%)' },
+    { plan: 'Premium', price: 999, bookings: null, packages: null, color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)' },
   ];
 
   return (
@@ -165,7 +166,7 @@ export default function PlatformSettings() {
         </span>
       </div>
 
-      {/* Add Staff Modal */}
+      {/* Add Staff Guide Modal */}
       {showAddStaff && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(17, 17, 17, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }} onClick={() => setShowAddStaff(false)}>
           <div style={{ background: '#FFFFFF', width: '100%', maxWidth: 540, borderRadius: 24, padding: 32, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
@@ -177,23 +178,14 @@ export default function PlatformSettings() {
             </div>
             
             <p style={{ fontSize: 14, color: '#4B5563', marginBottom: 20, lineHeight: 1.6 }}>
-              To guarantee secure account creation, credentials must first be generated inside the <strong>Supabase Auth Dashboard</strong>. Once created, execute the following SQL script to link their profile role:
+              To ensure maximum security, staff credentials are created securely inside your <strong>Supabase Auth Dashboard</strong>. Follow these steps:
             </p>
-            
-            <div style={{ background: '#111827', borderRadius: 14, padding: 20, marginBottom: 24, overflowX: 'auto', border: '1px solid #374151' }}>
-              <pre style={{ fontSize: 13, color: '#34D399', lineHeight: 1.6, margin: 0, fontFamily: 'monospace' }}>
-{`INSERT INTO profiles (id, full_name, email, role)
-VALUES (
-  'PASTE-UUID-FROM-AUTH',
-  'Staff Full Name',
-  'staff@email.com',
-  'staff'
-)
-ON CONFLICT (id)
-DO UPDATE SET role = 'staff',
-  full_name = EXCLUDED.full_name;`}
-              </pre>
-            </div>
+
+            <ol style={{ fontSize: 13.5, color: '#374151', paddingLeft: 20, lineHeight: 1.6, marginBottom: 20 }}>
+              <li>Go to <strong>Authentication &gt; Users</strong> in Supabase and click <strong>Add User</strong>.</li>
+              <li>Create the user (make sure <strong>Auto Confirm</strong> is checked).</li>
+              <li>Go to the <strong>Table Editor &gt; profiles</strong> table and update their role column to <code style={{ background: '#F3F4F6', padding: '2px 6px', borderRadius: 4, color: '#F97316' }}>staff</code>.</li>
+            </ol>
 
             <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', background: '#111', color: '#FFF', borderRadius: 14, fontWeight: 800, fontSize: 14, textDecoration: 'none', transition: 'background 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}

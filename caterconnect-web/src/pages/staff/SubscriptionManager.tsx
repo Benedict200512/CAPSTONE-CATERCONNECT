@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { 
   CreditCard, Search, Clock, 
   AlertCircle, CheckCircle2, Building2,
-  X, Loader2, DollarSign, RefreshCw 
+  X, Loader2, DollarSign, RefreshCw, Send 
 } from 'lucide-react';
 
 type Payment = {
@@ -44,6 +44,7 @@ export default function SubscriptionManager() {
   const [tab, setTab]              = useState<'caterers' | 'expiring' | 'payments'>('caterers');
   const [search, setSearch]        = useState('');
   const [planFilter, setPlanFilter] = useState('all');
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
 
   const loadPayments = async () => {
     const { data, error } = await supabase
@@ -105,6 +106,32 @@ export default function SubscriptionManager() {
       setLoading(false);
     })();
   }, []);
+
+  const handleNotifyCaterer = async (caterer: Caterer & { daysLeft: number }) => {
+    if (!caterer.user_id) return;
+    try {
+      setNotifyingId(caterer.id);
+      const message = caterer.daysLeft < 0 
+        ? `Your ${caterer.subscription_plan.toUpperCase()} subscription has expired. Please renew your plan to keep your premium features active.`
+        : `Your ${caterer.subscription_plan.toUpperCase()} subscription is expiring in ${caterer.daysLeft} day(s). Please renew your subscription soon.`;
+
+      const { error } = await supabase.from('notifications').insert({
+        user_id: caterer.user_id,
+        title: 'Subscription Expiry Notice',
+        message: message,
+        type: 'subscription', // Satisfies the not-null constraint on 'type'
+        is_read: false,
+      });
+
+      if (error) throw error;
+      alert(`Successfully sent notification to ${caterer.business_name}!`);
+    } catch (err: any) {
+      console.error('Error sending notification:', err);
+      alert('Failed to send notification: ' + err.message);
+    } finally {
+      setNotifyingId(null);
+    }
+  };
 
   const planStyle = (planId: string) => PLANS.find((p) => p.id === planId) ?? PLANS[0];
 
@@ -383,8 +410,9 @@ export default function SubscriptionManager() {
               {expiringCaterers.map((c) => {
                 const ps = planStyle(c.subscription_plan);
                 const isExpired = c.daysLeft < 0;
+                const isNotifying = notifyingId === c.id;
                 return (
-                  <div key={c.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E5E7EB', borderLeft: `4px solid ${isExpired ? '#DC2626' : '#F59E0B'}`, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <div key={c.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E5E7EB', borderLeft: `4px solid ${isExpired ? '#DC2626' : '#F59E0B'}`, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', flexWrap: 'wrap', gap: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       <div style={{ padding: '8px 14px', borderRadius: 10, background: ps.bg, color: ps.color, fontWeight: 900, fontSize: 13, textAlign: 'center' }}>
                         {ps.label}
@@ -400,17 +428,29 @@ export default function SubscriptionManager() {
                           )}
                           <span style={{ fontSize: 16, fontWeight: 900, color: '#111' }}>{c.business_name}</span>
                         </div>
-                        <div style={{ fontSize: 13, color: '#6B7280', display: 'flex', gap: 12 }}>
+                        <div style={{ fontSize: 13, color: '#6B7280', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                           <span>{(c.profiles as any)?.email ?? ''}</span>
                           <span>•</span>
                           <span>Expires {new Date(c.subscription_expires_at!).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                       </div>
                     </div>
-                    <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: isExpired ? '#FEE2E2' : '#FEF3C7', color: isExpired ? '#991B1B' : '#92400E', border: `1px solid ${isExpired ? '#FECACA' : '#FDE68A'}` }}>
                         {isExpired ? `Expired ${Math.abs(c.daysLeft)} days ago` : c.daysLeft === 0 ? 'Expires today' : `${c.daysLeft} days left`}
                       </span>
+                      <button
+                        onClick={() => handleNotifyCaterer(c)}
+                        disabled={isNotifying}
+                        style={{
+                          background: '#F97316', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: 10,
+                          fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                          opacity: isNotifying ? 0.7 : 1, transition: 'background 0.2s'
+                        }}
+                      >
+                        {isNotifying ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        Notify Caterer
+                      </button>
                     </div>
                   </div>
                 );

@@ -11,13 +11,14 @@ type XenditPaymentOptions = {
   customerName: string;
   customerEmail: string;
   description: string;
+  paymentMethod?: string;
 };
 
 type PaymentResult = {
   success: boolean;
   checkoutUrl?: string;
   webUrl?: string;
-  chargeId?: string;
+  chargeId?: string; // Stores the Xendit Invoice ID
   error?: string;
 };
 
@@ -61,6 +62,9 @@ export async function initiateGCashPayment(
   }
 }
 
+// Optional alias if you prefer calling it initiateXenditPayment
+export const initiateXenditPayment = initiateGCashPayment;
+
 async function pollChargeStatus(
   chargeId: string,
   maxAttempts = 24,
@@ -88,8 +92,8 @@ async function pollChargeStatus(
       const data = await res.json();
       console.log(`Poll ${i + 1}/${maxAttempts} — status: ${data.status}`);
 
-      if (data.status === 'SUCCEEDED') return 'SUCCEEDED';
-      if (data.status === 'FAILED' || data.status === 'VOIDED') return 'FAILED';
+      if (data.status === 'SUCCEEDED' || data.status === 'PAID') return 'SUCCEEDED';
+      if (data.status === 'FAILED' || data.status === 'VOIDED' || data.status === 'EXPIRED') return 'FAILED';
     } catch (err) {
       console.warn('Poll error (will retry):', err);
     }
@@ -104,21 +108,14 @@ export async function openGCashCheckout(
   webUrl?: string
 ): Promise<'success' | 'failed' | 'cancelled'> {
   try {
-    // Open browser with checkout URL
-    // On Android this opens a Chrome Custom Tab
-    // On iOS this opens an in-app Safari
+    // Open Xendit hosted checkout browser tab (supports GCash, Maya, Cards, Online Banking)
     await WebBrowser.openBrowserAsync(checkoutUrl, {
       showTitle:             false,
-      toolbarColor:        '#F97316',
+      toolbarColor:         '#F97316',
       enableBarCollapsing: false,
-      presentationStyle:   WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+      presentationStyle:     WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
     });
 
-    // Browser closed — now poll for status
-    // This works because:
-    // 1. User completes payment and presses back
-    // 2. Xendit redirects to success URL and browser auto-closes
-    // 3. Either way we check the actual charge status
     console.log('Browser closed — polling for payment status...');
     const status = await pollChargeStatus(chargeId);
 
@@ -129,14 +126,12 @@ export async function openGCashCheckout(
   } catch (err: any) {
     console.error('openGCashCheckout error:', err.message);
 
-    // If the intent/deep link URL fails (GCash app not installed),
-    // fall back to web URL
     if (webUrl && checkoutUrl !== webUrl) {
       console.log('Falling back to web URL...');
       try {
         await WebBrowser.openBrowserAsync(webUrl, {
           showTitle:         false,
-          toolbarColor:      '#F97316',
+          toolbarColor:       '#F97316',
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
         });
         const status = await pollChargeStatus(chargeId);
