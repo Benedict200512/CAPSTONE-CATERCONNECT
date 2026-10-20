@@ -1,28 +1,80 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { UserPlus, CheckCircle2, AlertTriangle, ExternalLink, CreditCard, Package, Calendar, X, Loader2, Shield, Mail } from 'lucide-react';
+import { assignStaffRole } from '../../lib/profileRoles';
+import { createStaffAccount } from '../../lib/staffProvisioning';
+import { useAuth } from '../../context/AuthContext';
+import { AlertTriangle, CreditCard, Package, Calendar, Loader2, Shield, Mail, UserPlus, X, User, Lock } from 'lucide-react';
+
+type StaffAccount = { id: string; role: 'staff' | 'admin'; full_name: string | null; email: string | null; created_at: string | null };
 
 export default function PlatformSettings() {
-  const [staffList, setStaffList] = useState<any[]>([]);
+  const { profile } = useAuth();
+  const [staffList, setStaffList] = useState<StaffAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddStaff, setShowAddStaff] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  const load = async () => {
-    const { data } = await supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false });
-    setStaffList(data ?? []);
-    setLoading(false);
-  };
+  const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [confirmStaffPassword, setConfirmStaffPassword] = useState('');
+  const [creatingStaff, setCreatingStaff] = useState(false);
+  const [staffError, setStaffError] = useState('');
 
   useEffect(() => {
-    load();
+    let active = true;
+    supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false })
+      .then(({ data, error: loadError }) => {
+        if (!active) return;
+        if (loadError) setError('Unable to load staff accounts. Please refresh and try again.');
+        else setStaffList(data ?? []);
+        setLoading(false);
+      });
+    return () => { active = false; };
   }, []);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
-    await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-    setStaffList(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
-    setMsg('Role updated successfully.');
-    setTimeout(() => setMsg(''), 3000);
+    if (savingRole || profile?.role !== 'admin' || userId === profile.id) return;
+    setSavingRole(userId);
+    setMessage('');
+    setError('');
+    try {
+      const result = await assignStaffRole(userId, newRole);
+      setStaffList(previous => previous.map(account => account.id === result.id ? { ...account, role: result.role as 'staff' | 'admin' } : account));
+      setMessage('Account role updated successfully.');
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message
+        : typeof cause === 'object' && cause !== null && 'message' in cause
+          ? String(cause.message) : 'Unable to update the role. Please try again.');
+    } finally {
+      setSavingRole(null);
+    }
+  };
+
+  const handleCreateStaff = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (creatingStaff || profile?.role !== 'admin') return;
+    if (staffPassword !== confirmStaffPassword) { setStaffError('Passwords must match.'); return; }
+    if (staffPassword.length < 12 || new TextEncoder().encode(staffPassword).length > 72) { setStaffError('Use at least 12 characters and no more than 72 UTF-8 bytes.'); return; }
+    setCreatingStaff(true);
+    setStaffError('');
+    setMessage('');
+    try {
+      await createStaffAccount(fullName, email, staffPassword);
+      setFullName(''); setEmail(''); setShowAddStaff(false);
+      setMessage('Staff account created. They can sign in with their email and password.');
+      const { data, error: refreshError } = await supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false });
+      if (refreshError) setError('Staff account created, but the table could not refresh. Refresh this page; do not create it again.');
+      else { setStaffList(data ?? []); setError(''); }
+    } catch (cause: unknown) {
+      setStaffError(cause instanceof Error ? cause.message : 'Unable to create staff account. Check the account list before retrying.');
+    } finally { setStaffPassword(''); setConfirmStaffPassword(''); setCreatingStaff(false); }
+  };
+
+  const closeStaffForm = () => {
+    if (creatingStaff) return;
+    setStaffPassword(''); setConfirmStaffPassword(''); setStaffError(''); setShowAddStaff(false);
   };
 
   const planDetails = [
@@ -38,28 +90,19 @@ export default function PlatformSettings() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Platform Settings</h1>
-          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>Configure administrative access rights and view subscription tiers.</p>
+          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>View existing staff and administrator accounts and subscription tiers.</p>
         </div>
       </div>
 
-      {/* Success Notification Banner */}
-      {msg && (
-        <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 16, padding: '16px 24px', marginBottom: 28, fontSize: 14, color: '#15803D', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <CheckCircle2 size={20} color="#16A34A" /> {msg}
-        </div>
-      )}
-
       {/* Staff & Admin Section Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      {error && <p role="alert" style={{ color: '#B91C1C', marginBottom: 20 }}>{error}</p>}
+      {message && <p role="status" style={{ color: '#15803D', marginBottom: 20 }}>{message}</p>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ fontSize: 20, fontWeight: 900, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0, letterSpacing: '-0.5px' }}>
           <Shield size={22} color="#F97316" /> Staff & Admin Accounts
         </h2>
-        <button 
-          onClick={() => setShowAddStaff(true)}
-          style={{ background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, padding: '10px 18px', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)', transition: 'background 0.2s' }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#EA580C')}
-          onMouseLeave={e => (e.currentTarget.style.background = '#F97316')}
-        >
+        <button type="button" onClick={() => setShowAddStaff(true)} disabled={profile?.role !== 'admin'}
+          style={{ background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, padding: '10px 18px', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
           <UserPlus size={16} /> Add Staff Account
         </button>
       </div>
@@ -98,8 +141,11 @@ export default function PlatformSettings() {
                         <strong style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{u.full_name ?? '—'}</strong>
                       </div>
                     </td>
-                    <td style={{ padding: '18px 24px', color: '#4B5563', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, height: '100%' }}>
-                      <Mail size={14} color="#9CA3AF" /> {u.email}
+                    <td style={{ padding: '18px 24px', color: '#4B5563', fontSize: 14, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Mail size={14} color="#9CA3AF" style={{ flexShrink: 0 }} />
+                        <span>{u.email}</span>
+                      </div>
                     </td>
                     <td style={{ padding: '18px 24px' }}>
                       <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: u.role === 'admin' ? '#FFF7ED' : '#F0FDF4', color: u.role === 'admin' ? '#F97316' : '#16A34A', border: `1px solid ${u.role === 'admin' ? '#FFEDD5' : '#BBF7D0'}`, textTransform: 'capitalize' }}>
@@ -109,14 +155,13 @@ export default function PlatformSettings() {
                     <td style={{ padding: '18px 24px', fontSize: 13, color: '#6B7280', fontWeight: 500 }}>
                       {u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                     </td>
-                    <td style={{ padding: '18px 24px' }}>
-                      <select
-                        value={u.role}
-                        onChange={e => handleRoleChange(u.id, e.target.value)}
-                        style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 14px', fontSize: 13, outline: 'none', background: '#F9FAFB', color: '#111', fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
-                      >
-                        <option value="staff">Staff Member</option>
-                        <option value="admin">Platform Admin</option>
+                    <td style={{ padding: '18px 24px', verticalAlign: 'middle' }}>
+                      <select aria-label={`Permissions for ${u.full_name ?? u.email ?? 'account'}`}
+                        disabled={savingRole !== null || profile?.role !== 'admin' || u.id === profile.id}
+                        value={u.role} onChange={event => void handleRoleChange(u.id, event.target.value)}
+                        style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 14px', fontSize: 13, background: '#F9FAFB', color: '#111', fontWeight: 700 }}>
+                        <option value="admin">System Administrator</option>
+                        <option value="staff">Platform Staff</option>
                       </select>
                     </td>
                   </tr>
@@ -166,44 +211,151 @@ export default function PlatformSettings() {
         </span>
       </div>
 
-      {/* Add Staff Guide Modal */}
+      {/* Add Staff Account Modal */}
       {showAddStaff && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(17, 17, 17, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }} onClick={() => setShowAddStaff(false)}>
-          <div style={{ background: '#FFFFFF', width: '100%', maxWidth: 540, borderRadius: 24, padding: 32, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 900, color: '#111', margin: 0, letterSpacing: '-0.5px' }}>Add Administrative Staff</h2>
-              <button style={{ background: '#F3F4F6', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', color: '#4B5563', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowAddStaff(false)}>
+        <div 
+          role="presentation" 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 20 }} 
+          onClick={closeStaffForm}
+        >
+          <div 
+            role="dialog" 
+            aria-modal="true" 
+            aria-labelledby="add-staff-title" 
+            style={{ background: '#FFF', maxWidth: 480, width: '100%', borderRadius: 24, padding: 32, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} 
+            onClick={event => event.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #E5E7EB', paddingBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#FFF7ED', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserPlus size={20} />
+                </div>
+                <div>
+                  <h2 id="add-staff-title" style={{ fontSize: 18, fontWeight: 900, color: '#111', margin: 0 }}>Add Staff Account</h2>
+                  <p style={{ fontSize: 12.5, color: '#6B7280', margin: '2px 0 0' }}>Provision a new administrative or staff user</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                aria-label="Close staff account form" 
+                disabled={creatingStaff} 
+                onClick={closeStaffForm} 
+                style={{ border: '1px solid #E5E7EB', background: '#FFF', borderRadius: '50%', width: 36, height: 36, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#4B5563' }}
+              >
                 <X size={18} />
               </button>
             </div>
-            
-            <p style={{ fontSize: 14, color: '#4B5563', marginBottom: 20, lineHeight: 1.6 }}>
-              To ensure maximum security, staff credentials are created securely inside your <strong>Supabase Auth Dashboard</strong>. Follow these steps:
+
+            <p style={{ fontSize: 13.5, color: '#4B5563', lineHeight: 1.5, marginBottom: 20 }}>
+              Create a new staff account with an initial password. Existing user accounts cannot be converted. Staff will sign in through the standard portal login page.
             </p>
 
-            <ol style={{ fontSize: 13.5, color: '#374151', paddingLeft: 20, lineHeight: 1.6, marginBottom: 20 }}>
-              <li>Go to <strong>Authentication &gt; Users</strong> in Supabase and click <strong>Add User</strong>.</li>
-              <li>Create the user (make sure <strong>Auto Confirm</strong> is checked).</li>
-              <li>Go to the <strong>Table Editor &gt; profiles</strong> table and update their role column to <code style={{ background: '#F3F4F6', padding: '2px 6px', borderRadius: 4, color: '#F97316' }}>staff</code>.</li>
-            </ol>
+            <form onSubmit={handleCreateStaff} style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label htmlFor="staff-full-name" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
+                  <User size={14} color="#6B7280" /> Full Name
+                </label>
+                <input 
+                  id="staff-full-name" 
+                  required 
+                  maxLength={150} 
+                  autoComplete="name" 
+                  value={fullName} 
+                  disabled={creatingStaff} 
+                  placeholder="e.g.  Benedict Alicante"
+                  onChange={event => setFullName(event.target.value)} 
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+                />
+              </div>
 
-            <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', background: '#111', color: '#FFF', borderRadius: 14, fontWeight: 800, fontSize: 14, textDecoration: 'none', transition: 'background 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#27272A')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#111')}
-            >
-              Open Supabase Dashboard <ExternalLink size={16} />
-            </a>
+              <div>
+                <label htmlFor="staff-email" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
+                  <Mail size={14} color="#6B7280" /> Email Address
+                </label>
+                <input 
+                  id="staff-email" 
+                  type="email" 
+                  required 
+                  maxLength={254} 
+                  autoComplete="email" 
+                  value={email} 
+                  disabled={creatingStaff} 
+                  placeholder="staff@caterconnect.ph"
+                  onChange={event => setEmail(event.target.value)} 
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+                />
+              </div>
+
+              <div>
+                <label htmlFor="staff-password" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
+                  <Lock size={14} color="#6B7280" /> Password (min 12 characters)
+                </label>
+                <input 
+                  id="staff-password" 
+                  type="password" 
+                  required 
+                  minLength={12} 
+                  maxLength={72} 
+                  autoComplete="new-password" 
+                  value={staffPassword} 
+                  disabled={creatingStaff} 
+                  placeholder="••••••••••••"
+                  onChange={event => setStaffPassword(event.target.value)} 
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+                />
+              </div>
+
+              <div>
+                <label htmlFor="staff-confirm-password" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
+                  <Lock size={14} color="#6B7280" /> Confirm Password
+                </label>
+                <input 
+                  id="staff-confirm-password" 
+                  type="password" 
+                  required 
+                  minLength={12} 
+                  maxLength={72} 
+                  autoComplete="new-password" 
+                  value={confirmStaffPassword} 
+                  disabled={creatingStaff} 
+                  placeholder="••••••••••••"
+                  onChange={event => setConfirmStaffPassword(event.target.value)} 
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+                />
+              </div>
+
+              {staffError && (
+                <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', padding: '10px 14px', borderRadius: 10, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={16} /> {staffError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8, borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
+                <button 
+                  type="button" 
+                  disabled={creatingStaff} 
+                  onClick={closeStaffForm} 
+                  style={{ flex: 1, padding: '12px 16px', background: '#F3F4F6', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={creatingStaff || profile?.role !== 'admin' || !fullName.trim() || !email.trim() || !staffPassword || !confirmStaffPassword} 
+                  style={{ 
+                    flex: 1, padding: '12px 16px', background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    opacity: creatingStaff || profile?.role !== 'admin' || !fullName.trim() || !email.trim() || !staffPassword || !confirmStaffPassword ? 0.7 : 1 
+                  }}
+                >
+                  {creatingStaff ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                  {creatingStaff ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes scaleIn {
-          from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

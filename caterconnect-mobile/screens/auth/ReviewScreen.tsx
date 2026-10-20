@@ -6,7 +6,6 @@ import {
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { sendNotification } from '@/lib/notifications';
 
 type Props = {
   bookingId: string;
@@ -56,7 +55,7 @@ function StarRow({
 }
 
 export default function ReviewScreen({ bookingId, catererId, catererName, onClose, onSubmitted }: Props) {
-  const { session, profile } = useAuth();
+  const { session } = useAuth();
   const [ratings, setRatings] = useState<Ratings>({
     food_quality: 0, service_quality: 0, timeliness: 0, overall: 0,
   });
@@ -94,18 +93,6 @@ export default function ReviewScreen({ bookingId, catererId, catererName, onClos
       Alert.alert('Error', error.message);
       setSubmitting(false);
       return;
-    }
-
-    // Notify caterer
-    const { data: caterer } = await supabase
-      .from('caterers').select('user_id').eq('id', catererId).single();
-    if (caterer?.user_id) {
-      await sendNotification({
-        user_id: caterer.user_id,
-        title:   '⭐ New Review Received',
-        message: `${profile?.full_name ?? 'A customer'} gave you ${avgRating} stars! Check your reviews.`,
-        type:    'booking_completed',
-      });
     }
 
     setSubmitting(false);

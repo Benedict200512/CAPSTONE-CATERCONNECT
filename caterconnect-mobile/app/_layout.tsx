@@ -1,4 +1,5 @@
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import MaintenanceGate from '@/components/MaintenanceGate';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
@@ -13,7 +14,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
-        <RootNavigator />
+        <MaintenanceGate>
+          <RootNavigator />
+        </MaintenanceGate>
       </AuthProvider>
       <StatusBar style="auto" />
     </ThemeProvider>

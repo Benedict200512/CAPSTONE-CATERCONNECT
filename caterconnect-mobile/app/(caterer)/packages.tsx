@@ -7,19 +7,23 @@ import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { isPublicationStatus, packagePublicationError, setPackagePublication, type PackagePublicationStatus } from '../../lib/packagePublication';
+import { calculatePackagePricing, formatPricingMoney, packageGuestBounds } from '../../lib/packagePricing';
 import { 
-  Plus, Edit3, Trash2, X, Check, Image as ImageIcon, 
+  Plus, Edit3, Archive, X, Check, Image as ImageIcon,
   CheckCircle2, UtensilsCrossed, PackageSearch, XCircle, 
-  DollarSign, Users
+  Users, RefreshCw, Send, Eye, EyeOff
 } from 'lucide-react-native';
 
 type Package = {
   id: string;
+  publication_status: PackagePublicationStatus;
   tier: string;
   name: string;
   description: string | null;
   price: number;
   guest_capacity: number;
+  max_guests: number;
   min_guests: number | null;
   includes: string[] | null;
   food_inclusions: string[] | null;
@@ -37,6 +41,13 @@ const ALL_EVENT_TYPES = [
   'Anniversary', 'Party', 'Reunion', 'Other',
 ];
 
+// Display thousands separators without changing the numeric value used by pricing and saving.
+const formatPackagePriceInput = (value: string): string => {
+  const [integer, ...decimal] = value.split('.');
+  const formattedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return decimal.length ? `${formattedInteger}.${decimal.join('.')}` : formattedInteger;
+};
+
 const INCLUDE_SUGGESTIONS = [
   'Buffet setup', 'Chafing dishes', 'Premium tableware',
   '2 waiters', '5 waiters', 'Free flowing drinks', 
@@ -51,6 +62,11 @@ export default function PackagesScreen() {
   const [editing, setEditing]     = useState<Package | null>(null);
   const [saving, setSaving]       = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [changingId, setChangingId] = useState<string | null>(null);
+  const [view, setView] = useState<'active' | 'archived'>('active');
+  const visiblePackages = packages.filter(pkg => view === 'archived'
+    ? pkg.publication_status === 'archived' : pkg.publication_status !== 'archived');
 
   // Form State
   const [name, setName]               = useState('');
@@ -58,7 +74,12 @@ export default function PackagesScreen() {
   const [description, setDescription] = useState('');
   const [price, setPrice]             = useState('');
   const [guestCapacity, setGuestCapacity] = useState('');
+  const [maxGuests, setMaxGuests] = useState('');
   const [minGuests, setMinGuests]     = useState('');
+  const automaticRate = (() => {
+    try { return calculatePackagePricing({ price, guest_capacity: Number(guestCapacity), min_guests: minGuests ? Number(minGuests) : null, max_guests: Number(maxGuests) }, Number(guestCapacity)).pricePerGuest; }
+    catch { return null; }
+  })();
   const [includes, setIncludes]       = useState<string[]>([]);
   const [customInclude, setCustomInclude] = useState('');
   const [eventTypes, setEventTypes]   = useState<string[]>([]);
@@ -71,14 +92,20 @@ export default function PackagesScreen() {
   const load = async () => {
     if (!catererData?.id) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('packages')
-      .select('*')
-      .eq('caterer_id', catererData.id)
-      .order('created_at', { ascending: true });
-    
-    setPackages(data ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const { data, error } = await supabase.from('packages')
+        .select('id, tier, name, description, price, guest_capacity, min_guests, max_guests, includes, food_inclusions, event_types, image_url, publication_status')
+        .eq('caterer_id', catererData.id).order('created_at', { ascending: true });
+      if (error) throw error;
+      if ((data ?? []).some(pkg => !isPublicationStatus(pkg.publication_status))) {
+        throw new Error('Package publishing setup is required. Please contact platform support.');
+      }
+      setPackages(data ?? []);
+    } catch (error) {
+      setPackages([]);
+      setLoadError(packagePublicationError(error));
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [catererData?.id]);
@@ -129,6 +156,7 @@ export default function PackagesScreen() {
     setEditing(null);
     setName(''); setTier('bronze'); setDescription('');
     setPrice(''); setGuestCapacity(''); setMinGuests('');
+    setMaxGuests('');
     setIncludes([]); setCustomInclude(''); setEventTypes([]);
     setFoodInclusions([]); setNewFood('');
     setImageUrl(null);
@@ -139,6 +167,7 @@ export default function PackagesScreen() {
     setEditing(pkg);
     setName(pkg.name); setTier(pkg.tier); setDescription(pkg.description ?? '');
     setPrice(String(pkg.price)); setGuestCapacity(String(pkg.guest_capacity)); setMinGuests(String(pkg.min_guests ?? ''));
+    setMaxGuests(String(pkg.max_guests ?? ''));
     setIncludes(pkg.includes ?? []); setEventTypes(pkg.event_types ?? []);
     setFoodInclusions(pkg.food_inclusions ?? []);
     setImageUrl(pkg.image_url ?? null); setCustomInclude(''); setNewFood('');
@@ -166,11 +195,21 @@ export default function PackagesScreen() {
   const removeFood = (item: string) => setFoodInclusions(prev => prev.filter(i => i !== item));
 
   const handleSave = async () => {
+    if (saving || changingId || loadError) return;
     if (!name.trim() || !price || !guestCapacity) {
       Alert.alert('Missing fields', 'Name, price, and guest capacity are required.');
       return;
     }
     if (!catererData?.id) return;
+
+    const limits = { price, guest_capacity: Number(guestCapacity), min_guests: minGuests ? Number(minGuests) : null, max_guests: Number(maxGuests) };
+    try {
+      packageGuestBounds(limits);
+      calculatePackagePricing(limits, limits.guest_capacity);
+    } catch (error) {
+      Alert.alert('Check package pricing', error instanceof Error ? error.message : 'Check the package guest limits.');
+      return;
+    }
 
     setSaving(true);
     const payload = {
@@ -178,41 +217,53 @@ export default function PackagesScreen() {
       name: name.trim(),
       tier,
       description: description.trim() || null,
-      price: parseFloat(price),
-      guest_capacity: parseInt(guestCapacity),
-      min_guests: minGuests ? parseInt(minGuests) : null,
+      price: Number(price),
+      guest_capacity: limits.guest_capacity,
+      min_guests: limits.min_guests,
+      max_guests: limits.max_guests,
       includes: includes.length > 0 ? includes : null,
       food_inclusions: foodInclusions.length > 0 ? foodInclusions : null,
       event_types: eventTypes.length > 0 ? eventTypes : null,
       image_url: imageUrl,
     };
 
-    if (editing) {
-      const { error } = await supabase.from('packages').update(payload).eq('id', editing.id);
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
-    } else {
-      const { error } = await supabase.from('packages').insert(payload);
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
-    }
-
-    setSaving(false);
-    setShowModal(false);
-    load();
+    try {
+      const query = editing
+        ? supabase.from('packages').update(payload).eq('id', editing.id)
+          .eq('caterer_id', catererData.id).eq('publication_status', editing.publication_status)
+        : supabase.from('packages').insert({ ...payload, publication_status: 'unpublished' });
+      const { data, error } = await query.select('id');
+      if (error) throw error;
+      if (data?.length !== 1) throw new Error('Package changed or permission was denied. Refresh and try again.');
+      setShowModal(false);
+      await load();
+    } catch (error) { Alert.alert('Package not saved', packagePublicationError(error)); }
+    finally { setSaving(false); }
   };
 
-  const handleDelete = (pkg: Package) => {
-    Alert.alert('Delete Package', `Remove "${pkg.name}"?`, [
+  const changePublication = async (pkg: Package, next: PackagePublicationStatus) => {
+    if (changingId || saving || !session?.user.id || !catererData?.id) return;
+    setChangingId(pkg.id);
+    try {
+      await setPackagePublication(pkg.id, catererData.id, session.user.id, pkg.publication_status, next);
+      await load();
+    } catch (error) {
+      Alert.alert('Package not updated', packagePublicationError(error));
+      await load();
+    } finally { setChangingId(null); }
+  };
+
+  const handleArchive = (pkg: Package) => {
+    Alert.alert('Archive Package', `Archive "${pkg.name}"? It will be hidden from new bookings. Existing accepted bookings and their history remain unchanged.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-          await supabase.from('packages').delete().eq('id', pkg.id);
-          load();
-        },
+      { text: 'Archive', onPress: () => { void changePublication(pkg, 'archived'); },
       },
     ]);
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      {/* Header */}
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <View>
           <Text style={styles.pageTitle}>My Packages</Text>
@@ -220,32 +271,57 @@ export default function PackagesScreen() {
             <Text style={styles.pageCount}>{packages.length} package{packages.length !== 1 ? 's' : ''}</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={openCreate} activeOpacity={0.85}>
-          <Plus size={18} color={Colors.white} strokeWidth={3} />
-          <Text style={styles.addBtnText}>Add</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openCreate} activeOpacity={0.85} disabled={loading || !!loadError || saving || !!changingId} accessibilityLabel="Add Package">
+          <Plus size={22} color={Colors.white} strokeWidth={3} />
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        {(['active', 'archived'] as const).map(value => {
+          const isActive = view === value;
+          return (
+            <TouchableOpacity 
+              key={value} 
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }} 
+              onPress={() => setView(value)}
+              style={styles.tabItem}
+            >
+              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                {value === 'active' ? 'Active packages' : 'Archived packages'}
+              </Text>
+              {isActive && <View style={styles.tabIndicator} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {loadError ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptySub}>{loadError}</Text>
+          <TouchableOpacity onPress={() => void load()}><Text style={{ color: Colors.orange, fontWeight: '700' }}>Retry</Text></TouchableOpacity>
+        </View>
+      ) : loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={Colors.orange} size="large" />
         </View>
-      ) : packages.length === 0 ? (
+      ) : visiblePackages.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIconWrap}>
             <PackageSearch size={48} color={Colors.orange} strokeWidth={1.5} />
           </View>
-          <Text style={styles.emptyTitle}>No packages yet</Text>
-          <Text style={styles.emptySub}>Create your first catering package to start receiving bookings.</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={openCreate} activeOpacity={0.85}>
-            <Plus size={20} color={Colors.white} />
-            <Text style={styles.emptyBtnText}>Create Package</Text>
+          <Text style={styles.emptyTitle}>{view === 'archived' ? 'No archived packages' : 'No active packages'}</Text>
+          <Text style={styles.emptySub}>New packages start unpublished. Publish a package when it is ready for customer bookings.</Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={openCreate} activeOpacity={0.85} accessibilityLabel="Create Package">
+            <Plus size={22} color={Colors.white} />
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 20, gap: 20 }} showsVerticalScrollIndicator={false}>
-          {packages.map((pkg) => {
+          {visiblePackages.map((pkg) => {
             const tierColor = TIER_COLORS[pkg.tier] ?? Colors.orange;
+            const isPublished = pkg.publication_status === 'published';
 
             return (
               <View key={pkg.id} style={styles.pkgCard}>
@@ -264,13 +340,39 @@ export default function PackagesScreen() {
 
                 <View style={styles.pkgContent}>
                   <View style={styles.pkgHeaderRow}>
-                    <Text style={styles.pkgName} numberOfLines={1}>{pkg.name}</Text>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.pkgName} numberOfLines={1}>{pkg.name}</Text>
+                      <View style={styles.statusPillContainer}>
+                        <View style={[styles.statusDot, { backgroundColor: isPublished ? '#10B981' : '#94A3B8' }]} />
+                        <Text style={[styles.statusPillText, { color: isPublished ? '#047857' : '#64748B' }]}>
+                          {pkg.publication_status.charAt(0).toUpperCase() + pkg.publication_status.slice(1)}
+                        </Text>
+                      </View>
+                    </View>
+
                     <View style={styles.pkgActions}>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(pkg)}>
-                        <Edit3 size={18} color={Colors.textSecondary} />
+                      <TouchableOpacity accessibilityLabel={`Edit ${pkg.name}`} disabled={saving || !!changingId} style={styles.actionBtn} onPress={() => openEdit(pkg)}>
+                        <Edit3 size={16} color={Colors.textSecondary} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionBtnDelete} onPress={() => handleDelete(pkg)}>
-                        <Trash2 size={18} color={Colors.error} />
+                      {pkg.publication_status !== 'archived' && (
+                        <TouchableOpacity accessibilityLabel={`Archive ${pkg.name}`} disabled={saving || !!changingId} style={styles.actionBtnDelete} onPress={() => handleArchive(pkg)}>
+                          <Archive size={16} color={Colors.orange} />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity 
+                        accessibilityRole="button" 
+                        accessibilityLabel={isPublished ? 'Unpublish' : pkg.publication_status === 'archived' ? 'Restore as unpublished' : 'Publish'}
+                        disabled={saving || !!changingId}
+                        style={styles.actionBtnView}
+                        onPress={() => void changePublication(pkg, isPublished || pkg.publication_status === 'archived' ? 'unpublished' : 'published')}
+                      >
+                        {changingId === pkg.id ? (
+                          <ActivityIndicator size="small" color={Colors.orange} />
+                        ) : isPublished ? (
+                          <EyeOff size={16} color={Colors.orange} />
+                        ) : (
+                          <Eye size={16} color={Colors.orange} />
+                        )}
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -279,7 +381,7 @@ export default function PackagesScreen() {
 
                   <View style={[styles.metricsRow, { backgroundColor: tierColor + '10' }]}>
                     <View style={styles.metric}>
-                      <DollarSign size={16} color={tierColor} />
+                      <Text style={{ color: tierColor, fontSize: 16, fontWeight: '700' }}>₱</Text>
                       <View>
                         <Text style={styles.metricValue}>₱{pkg.price.toLocaleString()}</Text>
                         <Text style={styles.metricLabel}>Total Base</Text>
@@ -290,14 +392,13 @@ export default function PackagesScreen() {
                       <Users size={16} color={tierColor} />
                       <View>
                         <Text style={styles.metricValue}>{pkg.guest_capacity}</Text>
-                        <Text style={styles.metricLabel}>Max Guests</Text>
+                        <Text style={styles.metricLabel}>Included guests</Text>
                       </View>
                     </View>
                   </View>
 
                   {((pkg.includes && pkg.includes.length > 0) || (pkg.food_inclusions && pkg.food_inclusions.length > 0)) && (
                     <View style={styles.pkgPreviewData}>
-                      
                       {pkg.food_inclusions && pkg.food_inclusions.length > 0 && (
                         <View style={styles.previewSection}>
                           <Text style={styles.previewLabel}>FOOD INCLUDED</Text>
@@ -335,7 +436,6 @@ export default function PackagesScreen() {
                           </View>
                         </View>
                       )}
-
                     </View>
                   )}
                 </View>
@@ -350,7 +450,7 @@ export default function PackagesScreen() {
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>{editing ? 'Edit Package' : 'New Package'}</Text>
-          <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowModal(false)} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowModal(false)} activeOpacity={0.8} accessibilityLabel="Close Modal">
             <X size={20} color={Colors.black} />
           </TouchableOpacity>
         </View>
@@ -370,6 +470,7 @@ export default function PackagesScreen() {
               onPress={handlePickImage}
               disabled={uploadingImage}
               activeOpacity={0.85}
+              accessibilityLabel="Upload cover photo"
             >
               {uploadingImage ? (
                 <View style={styles.photoPickerContent}>
@@ -431,13 +532,19 @@ export default function PackagesScreen() {
             <Text style={styles.sectionTitle}>PRICING & GUESTS</Text>
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Base Price (₱) *</Text>
-                <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={Colors.textMuted} value={price} onChangeText={setPrice} keyboardType="numeric" />
+                <Text style={styles.inputLabel}>Package Price (₱) *</Text>
+                <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={Colors.textMuted} value={formatPackagePriceInput(price)} onChangeText={(value) => setPrice(value.replace(/,/g, ''))} keyboardType="numeric" />
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Max Guests *</Text>
+                <Text style={styles.inputLabel}>Included Guest Capacity *</Text>
                 <TextInput style={styles.input} placeholder="100" placeholderTextColor={Colors.textMuted} value={guestCapacity} onChangeText={setGuestCapacity} keyboardType="numeric" />
               </View>
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Maximum Guests *</Text>
+              <TextInput accessibilityLabel="Maximum guests" style={styles.input} placeholder="e.g. 150" placeholderTextColor={Colors.textMuted} value={maxGuests} onChangeText={setMaxGuests} keyboardType="number-pad" />
+              <Text style={styles.sectionSub}>Guests above the included capacity are priced automatically using package price ÷ included capacity. No manual extra-guest fee.</Text>
+              {automaticRate !== null && <Text style={styles.sectionSub}>Automatic rate: ₱{formatPricingMoney(automaticRate)} per extra guest (display rounded). The extra-guest subtotal is rounded after multiplication.</Text>}
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Min Guests (Optional)</Text>
@@ -463,7 +570,7 @@ export default function PackagesScreen() {
                 onSubmitEditing={addFood}
                 returnKeyType="done"
               />
-              <TouchableOpacity style={styles.customAddBtn} onPress={addFood}>
+              <TouchableOpacity style={styles.customAddBtn} onPress={addFood} accessibilityLabel="Add Food Item">
                 <Plus size={20} color={Colors.white} />
               </TouchableOpacity>
             </View>
@@ -474,7 +581,7 @@ export default function PackagesScreen() {
                   <View key={i} style={[styles.selectedPill, { backgroundColor: '#FFF7ED', borderColor: '#FFEDD5' }]}>
                     <UtensilsCrossed size={14} color={Colors.orange} />
                     <Text style={[styles.selectedPillText, { color: Colors.orange }]}>{food}</Text>
-                    <TouchableOpacity onPress={() => removeFood(food)} style={{ padding: 2 }}>
+                    <TouchableOpacity onPress={() => removeFood(food)} style={{ padding: 2 }} accessibilityLabel={`Remove ${food}`}>
                       <XCircle size={16} color={Colors.orange} opacity={0.6} />
                     </TouchableOpacity>
                   </View>
@@ -500,7 +607,7 @@ export default function PackagesScreen() {
                 onSubmitEditing={addCustomInclude}
                 returnKeyType="done"
               />
-              <TouchableOpacity style={[styles.customAddBtn, { backgroundColor: Colors.success }]} onPress={addCustomInclude}>
+              <TouchableOpacity style={[styles.customAddBtn, { backgroundColor: Colors.success }]} onPress={addCustomInclude} accessibilityLabel="Add Custom Inclusion">
                 <Plus size={20} color={Colors.white} />
               </TouchableOpacity>
             </View>
@@ -511,7 +618,7 @@ export default function PackagesScreen() {
                   <View key={i} style={styles.selectedPill}>
                     <Check size={14} color={Colors.success} />
                     <Text style={styles.selectedPillText}>{inc}</Text>
-                    <TouchableOpacity onPress={() => removeInclude(inc)} style={{ padding: 2 }}>
+                    <TouchableOpacity onPress={() => removeInclude(inc)} style={{ padding: 2 }} accessibilityLabel={`Remove ${inc}`}>
                       <XCircle size={16} color={Colors.textMuted} />
                     </TouchableOpacity>
                   </View>
@@ -524,7 +631,7 @@ export default function PackagesScreen() {
               {INCLUDE_SUGGESTIONS.map(item => {
                 if (includes.includes(item)) return null;
                 return (
-                  <TouchableOpacity key={item} style={styles.suggestionPill} onPress={() => toggleInclude(item)}>
+                  <TouchableOpacity key={item} style={styles.suggestionPill} onPress={() => toggleInclude(item)} accessibilityLabel={`Add suggestion ${item}`}>
                     <Plus size={14} color={Colors.textSecondary} />
                     <Text style={styles.suggestionPillText}>{item}</Text>
                   </TouchableOpacity>
@@ -545,6 +652,7 @@ export default function PackagesScreen() {
                     style={[styles.eventChip, isActive && styles.eventChipActive]}
                     onPress={() => toggleEventType(et)}
                     activeOpacity={0.85}
+                    accessibilityLabel={`Select event type ${et}`}
                   >
                     <Text style={[styles.eventChipText, isActive && styles.eventChipTextActive]}>{et}</Text>
                   </TouchableOpacity>
@@ -558,8 +666,13 @@ export default function PackagesScreen() {
             onPress={handleSave}
             disabled={saving}
             activeOpacity={0.88}
+            accessibilityLabel={editing ? 'Save Changes' : 'Create Package'}
           >
-            {saving ? <ActivityIndicator color="white" /> : <Text style={styles.saveBtnText}>{editing ? 'Save Changes' : 'Create Package'}</Text>}
+            {saving ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Send size={22} color={Colors.white} />
+            )}
           </TouchableOpacity>
           
         </ScrollView>
@@ -571,28 +684,57 @@ export default function PackagesScreen() {
 const styles = StyleSheet.create({
   header: { 
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', 
-    paddingHorizontal: 24, paddingBottom: 20, 
+    paddingHorizontal: 20, paddingBottom: 16, 
     backgroundColor: Colors.white, 
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
     zIndex: 10
   },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageTitle: { fontSize: 24, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
   pageCount: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
   addBtn: { 
-    flexDirection: 'row', alignItems: 'center', gap: 6, 
-    backgroundColor: Colors.orange, borderRadius: 24, 
-    paddingHorizontal: 16, paddingVertical: 10, 
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: Colors.orange, 
+    justifyContent: 'center', alignItems: 'center',
     shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 
   },
-  addBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
   
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  tabItem: {
+    paddingVertical: 14,
+    marginRight: 24,
+    position: 'relative',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  tabTextActive: {
+    color: Colors.orange,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: Colors.orange,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyIconWrap: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   emptyTitle: { fontSize: 22, fontWeight: '800', color: Colors.black, marginBottom: 12 },
   emptySub: { fontSize: 15, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.orange, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 16 },
-  emptyBtnText: { color: Colors.white, fontWeight: '800', fontSize: 15 },
+  emptyBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
 
   pkgCard: { 
     backgroundColor: Colors.white, borderRadius: 24, 
@@ -610,23 +752,44 @@ const styles = StyleSheet.create({
   tierText: { color: Colors.white, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
   
   pkgContent: { padding: 20 },
-  pkgHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  pkgName: { flex: 1, fontSize: 20, fontWeight: '900', color: Colors.black, letterSpacing: -0.5, paddingRight: 12 },
-  pkgActions: { flexDirection: 'row', gap: 8 },
-  actionBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  actionBtnDelete: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center' },
-  pkgDesc: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20, marginBottom: 20 },
+  pkgHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  pkgName: { fontSize: 20, fontWeight: '900', color: Colors.black, letterSpacing: -0.5, marginBottom: 4 },
   
-  metricsRow: { flexDirection: 'row', borderRadius: 16, padding: 16, marginBottom: 20 },
+  statusPillContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  pkgActions: { flexDirection: 'row', gap: 6 },
+  actionBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  actionBtnDelete: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center' },
+  actionBtnView: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  pkgDesc: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20, marginBottom: 16 },
+  
+  metricsRow: { flexDirection: 'row', borderRadius: 16, padding: 16, marginBottom: 16 },
   metric: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   metricDivider: { width: 1, height: '100%', backgroundColor: 'rgba(0,0,0,0.05)', marginHorizontal: 12 },
   metricValue: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 2 },
   metricLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
 
-  pkgPreviewData: { gap: 16 },
-  previewSection: { gap: 8 },
+  pkgPreviewData: { gap: 14 },
+  previewSection: { gap: 6 },
   previewLabel: { fontSize: 10, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1.2 },
-  previewTextSub: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
   pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   previewPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9' },
   previewPillText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
@@ -680,6 +843,16 @@ const styles = StyleSheet.create({
   eventChipText: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
   eventChipTextActive: { color: Colors.orange },
 
-  saveBtn: { backgroundColor: Colors.orange, borderRadius: 16, paddingVertical: 18, alignItems: 'center', shadowColor: Colors.orange, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 4 },
-  saveBtnText: { color: Colors.white, fontWeight: '900', fontSize: 16 },
+  saveBtn: { 
+    height: 56, 
+    backgroundColor: Colors.orange, 
+    borderRadius: 16, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    shadowColor: Colors.orange, 
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 12, 
+    elevation: 4 
+  },
 });

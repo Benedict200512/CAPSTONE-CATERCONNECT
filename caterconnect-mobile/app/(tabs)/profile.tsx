@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Image, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { logoutUser } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
+import { usePackageBookmarks } from '../../hooks/usePackageBookmarks';
 import { 
-  Pencil, MessageCircle, ClipboardList, ShieldAlert, 
+  Pencil, CircleHelp, ClipboardList, ShieldAlert, 
   Bell, ChevronRight, LogOut, Calendar, Heart, Info, CheckCircle2, User, Mail, Bookmark 
 } from 'lucide-react-native';
 
@@ -21,13 +22,34 @@ export default function ProfileScreen() {
   const avatarUrl = (profile as any)?.avatar_url ?? null;
 
   const [totalBookings, setTotalBookings] = useState(0);
-  const [favoritesCount, setFavoritesCount] = useState(0);
-  const [reviewCount, setReviewCount] = useState(0);
+  const savedPackages = usePackageBookmarks();
+  const reviewCustomerId = profile?.id === session?.user.id && profile?.role === 'customer'
+    ? session?.user.id ?? null : null;
+  const [reviewStats, setReviewStats] = useState<{ owner: string | null; count: number | null; loading: boolean; error: boolean }>({ owner: null, count: null, loading: false, error: false });
   const [loadingStats, setLoadingStats] = useState(true);
 
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [logoutPressed, setLogoutPressed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setReviewStats({ owner: reviewCustomerId, count: null, loading: !!reviewCustomerId, error: false });
+    if (reviewCustomerId) {
+      void (async () => {
+        try {
+          const { count, error } = await supabase.from('reviews')
+            .select('id', { count: 'exact', head: true }).eq('customer_id', reviewCustomerId);
+          if (error) throw error;
+          if (count === null) throw new Error('Review count unavailable');
+          if (active) setReviewStats({ owner: reviewCustomerId, count, loading: false, error: false });
+        } catch {
+          if (active) setReviewStats({ owner: reviewCustomerId, count: null, loading: false, error: true });
+        }
+      })();
+    }
+    return () => { active = false; };
+  }, [reviewCustomerId]));
 
   useEffect(() => {
     const fetchCustomerStats = async () => {
@@ -46,26 +68,6 @@ export default function ProfileScreen() {
         setTotalBookings(bookingCount);
       }
 
-      // 2. Fetch live favorites count
-      const { count: favCount } = await supabase
-        .from('favorites')
-        .select('*', { count: 'exact', head: true })
-        .eq('customer_id', session.user.id);
-
-      if (favCount !== null) {
-        setFavoritesCount(favCount);
-      }
-
-      // 3. Fetch live reviews count
-      const { count: revCount } = await supabase
-        .from('reviews')
-        .select('*', { count: 'exact', head: true })
-        .eq('customer_id', session.user.id);
-
-      if (revCount !== null) {
-        setReviewCount(revCount);
-      }
-
       setLoadingStats(false);
     };
 
@@ -80,11 +82,11 @@ export default function ProfileScreen() {
       onPress: () => router.push('/(tabs)/edit-profile'),
     },
     {
-      icon: MessageCircle, 
-      label: 'Consultations',
-      sub: 'Ask platform staff for help',
-      onPress: () => router.push('/(tabs)/consultation'),
-    },
+  icon: CircleHelp,
+  label: 'Help Center / FAQ',
+  sub: 'Find answers to common customer questions',
+  onPress: () => router.push('/(tabs)/faq'),
+},
     {
       icon: ClipboardList, 
       label: 'My Bookings',
@@ -200,33 +202,52 @@ export default function ProfileScreen() {
 
         {/* Unified 3-Stat Single Box Row Container */}
         <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <View style={styles.statIconWrap}>
-              <Calendar size={18} color={Colors.orange} />
-            </View>
-            <Text style={styles.statNumber}>{loadingStats ? '...' : totalBookings}</Text>
-            <Text style={styles.statLabel}>Total Bookings</Text>
-          </View>
+          
+<TouchableOpacity
+  style={styles.statCard}
+  activeOpacity={0.7}
+  accessibilityRole="button"
+  accessibilityLabel="View My Bookings"
+  onPress={() => router.push('/(tabs)/bookings')}
+>
+  <View style={styles.statIconWrap}>
+    <Calendar size={18} color={Colors.orange} />
+  </View>
+
+  <Text style={styles.statNumber}>
+    {loadingStats ? '...' : totalBookings}
+  </Text>
+
+  <Text style={styles.statLabel}>
+    Total Bookings
+  </Text>
+</TouchableOpacity>
 
           <View style={styles.statDivider} />
 
-          <View style={styles.statCard}>
+          <TouchableOpacity style={styles.statCard} accessibilityRole="button" accessibilityLabel="Open Saved Packages"
+            onPress={() => router.push('./saved-packages')}>
             <View style={[styles.statIconWrap, { backgroundColor: '#FEF3C7' }]}>
               <Bookmark size={18} color="#D97706" />
             </View>
-            <Text style={styles.statNumber}>{loadingStats ? '...' : favoritesCount}</Text>
-            <Text style={styles.statLabel}>Favorites</Text>
-          </View>
+            <Text style={styles.statNumber}>{savedPackages.loading ? '...' : savedPackages.error ? '—' : savedPackages.bookmarks.length}</Text>
+            <Text style={styles.statLabel}>Saved Packages</Text>
+            {savedPackages.error && <Text style={{ color: Colors.error, fontSize: 11 }}>Could not load · Tap to retry</Text>}
+          </TouchableOpacity>
 
           <View style={styles.statDivider} />
 
-          <View style={styles.statCard}>
+          <TouchableOpacity style={styles.statCard} activeOpacity={0.7}
+            accessibilityRole="button" accessibilityLabel="View My Reviews"
+            onPress={() => router.push('./my-reviews')}>
             <View style={[styles.statIconWrap, { backgroundColor: '#FEE2E2' }]}>
               <Heart size={18} color="#DC2626" />
             </View>
-            <Text style={styles.statNumber}>{loadingStats ? '...' : reviewCount}</Text>
+            <Text style={styles.statNumber}>{reviewCustomerId && (reviewStats.owner !== reviewCustomerId || reviewStats.loading)
+              ? '...' : reviewStats.owner === reviewCustomerId ? reviewStats.count ?? '—' : '—'}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
-          </View>
+            {reviewStats.owner === reviewCustomerId && reviewStats.error && <Text style={{ color: Colors.error, fontSize: 11 }}>Could not load · Tap to retry</Text>}
+          </TouchableOpacity>
         </View>
 
         {/* Support & Settings Menu */}

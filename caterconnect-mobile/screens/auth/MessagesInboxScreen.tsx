@@ -1,21 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator, Image, Modal, Platform,
-  ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import ChatScreen from './ChatScreen';
 import {
-  MessageSquare, ArrowLeft, Inbox, ChevronRight, Sparkles
+  MessageSquare, ChevronLeft, Inbox, ChevronRight, Sparkles, Search, X
 } from 'lucide-react-native';
 
 type Conversation = {
+  accountId: string;
   bookingId: string;
   bookingInfo: string;
   otherPersonId: string;
   otherPersonName: string;
+  participantName?: string;
   otherPersonAvatar: string | null;
   lastMessage: string;
   lastMessageTime: string;
@@ -25,23 +28,90 @@ type Conversation = {
 
 export default function MessagesInboxScreen({ onClose }: { onClose?: () => void }) {
   const { session } = useAuth();
+  const router = useRouter();
+  const { booking_id: requestedBookingId } = useLocalSearchParams<{ booking_id?: string | string[] }>();
+  const bookingId = typeof requestedBookingId === 'string' ? requestedBookingId : '';
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading]             = useState(true);
   const [openChat, setOpenChat]           = useState<Conversation | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const loadedAccount = useRef('');
+  const refreshInbox = useRef<() => void>(() => {});
 
   const myId = session?.user?.id ?? '';
+  const currentAccount = useRef(myId);
+  currentAccount.current = myId;
 
-  const loadConversations = async () => {
-    if (!myId) return;
+  useFocusEffect(useCallback(() => {
+    if (!requestedBookingId || !myId) return;
+    let active = true;
+    const isCurrent = () => active && currentAccount.current === myId;
+    setOpenChat(null);
+
+    const openRequestedBooking = async () => {
+      try {
+        // Route parameters are untrusted. Resolve ownership from the booking,
+        // not from notification text or a caller-supplied receiver ID.
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bookingId)) return;
+        const { data: booking, error } = await supabase.from('bookings')
+          .select('id, customer_id, event_date, event_type, caterers(business_name, logo_url, user_id)')
+          .eq('id', bookingId).maybeSingle();
+        if (!isCurrent() || error || !booking) return;
+        const caterer = Array.isArray(booking.caterers) ? booking.caterers[0] : booking.caterers;
+        if (!caterer?.user_id || !booking.customer_id) return;
+        const isCustomer = booking.customer_id === myId;
+        if (!isCustomer && caterer.user_id !== myId) return;
+        const receiverId = isCustomer ? caterer.user_id : booking.customer_id;
+        if (receiverId === myId) return;
+
+        let name = isCustomer ? caterer.business_name || 'Caterer' : 'Customer';
+        let avatar = isCustomer ? caterer.logo_url : null;
+        if (!isCustomer) {
+          const { data: customer, error: profileError } = await supabase.from('profiles')
+            .select('full_name, avatar_url').eq('id', receiverId).maybeSingle();
+          if (!isCurrent()) return;
+          if (!profileError && customer) {
+            name = customer.full_name || 'Customer';
+            avatar = customer.avatar_url;
+          }
+        }
+        if (!isCurrent()) return;
+        setOpenChat({
+          accountId: myId, bookingId: booking.id,
+          bookingInfo: `${booking.event_type ?? 'Event'} · ${new Date(booking.event_date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}`,
+          otherPersonId: receiverId, otherPersonName: name, otherPersonAvatar: avatar,
+          lastMessage: '', lastMessageTime: '', unreadCount: 0, isMine: false,
+        });
+      } catch {
+        // Invalid, inaccessible or failed requests leave the normal inbox open.
+      } finally {
+        if (isCurrent()) router.setParams({ booking_id: undefined });
+      }
+    };
+    void openRequestedBooking();
+    return () => { active = false; };
+  }, [bookingId, requestedBookingId, myId, router]));
+
+  const loadConversations = useCallback(async (isCurrent: () => boolean) => {
+    if (!myId || !isCurrent()) return;
+    if (loadedAccount.current !== myId) setLoading(true);
+    try {
 
     // Get distinct booking_ids I'm involved in, with last message per booking
-    const { data: msgs } = await supabase
+    const { data: msgs, error: messageError } = await supabase
       .from('messages')
       .select('id, booking_id, sender_id, receiver_id, content, is_read, created_at')
       .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`)
       .order('created_at', { ascending: false });
 
-    if (!msgs || msgs.length === 0) { setLoading(false); return; }
+    if (!isCurrent()) return;
+    if (messageError) throw messageError;
+    if (!msgs || msgs.length === 0) {
+      setConversations([]); setLoadError(null); loadedAccount.current = myId;
+      return;
+    }
 
     // Get unique booking_ids (first message per booking = latest)
     const seenBookings = new Set<string>();
@@ -59,38 +129,51 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
     );
 
     // Batch fetch profiles
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url')
       .in('id', [...new Set(otherIds)]);
+    if (!isCurrent()) return;
+    if (profileError) throw profileError;
 
     const profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
 
     // Batch fetch bookings with caterer business info
     const bookingIds = [...seenBookings];
-    const { data: bookings } = await supabase
+    const { data: bookings, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_date, event_type, caterers(business_name, logo_url, user_id)')
+      .select('id, customer_id, event_date, event_type, caterers(business_name, logo_url, user_id)')
       .in('id', bookingIds);
+    if (!isCurrent()) return;
+    if (bookingError) throw bookingError;
 
     const bookingMap = Object.fromEntries((bookings ?? []).map(b => [b.id, b]));
 
     // Batch fetch unread counts per booking
-    const { data: unreadMsgs } = await supabase
+    // Keep this separate: the latest-message response may hit the API row cap.
+    const { data: unreadMsgs, error: unreadError } = await supabase
       .from('messages')
       .select('booking_id')
       .in('booking_id', bookingIds)
       .eq('receiver_id', myId)
       .eq('is_read', false);
-
+    if (!isCurrent()) return;
+    if (unreadError) throw unreadError;
     const unreadMap: Record<string, number> = {};
     (unreadMsgs ?? []).forEach(m => {
-      unreadMap[m.booking_id] = (unreadMap[m.booking_id] ?? 0) + 1;
+      if (m.booking_id) {
+        unreadMap[m.booking_id] = (unreadMap[m.booking_id] ?? 0) + 1;
+      }
     });
 
     // Build conversations
     const convs: Conversation[] = latestPerBooking
-      .filter(msg => msg.booking_id)
+      .filter(msg => {
+        const booking = bookingMap[msg.booking_id];
+        if (!booking) return false;
+        const caterer = Array.isArray(booking.caterers) ? booking.caterers[0] : booking.caterers;
+        return booking.customer_id === myId || caterer?.user_id === myId;
+      })
       .map(msg => {
         const isMine = msg.sender_id === myId;
         const otherId = isMine ? msg.receiver_id : msg.sender_id;
@@ -118,10 +201,12 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
           : '';
 
         return {
+          accountId:        myId,
           bookingId:        msg.booking_id,
           bookingInfo,
           otherPersonId:    otherId,
           otherPersonName,
+          participantName: other?.full_name ?? undefined,
           otherPersonAvatar,
           lastMessage:      msg.content,
           lastMessageTime:  msg.created_at,
@@ -131,10 +216,75 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
       });
 
     setConversations(convs);
-    setLoading(false);
-  };
+    setLoadError(null);
+    loadedAccount.current = myId;
+    } catch {
+      if (isCurrent()) setLoadError('Unable to refresh messages. Please try again.');
+    } finally {
+      if (isCurrent()) setLoading(false);
+    }
+  }, [myId]);
 
-  useEffect(() => { loadConversations(); }, [myId]);
+  useFocusEffect(useCallback(() => {
+    if (!myId) {
+      setConversations([]); setLoadError(null); setLiveError(null); setLoading(false);
+      loadedAccount.current = '';
+      return;
+    }
+    let active = true;
+    let inFlight = false;
+    let queued = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const isCurrent = () => active && currentAccount.current === myId;
+    const refresh = async () => {
+      if (!isCurrent()) return;
+      if (inFlight) { queued = true; return; }
+      inFlight = true;
+      try {
+        do {
+          queued = false;
+          await loadConversations(isCurrent);
+        } while (queued && isCurrent());
+      } finally { inFlight = false; }
+    };
+    const scheduleRefresh = () => {
+      if (!isCurrent()) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { timer = undefined; void refresh(); }, 200);
+    };
+    refreshInbox.current = scheduleRefresh;
+    setLiveError(null);
+    if (loadedAccount.current !== myId) setLoading(true);
+    const channel = supabase.channel(`inbox:${myId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${myId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${myId}` }, scheduleRefresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${myId}` }, scheduleRefresh)
+      .subscribe(status => {
+        if (!isCurrent()) return;
+        if (status === 'SUBSCRIBED') {
+          // Refresh after the initial subscription is established, closing the
+          // focus-fetch/subscription gap, and again following a reconnect.
+          setLiveError(null);
+          scheduleRefresh();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setLiveError('Live updates are unavailable. Tap Retry to refresh messages.');
+        }
+      });
+    // Coalesce focus and initial subscription acknowledgements when possible.
+    scheduleRefresh();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+      refreshInbox.current = () => {};
+      void supabase.removeChannel(channel);
+    };
+  }, [myId, loadConversations]));
+
+  const visibleConversations = conversations.filter(conversation => conversation.accountId === myId);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredConversations = visibleConversations.filter(conversation =>
+    !normalizedQuery || [conversation.otherPersonName, conversation.participantName, conversation.bookingInfo, conversation.lastMessage]
+      .some(value => value?.toLowerCase().includes(normalizedQuery)));
 
   const timeAgo = (d: string) => {
     const diff = Date.now() - new Date(d).getTime();
@@ -149,15 +299,15 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
   return (
     <View style={s.root}>
       {/* Chat modal */}
-      <Modal visible={!!openChat} animationType="slide" presentationStyle="fullScreen">
-        {openChat && (
+      <Modal visible={!!openChat && openChat.accountId === myId} animationType="slide" presentationStyle="fullScreen">
+        {openChat && openChat.accountId === myId && (
           <ChatScreen
             bookingId={openChat.bookingId}
             receiverId={openChat.otherPersonId}
             receiverName={openChat.otherPersonName}
             receiverAvatar={openChat.otherPersonAvatar}
             bookingInfo={openChat.bookingInfo}
-            onClose={() => { setOpenChat(null); loadConversations(); }}
+            onClose={() => { setOpenChat(null); refreshInbox.current(); }}
           />
         )}
       </Modal>
@@ -167,7 +317,7 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
         <View style={s.headerLeftGroup}>
           {onClose ? (
             <TouchableOpacity onPress={onClose} style={s.headerBack} activeOpacity={0.7}>
-              <ArrowLeft size={20} color={Colors.black} />
+              <ChevronLeft size={20} color={Colors.black} />
             </TouchableOpacity>
           ) : (
             <View style={s.headerIconWrap}>
@@ -176,28 +326,68 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
           )}
           <View>
             <Text style={s.headerTitle}>Messages</Text>
-            <Text style={s.headerSub}>Chat with your confirmed caterers</Text>
+            <Text style={s.headerSub}>Messages about your bookings</Text>
           </View>
         </View>
       </View>
+
+      <View style={s.searchContainer}>
+        <View style={s.searchBar}>
+          <Search size={18} color={Colors.orange} />
+          <TextInput
+            style={s.searchInput}
+            accessibilityLabel="Search conversations"
+            placeholder="Search names, bookings or messages"
+            placeholderTextColor={Colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear conversation search" onPress={() => setSearchQuery('')} style={s.clearSearch}>
+              <X size={18} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {(loadError || liveError) && (
+        <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.orangeLight }}>
+          <Text accessibilityRole="alert" style={{ color: Colors.textSecondary, fontSize: 13 }}>{loadError || liveError}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => refreshInbox.current()} style={{ alignSelf: 'flex-start', paddingVertical: 8 }}>
+            <Text style={{ color: Colors.orange, fontWeight: '700' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color={Colors.orange} />
         </View>
-      ) : conversations.length === 0 ? (
+      ) : visibleConversations.length === 0 ? (
         <View style={s.center}>
           <View style={s.emptyIconWrap}>
             <Inbox size={36} color={Colors.orange} />
           </View>
-          <Text style={s.emptyTitle}>No messages yet</Text>
+          <Text style={s.emptyTitle}>{loadError ? 'Messages unavailable' : 'No messages yet'}</Text>
           <Text style={s.emptySub}>
-            Once you have a confirmed booking, you can directly chat with your caterer here.
+            {loadError ? 'Please retry to load your booking conversations.' : 'Open a booking and start a chat. Your conversations will appear here, even while the booking is pending.'}
           </Text>
         </View>
+      ) : filteredConversations.length === 0 ? (
+        <View style={s.center}>
+          <View style={s.emptyIconWrap}><Search size={32} color={Colors.orange} /></View>
+          <Text style={s.emptyTitle}>No conversations found</Text>
+          <Text style={s.emptySub}>Try another name or message, or clear your search.</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setSearchQuery('')} style={{ padding: 12 }}>
+            <Text style={{ color: Colors.orange, fontWeight: '700' }}>Clear search</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16 }}>
-          {conversations.map(conv => (
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ padding: 16 }}>
+          {filteredConversations.map(conv => (
             <TouchableOpacity
               key={conv.bookingId}
               style={[s.convCard, conv.unreadCount > 0 && s.convCardUnread]}
@@ -254,6 +444,10 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
 }
 
 const s = StyleSheet.create({
+  searchContainer: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.white },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 4, backgroundColor: Colors.bgInput, borderWidth: 1, borderColor: Colors.border, borderRadius: 16, minHeight: 46 },
+  searchInput: { flex: 1, paddingVertical: 12, fontSize: 13, color: Colors.textPrimary },
+  clearSearch: { padding: 10 },
   root: { flex: 1, backgroundColor: '#F9FAFB' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
 

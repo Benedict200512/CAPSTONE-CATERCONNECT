@@ -28,7 +28,7 @@ export default function Login() {
       if (profile.role === 'admin') navigate('/admin', { replace: true });
       else if (profile.role === 'staff') navigate('/staff', { replace: true });
     }
-  }, [profile, authLoading]);
+  }, [profile, authLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,18 +69,23 @@ export default function Login() {
 
     setLoading(false);
 
-    // Route based on role
+    // Strict Role Check: Only allow admin and staff internally, but fail safely without giving clues to attackers
     const role = profileData.role;
-    if (role === 'admin') navigate('/admin');
-    else if (role === 'staff') navigate('/staff');
-    else setError('Access denied. This portal is for staff and admin only.');
+    if (role === 'admin') {
+      navigate('/admin');
+    } else if (role === 'staff') {
+      navigate('/staff');
+    } else {
+      await supabase.auth.signOut();
+      setError('Access denied. Invalid portal credentials.');
+    }
   };
 
   const features = [
-    { Icon: ShieldCheck, title: 'Verify Caterers', desc: 'Review applications and documents' },
-    { Icon: Calendar, title: 'Manage Bookings', desc: 'Track and update booking status' },
-    { Icon: MessageCircle, title: 'Handle Complaints', desc: 'Provide quick and quality support' },
-    { Icon: BarChart3, title: 'Generate Reports', desc: 'Monitor platform activity and growth' },
+    { Icon: ShieldCheck, title: 'Verify Partners', desc: 'Review provider applications and compliance documents' },
+    { Icon: Calendar, title: 'Manage Bookings', desc: 'Track and update reservation lifecycle statuses' },
+    { Icon: MessageCircle, title: 'Handle Support', desc: 'Resolve queries and manage dispute channels' },
+    { Icon: BarChart3, title: 'Platform Analytics', desc: 'Monitor system activity, growth, and metrics' },
   ];
 
   return (
@@ -98,13 +103,8 @@ export default function Login() {
                 <span style={{ color: '#111' }}>CATER</span>
                 <span style={{ color: '#F97316' }}>CONNECT</span>
               </div>
-              <span style={styles.brandSubText}>Cebu's Catering Marketplace</span>
+              <span style={styles.brandSubText}>Secure Management Gateway</span>
             </div>
-          </div>
-
-          <div style={styles.badgePill}>
-            <ShieldCheck size={14} color="#C2410C" />
-            <span>Staff & Admin Portal</span>
           </div>
 
           <h1 style={styles.leftTitle}>
@@ -112,7 +112,7 @@ export default function Login() {
             <span style={{ color: '#F97316' }}>CaterConnect Running.</span>
           </h1>
           <p style={styles.leftSub}>
-            Access your staff and admin dashboard to verify caterers, manage bookings, handle complaints, and ensure a smooth catering experience for everyone.
+            Access the system dashboard to coordinate marketplace operations, verify partners, manage reservations, and ensure seamless experiences.
           </p>
 
           <div style={styles.featureList}>
@@ -138,8 +138,8 @@ export default function Login() {
             <div style={styles.formLogo}>
               <img src={caterLogo} alt="CaterConnect Logo" style={styles.logoImgSm} />
             </div>
-            <h2 style={styles.formTitle}>Staff & Admin Login</h2>
-            <p style={styles.formSub}>Sign in to access your dashboard and manage the platform.</p>
+            <h2 style={styles.formTitle}>Login</h2>
+            <p style={styles.formSub}>Authenticate to access your workspace dashboard.</p>
           </div>
 
           <form onSubmit={handleLogin} style={styles.form}>
@@ -150,7 +150,7 @@ export default function Login() {
                 id="email"
                 style={styles.input}
                 type="email"
-                placeholder="admin@caterconnect.com"
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
@@ -201,7 +201,7 @@ export default function Login() {
                 </div>
               ) : (
                 <>
-                  <span>Log In</span>
+                  <span>Sign In</span>
                   <ArrowRight size={16} />
                 </>
               )}
@@ -211,8 +211,8 @@ export default function Login() {
           <div style={styles.roleInfo}>
             <KeyRound size={16} color="#C2410C" style={{ flexShrink: 0, marginTop: 1 }} />
             <div>
-              <div style={styles.roleTitle}>Authorized personnel only</div>
-              <div style={styles.roleInfoText}>CaterConnect Staff & Admin Portal</div>
+              <div style={styles.roleTitle}>Restricted Environment</div>
+              <div style={styles.roleInfoText}>Secure Enterprise Gateway Session</div>
             </div>
           </div>
         </div>
@@ -273,14 +273,6 @@ const styles: Record<string, React.CSSProperties> = {
   brandTextContainer: { display: 'flex', flexDirection: 'column' },
   brand: { fontSize: 20, fontWeight: 900, letterSpacing: 1.5, lineHeight: 1.1 },
   brandSubText: { fontSize: 11.5, color: '#78716C', fontWeight: 600, letterSpacing: 0.2, marginTop: 2 },
-
-  badgePill: {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    background: '#FFEDD5', border: '1px solid #FED7AA',
-    padding: '6px 14px', borderRadius: 20,
-    fontSize: 12.5, fontWeight: 700, color: '#C2410C',
-    marginBottom: 20,
-  },
 
   leftTitle: {
     fontSize: 42, fontWeight: 900, color: '#111827',

@@ -100,7 +100,6 @@ export default function CatererVerification() {
       staff_notes: staffNotes.trim() || null,
       reviewed_at: new Date().toISOString(),
       reviewed_by: profile?.id ?? null,
-      ...(status === 'approved' && { subscription_plan: 'free' }),
     }).eq('id', id);
 
     setUpdating(false);

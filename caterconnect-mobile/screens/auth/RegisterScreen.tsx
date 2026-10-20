@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { AppRole, signUp } from '../../lib/auth';
+import { POLICY_VERSION, POLICY_SECTIONS } from '../../constants/registrationPolicies';
 import { 
   ChevronLeft, Mail, Lock, Eye, EyeOff, 
   ChevronRight, User, Store, MapPin, Building, 
@@ -83,7 +84,7 @@ export default function RegisterScreen() {
         return; 
       }
       if (!agreedToCatererTerms) { 
-        setError('You must agree to the Terms & Conditions, Freemium Subscription Model, and Cancellation Policy to proceed.'); 
+        setError('You must agree to the Caterer Terms, Subscription and Verification Policies, and Privacy Notice to proceed.'); 
         return; 
       }
     } else {
@@ -92,7 +93,7 @@ export default function RegisterScreen() {
         return;
       }
       if (!agreedToCustomerTerms) {
-        setError('You must agree to the Terms & Conditions, Downpayment Policies, and Cancellation Policy to proceed.');
+        setError('You must agree to the Customer Terms, Downpayment and Refund Policies, and Privacy Notice to proceed.');
         return;
       }
     }
@@ -108,7 +109,8 @@ export default function RegisterScreen() {
       phone, 
       role === 'customer' ? address : undefined, 
       role === 'caterer' ? businessName : undefined, 
-      role === 'caterer' ? city : undefined
+      role === 'caterer' ? city : undefined,
+      role === 'caterer' ? agreedToCatererTerms : agreedToCustomerTerms
     );
     
     setLoading(false);
@@ -396,20 +398,14 @@ export default function RegisterScreen() {
 
                 {showCustomerTermsBox && (
                   <View style={styles.termsBox}>
-                    <Text style={styles.termsTitle}>Customer Guide & Policies</Text>
-                    <Text style={styles.termsLastUpdated}>Cebu, Philippines · Platform Rules</Text>
-                    
-                    <Text style={[styles.termsSectionHeading, { marginTop: 6 }]}>1. Booking & Approval Process</Text>
-                    <Text style={styles.termsSectionBody}>Browse verified local caterers, pick a standard package or custom setup, and submit your event details. The caterer will review and approve your request.</Text>
-
-                    <Text style={[styles.termsSectionHeading, { marginTop: 6 }]}>2. Downpayment Policies (10%, 25%, 50%)</Text>
-                    <Text style={styles.termsSectionBody}>Once approved, you are required to submit the required downpayment (10%, 25%, or 50% based on the caterer's package terms) before the specified deadline via GCash or digital payment gateways to lock in your schedule.</Text>
-
-                    <Text style={[styles.termsSectionHeading, { marginTop: 6 }]}>3. Cancellation & Refund Rules</Text>
-                    <Text style={styles.termsSectionBody}>• **&gt; 7 Days Before Event:** Free cancellation. Downpayments are fully eligible for a refund.{'\n'}• **&lt; 7 Days Before Event:** Downpayments are non-refundable because ingredients and staff have already been committed.</Text>
-
-                    <Text style={[styles.termsSectionHeading, { marginTop: 6 }]}>4. In-App Chat Support</Text>
-                    <Text style={styles.termsSectionBody}>Use the direct chatroom in your bookings tab to discuss dietary restrictions, venue guidelines, and coordinate any necessary refunds with your caterer.</Text>
+                    <Text style={styles.termsTitle}>Customer Terms & Policies</Text>
+                    <Text style={styles.termsLastUpdated}>Version {POLICY_VERSION} · Draft for review</Text>
+                    {POLICY_SECTIONS.customer.map((section) => (
+                      <View key={section.heading} style={styles.termsSection}>
+                        <Text style={styles.termsSectionHeading}>{section.heading}</Text>
+                        <Text style={styles.termsSectionBody}>{section.body}</Text>
+                      </View>
+                    ))}
                   </View>
                 )}
 
@@ -422,7 +418,7 @@ export default function RegisterScreen() {
                     {agreedToCustomerTerms && <Check size={14} color={Colors.white} />}
                   </View>
                   <Text style={styles.agreeText}>
-                    I agree to the <Text style={styles.agreeAccent}>Terms & Conditions, Downpayment Policies (10%, 25%, 50%), and Cancellation Policy</Text> of CaterConnect.
+                    I agree to the <Text style={styles.agreeAccent}>Customer Terms, Downpayment Policy, Cancellation & Refund Policy, and Privacy Notice</Text> of CaterConnect.
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -574,20 +570,8 @@ export default function RegisterScreen() {
             {showTerms && (
               <View style={styles.termsBox}>
                 <Text style={styles.termsTitle}>CaterConnect — Caterer Terms & Conditions</Text>
-                <Text style={styles.termsLastUpdated}>Effective date: 2025 · Cebu, Philippines</Text>
-
-                {[
-                  { heading: '1. Business Model — No Commission', body: 'CaterConnect does not charge commissions on bookings. Caterers receive 100% of their booking payments directly from customers. The platform generates revenue solely through optional subscription plans.' },
-                  { heading: '2. Subscription Plans', body: 'All verified caterers automatically receive the Free Plan upon approval. Caterers may upgrade to Basic (₱299/mo), Standard (₱499/mo), or Premium (₱999/mo) at any time.' },
-                  { heading: '3. Booking Limits', body: 'Each booking request received counts toward the caterer\'s monthly limit. Once the limit is reached, the caterer\'s packages remain visible but cannot accept new requests until the next cycle or an upgrade.' },
-                  { heading: '4. Package Limits', body: 'Free Plan caterers may create a maximum of 3 catering packages. Basic, Standard, and Premium Plan caterers may create unlimited packages.' },
-                  { heading: '5. Search & Budget Match Visibility', body: 'Subscription level affects placement in search results. Premium caterers appear first, followed by Standard, Basic, and Free plan caterers.' },
-                  { heading: '6. Subscription Payments', body: 'Subscription fees are paid monthly via GCash, Maya, or other accepted methods. Subscriptions not renewed revert to the Free Plan at end of billing cycle.' },
-                  { heading: '7. Caterer Verification', body: 'All caterers must submit valid business documents. Platform staff reviews and approves applications. Approved caterers receive a Verified Caterer Badge.' },
-                  { heading: '8. Cancellation Policy & Emergency Protocol', body: 'Caterers set their own downpayment policy. In case of emergency or unforeseen operational failures, caterers must provide valid notice. Habitual cancellations or unfulfilled booked services without valid cause may lead to account suspension or permanent termination.' },
-                  { heading: '9. Code of Conduct', body: 'Caterers agree to provide accurate information, fulfill booked services as agreed, maintain valid permits, and treat customers professionally.' },
-                  { heading: '10. Account Suspension', body: 'CaterConnect reserves the right to suspend or permanently ban caterer accounts found in violation of these terms.' },
-                ].map((section) => (
+                <Text style={styles.termsLastUpdated}>Version {POLICY_VERSION} · Draft for review</Text>
+                {POLICY_SECTIONS.caterer.map((section) => (
                   <View key={section.heading} style={styles.termsSection}>
                     <Text style={styles.termsSectionHeading}>{section.heading}</Text>
                     <Text style={styles.termsSectionBody}>{section.body}</Text>
@@ -606,7 +590,7 @@ export default function RegisterScreen() {
                 {agreedToCatererTerms && <Check size={14} color={Colors.white} />}
               </View>
               <Text style={styles.agreeText}>
-                I agree to the <Text style={styles.agreeAccent}>Terms & Conditions</Text>, the <Text style={styles.agreeAccent}>Freemium Subscription Model</Text>, and the <Text style={styles.agreeAccent}>Caterer Cancellation & Emergency Protocol</Text> of CaterConnect.
+                I accept the <Text style={styles.agreeAccent}>Caterer Terms, Verification, Zero-Commission and Subscription Policies, and Privacy Notice</Text> (version {POLICY_VERSION}).
               </Text>
             </TouchableOpacity>
 

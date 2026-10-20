@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase';
 import SubscriptionScreen from '../../screens/auth/SubscriptionScreen';
 import { 
   Hourglass, CheckCircle2, XCircle, FileEdit, 
-  CreditCard, MessageCircle, 
+  CreditCard, CircleHelp, 
   Bell, AlertTriangle, UtensilsCrossed, ChevronRight,
   LogOut, Camera, Edit3, Building2, MapPin, AlertCircle
 } from 'lucide-react-native';
@@ -70,12 +70,12 @@ export default function CatererProfile() {
       sub: 'View and upgrade your current plan', 
       onPress: () => setShowSubscription(true) 
     },
-    { 
-      icon: MessageCircle, 
-      label: 'Consultations', 
-      sub: 'Get help from platform staff', 
-      onPress: () => router.push('/(caterer)/consultation') 
-    },
+    {
+  icon: CircleHelp,
+  label: 'Help Center / FAQ',
+  sub: 'Find answers about managing your catering business',
+  onPress: () => router.push('/(caterer)/faq'),
+     },
     { 
       icon: Bell, 
       label: 'Notifications', 

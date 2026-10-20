@@ -6,9 +6,9 @@ import StaffLayout from './pages/staff/StaffLayout';
 import StaffDashboard from './pages/staff/Dashboard';
 import CatererVerification from './pages/staff/CatererVerification';
 import SubscriptionManager from './pages/staff/SubscriptionManager';
-import Consultations from './pages/staff/Consultations';
 import Complaints from './pages/staff/Complaints';
 import BookingMonitor from './pages/staff/BookingMonitor';
+import AccountMonitoring from './pages/staff/AccountMonitoring';
 import RefundManagement from './pages/staff/RefundManagement';
 
 import AdminLayout from './pages/admin/AdminLayout';
@@ -18,6 +18,7 @@ import Revenue from './pages/admin/Revenue';
 import Reports from './pages/admin/Reports';
 import ActivityLogs from './pages/admin/ActivityLogs';
 import PlatformSettings from './pages/admin/PlatformSettings';
+import MaintenanceSecurity from './pages/admin/MaintenanceSecurity';
 
 function ProtectedRoute({ children, allow }: { children: React.ReactNode; allow: string[] }) {
   const { session, profile, loading } = useAuth();
@@ -53,9 +54,9 @@ export default function App() {
             <Route index element={<StaffDashboard />} />
             <Route path="verification" element={<CatererVerification />} />
             <Route path="subscriptions" element={<SubscriptionManager />} />
-            <Route path="consultations" element={<Consultations />} />
             <Route path="complaints" element={<Complaints />} />
             <Route path="bookings" element={<BookingMonitor />} />
+            <Route path="account-monitoring" element={<AccountMonitoring />}/>
             <Route path="refunds" element={<RefundManagement />} />
           </Route>
 
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="activity" element={<ActivityLogs />} />
             <Route path="settings" element={<PlatformSettings />} />
+            <Route path="maintenance-security" element={<MaintenanceSecurity />} />
           </Route>
         </Routes>
       </AuthProvider>

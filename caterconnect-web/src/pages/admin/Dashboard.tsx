@@ -28,7 +28,6 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      // Get the start of the current calendar month
       const now = new Date();
       const startCurr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
@@ -49,14 +48,11 @@ export default function AdminDashboard() {
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('caterers').select('id', { count: 'exact', head: true }),
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
-        // New items added this month
         supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', startCurr),
         supabase.from('caterers').select('id', { count: 'exact', head: true }).gte('created_at', startCurr),
         supabase.from('bookings').select('id', { count: 'exact', head: true }).gte('created_at', startCurr),
-        // Revenue totals
         supabase.from('subscription_payments').select('amount').eq('status', 'confirmed'),
         supabase.from('subscription_payments').select('amount').eq('status', 'confirmed').gte('created_at', startCurr),
-        // Operational stats
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'approved'),
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
         supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'open'),
@@ -106,7 +102,6 @@ export default function AdminDashboard() {
             Here is your daily snapshot of CaterConnect's platform operations.
           </p>
         </div>
-
         <div>
           <div style={{ background: '#FFFFFF', border: '1px solid #E8E4DE', borderRadius: 20, padding: '8px 16px', fontSize: 13, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
             <Calendar size={15} color="#EA580C" />
@@ -128,9 +123,7 @@ export default function AdminDashboard() {
             <div key={i} onClick={() => navigate(card.path)} style={{ position: 'relative', background: '#FFFFFF', borderRadius: 24, padding: '24px 22px', border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease', overflow: 'hidden' }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 14px 36px rgba(0,0,0,0.07)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 10px 30px rgba(0,0,0,0.04)'; }}>
-              
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: card.accent }} />
-
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, marginTop: 4 }}>
                 <div style={{ width: 48, height: 48, borderRadius: 14, background: card.bg, border: '1px solid #FED7AA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={22} color={card.color} />
@@ -139,7 +132,6 @@ export default function AdminDashboard() {
                   <TrendingUp size={13} /> {card.trend}
                 </div>
               </div>
-              
               <div>
                 <div style={{ fontSize: 28, fontWeight: 800, color: '#111', letterSpacing: '-0.01em', marginBottom: 4 }}>
                   {loading ? <Loader2 size={22} className="animate-spin" color="#9CA3AF" /> : card.value}
@@ -151,10 +143,116 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      {/* Main Content Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, alignItems: 'start' }}>
-        
-        {/* Left Column: Recent Registrations Table */}
+      {/* Balanced Dashboard: Action Center and Subscription Tiers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'stretch', marginBottom: 24 }}>
+        {/* Action Center */}
+        <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0' }}>
+            <Activity size={19} color="#111" /> Action Center
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div onClick={() => navigate('/staff/verification')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#FEF3C7', borderRadius: 16, cursor: 'pointer', border: '1px solid #FDE68A', transition: 'transform 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ background: '#FFFBEB', padding: 8, borderRadius: 10, border: '1px solid #FDE68A' }}>
+                  <Clock size={18} color="#D97706" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#92400E' }}>Pending Verifications</div>
+                  <div style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>Caterers waiting for review</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#92400E' }}>{loading ? '-' : stats.pending}</span>
+                <ArrowRight size={16} color="#D97706" />
+              </div>
+            </div>
+            <div onClick={() => navigate('/staff/complaints')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#FEE2E2', borderRadius: 16, cursor: 'pointer', border: '1px solid #FECACA', transition: 'transform 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 10, border: '1px solid #FECACA' }}>
+                  <ShieldAlert size={18} color="#DC2626" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#991B1B' }}>Open Complaints</div>
+                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>Requires immediate action</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#991B1B' }}>{loading ? '-' : stats.complaints}</span>
+                <ArrowRight size={16} color="#DC2626" />
+              </div>
+            </div>
+            <div onClick={() => navigate('/staff/verification')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#DCFCE7', borderRadius: 16, cursor: 'pointer', border: '1px solid #BBF7D0', transition: 'transform 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ background: '#F0FDF4', padding: 8, borderRadius: 10, border: '1px solid #BBF7D0' }}>
+                  <CheckCircle2 size={18} color="#16A34A" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#166534' }}>Verified Caterers</div>
+                  <div style={{ fontSize: 12, color: '#15803D', marginTop: 2 }}>Active on the platform</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#166534' }}>{loading ? '-' : stats.verified}</span>
+                <ArrowRight size={16} color="#16A34A" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Subscription Tiers Mini-Widget */}
+        <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
+              <CreditCard size={19} color="#111" /> Subscription Tiers
+            </h3>
+            <button onClick={() => navigate('/staff/subscriptions')} style={{ background: 'transparent', border: 'none', color: '#EA580C', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Manage →
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            {[
+              { plan: 'Free Plan', price: '₱0', maxPkg: '3 packages', maxBooking: '5 bookings/mo', color: '#6B7280', bg: '#F9FAFB', border: '#E5E7EB', icon: Sparkles },
+              { plan: 'Basic Plan', price: '₱299', maxPkg: 'Unlimited', maxBooking: '20 bookings/mo', color: '#2563EB', bg: '#DBEAFE', border: '#93C5FD', icon: Zap },
+              { plan: 'Standard Plan', price: '₱499', maxPkg: 'Unlimited', maxBooking: '50 bookings/mo', color: '#D97706', bg: '#FEF3C7', border: '#FDE68A', icon: Crown },
+              { plan: 'Premium Plan', price: '₱999', maxPkg: 'Unlimited', maxBooking: 'Unlimited', color: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD', icon: Building2 },
+            ].map((p, idx) => {
+              const TierIcon = p.icon;
+              return (
+                <div key={idx} style={{ background: p.bg, borderRadius: 18, padding: '16px', border: `1px solid ${p.border}`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: p.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.plan}</span>
+                    <div style={{ width: 26, height: 26, borderRadius: 8, background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+                      <TierIcon size={14} color={p.color} />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 19, fontWeight: 900, color: '#111', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {p.price}<span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280' }}>/mo</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4B5563', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 4 }}>
+                        {p.maxPkg}
+                      </span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4B5563', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 4 }}>
+                        {p.maxBooking}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Registrations: Full-width table */}
+      <div style={{ width: '100%', minWidth: 0 }}>
         <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '24px 24px 20px', borderBottom: '1px solid #E8E4DE', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF' }}>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
@@ -220,119 +318,6 @@ export default function AdminDashboard() {
               </table>
             )}
           </div>
-        </div>
-
-        {/* Right Column: Health & Operations */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          
-          {/* Action Center */}
-          <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0' }}>
-              <Activity size={19} color="#111" /> Action Center
-            </h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div onClick={() => navigate('/staff/verification')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#FEF3C7', borderRadius: 16, cursor: 'pointer', border: '1px solid #FDE68A', transition: 'transform 0.15s' }}
-                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
-                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ background: '#FFFBEB', padding: 8, borderRadius: 10, border: '1px solid #FDE68A' }}>
-                    <Clock size={18} color="#D97706" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#92400E' }}>Pending Verifications</div>
-                    <div style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>Caterers waiting for review</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: '#92400E' }}>{loading ? '-' : stats.pending}</span>
-                  <ArrowRight size={16} color="#D97706" />
-                </div>
-              </div>
-              
-              <div onClick={() => navigate('/staff/complaints')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#FEE2E2', borderRadius: 16, cursor: 'pointer', border: '1px solid #FECACA', transition: 'transform 0.15s' }}
-                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
-                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 10, border: '1px solid #FECACA' }}>
-                    <ShieldAlert size={18} color="#DC2626" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#991B1B' }}>Open Complaints</div>
-                    <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>Requires immediate action</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: '#991B1B' }}>{loading ? '-' : stats.complaints}</span>
-                  <ArrowRight size={16} color="#DC2626" />
-                </div>
-              </div>
-
-              <div onClick={() => navigate('/staff/verification')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', background: '#DCFCE7', borderRadius: 16, cursor: 'pointer', border: '1px solid #BBF7D0', transition: 'transform 0.15s' }}
-                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.01)')}
-                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ background: '#F0FDF4', padding: 8, borderRadius: 10, border: '1px solid #BBF7D0' }}>
-                    <CheckCircle2 size={18} color="#16A34A" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#166534' }}>Verified Caterers</div>
-                    <div style={{ fontSize: 12, color: '#15803D', marginTop: 2 }}>Active on the platform</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: '#166534' }}>{loading ? '-' : stats.verified}</span>
-                  <ArrowRight size={16} color="#16A34A" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Subscription Tiers Mini-Widget */}
-          <div style={{ background: '#FFFFFF', borderRadius: 24, border: '1px solid #E8E4DE', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-                <CreditCard size={19} color="#111" /> Subscription Tiers
-              </h3>
-              <button onClick={() => navigate('/staff/subscriptions')} style={{ background: 'transparent', border: 'none', color: '#EA580C', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                Manage →
-              </button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {[
-                { plan: 'Free Plan', price: '₱0', maxPkg: '3 packages', maxBooking: '5 bookings/mo', color: '#6B7280', bg: '#F9FAFB', border: '#E5E7EB', icon: Sparkles },
-                { plan: 'Basic Plan', price: '₱299', maxPkg: 'Unlimited', maxBooking: '20 bookings/mo', color: '#2563EB', bg: '#DBEAFE', border: '#93C5FD', icon: Zap },
-                { plan: 'Standard Plan', price: '₱499', maxPkg: 'Unlimited', maxBooking: '50 bookings/mo', color: '#D97706', bg: '#FEF3C7', border: '#FDE68A', icon: Crown },
-                { plan: 'Premium Plan', price: '₱999', maxPkg: 'Unlimited', maxBooking: 'Unlimited', color: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD', icon: Building2 },
-              ].map((p, idx) => {
-                const TierIcon = p.icon;
-                return (
-                  <div key={idx} style={{ background: p.bg, borderRadius: 18, padding: '16px', border: `1px solid ${p.border}`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: p.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.plan}</span>
-                      <div style={{ width: 26, height: 26, borderRadius: 8, background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
-                        <TierIcon size={14} color={p.color} />
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 19, fontWeight: 900, color: '#111', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                        {p.price}<span style={{ fontSize: 10, fontWeight: 700, color: '#6B7280' }}>/mo</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4B5563', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 4 }}>
-                          {p.maxPkg}
-                        </span>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4B5563', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 4 }}>
-                          {p.maxBooking}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
         </div>
       </div>
     </div>

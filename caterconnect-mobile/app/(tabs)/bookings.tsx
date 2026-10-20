@@ -1,20 +1,21 @@
 // app/(tabs)/CustomerBookings.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, Platform,
   ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useBookingRefresh } from '../../hooks/useBookingRefresh';
 import { initiateGCashPayment, openGCashCheckout } from '../../lib/xendit';
 import ReviewScreen from '../../screens/auth/ReviewScreen';
 import ChatScreen from '../../screens/auth/ChatScreen';
 import {
   Clock, CheckCircle2, CreditCard, RefreshCw, PartyPopper,
-  XCircle, Ban, ClipboardList, MapPin, AlertTriangle, MessageSquare, Star, AlertCircle, Check, Wallet, Smartphone, Building2, ShieldCheck, Lock
+  XCircle, Ban, ClipboardList, MapPin, AlertTriangle, MessageSquare, Star, AlertCircle, Check, Wallet, Smartphone, Building2, ShieldCheck, Lock, CalendarDays, Users, Package, UtensilsCrossed, FileText, Hash, ReceiptText, Info, ChevronRight, X, Gift, ListChecks
 } from 'lucide-react-native';
 
 type Booking = {
@@ -29,9 +30,10 @@ type Booking = {
   cancelled_at: string | null;
   payment_method: string | null;
   payment_submitted_at: string | null;
+  payment_verified_at: string | null;
   payment_receipt_url: string | null;
   // --- Refund Tracking Fields ---
-  refund_status: 'none' | 'pending' | 'processed' | 'failed';
+  refund_status: 'none' | 'pending' | 'overdue' | 'awaiting_customer_confirmation' | 'processed' | 'failed';
   refund_amount: number;
   refunded_at: string | null;
   refund_account_details: string | null;
@@ -44,7 +46,9 @@ type Booking = {
     accepted_payment_methods?: string[] | null;
     accepted_payment_details?: Record<string, string> | null;
   } | null;
-  packages: { name: string; tier: string } | null;
+  packages: { name: string; tier: string; [key: string]: any } | null;
+  customized_items?: unknown;
+  special_requests?: string | null;
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -67,6 +71,16 @@ const PAYMENT_CHANNEL_CONFIG: Record<string, { label: string; sub: string; icon:
 
 const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed', 'rejected', 'cancelled'];
 
+const REFUND_METHODS = [
+  { key: 'gcash', label: 'GCash', type: 'wallet' },
+  { key: 'maya', label: 'Maya', type: 'wallet' },
+  { key: 'bpi', label: 'BPI', type: 'bank' },
+  { key: 'bdo', label: 'BDO', type: 'bank' },
+  { key: 'other_bank', label: 'Other Bank', type: 'bank' },
+] as const;
+
+type RefundMethod = (typeof REFUND_METHODS)[number]['key'];
+
 const CANCELLATION_REASONS = [
   "Event date changed",
   "Found another caterer",
@@ -74,6 +88,59 @@ const CANCELLATION_REASONS = [
   "Event was cancelled entirely",
   "Other"
 ];
+
+// ── Customer Cancellation Refund Policy Helpers (Step 1) ──
+// Compare calendar dates rather than elapsed hours, so event-date tiers
+// remain stable across daylight-saving changes.
+const getDaysBeforeEvent = (eventDateString: string): number => {
+  const [year, month, day] = eventDateString
+    .slice(0, 10)
+    .split('-')
+    .map(Number);
+
+  const eventDay = Date.UTC(year, month - 1, day);
+  const today = new Date();
+  const todayDay = Date.UTC(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+
+  return Math.round((eventDay - todayDay) / (1000 * 60 * 60 * 24));
+};
+
+const getCancellationRefundPercentage = (
+  eventDate: string,
+  paymentVerifiedAt: string | null
+): number => {
+  const daysBeforeEvent = getDaysBeforeEvent(eventDate);
+
+  // Cancellations fewer than 7 calendar days before the event
+  // are non-refundable, including during the grace period.
+  if (daysBeforeEvent < 7) return 0;
+
+  // Grace period: within 24 hours after payment verification.
+  if (paymentVerifiedAt) {
+    const verifiedTime = new Date(paymentVerifiedAt).getTime();
+    const elapsedHours = (Date.now() - verifiedTime) / (1000 * 60 * 60);
+
+    if (Number.isFinite(elapsedHours) && elapsedHours >= 0 && elapsedHours <= 24) {
+      return 100;
+    }
+  }
+
+  if (daysBeforeEvent >= 30) return 100;
+  if (daysBeforeEvent >= 15) return 75;
+  if (daysBeforeEvent >= 8) return 50;
+  return 25; // Exactly 7 calendar days before the event.
+};
+
+const calculateCancellationRefund = (
+  verifiedDownpayment: number,
+  percentage: number
+): number => {
+  return Math.round(Number(verifiedDownpayment) * percentage) / 100;
+};
 
 // ── Countdown Helper ──
 const getCountdownText = (eventDateString: string) => {
@@ -150,9 +217,66 @@ const tl = StyleSheet.create({
   lineDone: { backgroundColor: '#10B981' },
 });
 
+const formatRefundDestination = (raw: string | null): string => {
+  if (!raw) return 'Not provided';
+  try {
+    const details = JSON.parse(raw);
+    if (!details || typeof details !== 'object' || Array.isArray(details)) return raw;
+    const labels: Record<string, string> = {
+      gcash: 'GCash', maya: 'Maya', bpi: 'BPI', bdo: 'BDO', other_bank: 'Other Bank',
+    };
+    const methodKey = String(details.method ?? '').toLowerCase();
+    const method = labels[methodKey] ?? String(details.method ?? 'Refund account');
+    const holder = details.account_holder ?? details.account_holder_name ?? details.account_name ?? '';
+    const account = details.account_number ?? details.mobile_number ?? '';
+    const bank = details.bank_name ?? '';
+    return [
+      `Payment Method: ${method}`,
+      ...(methodKey === 'other_bank' && bank ? [`Bank Name: ${bank}`] : []),
+      ...(holder ? [`Account Holder: ${holder}`] : []),
+      ...(account ? [`${methodKey === 'gcash' || methodKey === 'maya' ? 'Mobile Number' : 'Account Number'}: ${account}`] : []),
+    ].join('\\n'.replace('\\n', '\n'));
+  } catch {
+    return raw;
+  }
+};
+
+const describePackageField = (value: unknown): string[] => {
+  if (value == null || value === '') return [];
+  let parsed: unknown = value;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch { return [String(parsed)]; }
+  }
+  if (Array.isArray(parsed)) return parsed.flatMap(describePackageField);
+  if (typeof parsed === 'object' && parsed !== null) {
+    const obj = parsed as Record<string, unknown>;
+    const title = obj.name ?? obj.item_name ?? obj.menu_item_name ?? obj.title;
+    if (title != null) {
+      const quantity = obj.quantity ?? obj.qty;
+      return [String(title) + (quantity != null ? ` (x${quantity})` : '')];
+    }
+    return Object.entries(obj).flatMap(([key, val]) =>
+      val == null ? [] : [`${key.replace(/_/g, ' ')}: ${typeof val === 'object' ? JSON.stringify(val) : String(val)}`]
+    );
+  }
+  return [String(parsed)];
+};
+
 export default function CustomerBookings() {
   const { session } = useAuth();
   const router = useRouter();
+  const { id: notificationBookingId, notification_id: notificationId } = useLocalSearchParams<{ id?: string; notification_id?: string }>();
+  const lastOpenedNotification = useRef<string | null>(null);
+  const [refundEvidence, setRefundEvidence] = useState<Record<string, boolean>>({});
+  const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
+  const [transferEvidence, setTransferEvidence] = useState<any[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [refundDisputes, setRefundDisputes] = useState<Record<string, { status: string; reason: string; created_at: string; caterer_response: string | null; caterer_responded_at: string | null }>>({});
+  const [disputeBooking, setDisputeBooking] = useState<Booking | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+
+  const [confirmingRefundId, setConfirmingRefundId] = useState<string | null>(null);
   const [bookings, setBookings]            = useState<Booking[]>([]);
   const [loading, setLoading]              = useState(true);
   const [filter, setFilter]                = useState('all');
@@ -170,61 +294,128 @@ export default function CustomerBookings() {
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
   const [refundAccount, setRefundAccount] = useState(''); 
+  // Refund destination fields, saved with the cancellation request.
+  const [refundMethod, setRefundMethod] = useState<RefundMethod>('gcash');
+  const [refundHolderName, setRefundHolderName] = useState('');
+  const [refundAccountNumber, setRefundAccountNumber] = useState('');
+  const [refundBankName, setRefundBankName] = useState('');
+
   const [isCancelling, setIsCancelling] = useState(false);
 
   // Caterer Cancelled Direct Refund Input State
-  const [catererRefundInput, setCatererRefundInput] = useState('');
-  const [submittingCatererRefundId, setSubmittingCatererRefundId] = useState<string | null>(null);
 
-  const load = async () => {
+  const loadScope = useRef('');
+  loadScope.current = `${session?.user.id ?? ''}:${filter}`;
+  const loadVersion = useRef(0);
+  const load = async (silent = false) => {
+    const scope = loadScope.current;
+    const version = ++loadVersion.current;
+    const isCurrent = () => scope === loadScope.current && version === loadVersion.current;
     if (!session?.user?.id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     let query = supabase
       .from('bookings')
       .select(`
         *,
         caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details),
-        packages(name, tier),
+        packages(*),
         reviews(id)
       `)
       .eq('customer_id', session.user.id)
       .order('created_at', { ascending: false });
     
     if (filter !== 'all') query = query.eq('status', filter);
-    const { data } = await query;
+    const { data, error: bookingLoadError } = await query;
+    if (!isCurrent()) return;
+    if (bookingLoadError) { setLoading(false); return; }
     let fetchedBookings = (data as any) ?? [];
 
-    const now = new Date();
-    const overdueBookings = fetchedBookings.filter((b: Booking) => 
-      b.status === 'confirmed' && 
-      b.downpayment_deadline && 
-      new Date(b.downpayment_deadline) < now
-    );
+    // Payment deadline enforcement must run on a trusted backend job.
+    // Never mutate booking status while loading a customer screen.
 
-    if (overdueBookings.length > 0) {
-      for (const ob of overdueBookings) {
-        await supabase
-          .from('bookings')
-          .update({ 
-            status: 'cancelled',
-            cancelled_by: 'system',
-            cancellation_reason: 'System Auto-Cancel: Payment deadline exceeded.',
-            cancelled_at: new Date().toISOString()
-          })
-          .eq('id', ob.id);
-          
-        ob.status = 'cancelled';
-        ob.cancelled_by = 'system';
-        ob.cancellation_reason = 'System Auto-Cancel: Payment deadline exceeded.';
-        ob.cancelled_at = new Date().toISOString();
+    // Customer can see whether a transfer receipt was submitted, not its private contents.
+    const pendingIds = fetchedBookings
+      .filter((b: Booking) => b.status === 'cancelled' && b.refund_status === 'awaiting_customer_confirmation')
+      .map((b: Booking) => b.id);
+    if (pendingIds.length) {
+      const { data: evidenceRows, error: evidenceError } = await supabase
+        .from('refund_transfer_submissions')
+        .select('booking_id')
+        .in('booking_id', pendingIds);
+      if (!isCurrent()) return;
+      if (evidenceError) {
+        console.warn('Could not load refund submission status:', evidenceError.message);
+        setRefundEvidence({});
+      } else {
+        setRefundEvidence(Object.fromEntries((evidenceRows ?? []).map(row => [row.booking_id, true])));
       }
+    } else {
+      setRefundEvidence({});
+    }
+
+    const disputeBookingIds = fetchedBookings
+      .filter((b: Booking) => b.status === 'cancelled' && Number(b.refund_amount) > 0)
+      .map((b: Booking) => b.id);
+    if (disputeBookingIds.length) {
+      const { data: disputeRows, error: disputeError } = await supabase
+        .from('refund_disputes')
+        .select('booking_id, status, reason, created_at, caterer_response, caterer_responded_at')
+        .in('booking_id', disputeBookingIds);
+      if (!isCurrent()) return;
+      if (disputeError) console.warn('Unable to load refund disputes:', disputeError.message);
+      setRefundDisputes(Object.fromEntries(
+        (disputeRows ?? []).map(row => [row.booking_id, { status: row.status, reason: row.reason, created_at: row.created_at, caterer_response: row.caterer_response, caterer_responded_at: row.caterer_responded_at }])
+      ));
+    } else {
+      setRefundDisputes({});
     }
 
     setBookings(fetchedBookings);
+    // Keep an open details sheet current even when a status filter removes the
+    // booking from the visible list. This only reads the authorized booking.
+    if (detailBooking) {
+      const { data: current } = await supabase.from('bookings')
+        .select('*, caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details), packages(*), reviews(id)')
+        .eq('id', detailBooking.id).eq('customer_id', session.user.id).maybeSingle();
+      if (!isCurrent()) return;
+      if (current) setDetailBooking(previous => previous?.id === current.id ? current as Booking : previous);
+    }
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [session, filter]);
+  useBookingRefresh(session?.user.id ? `${session.user.id}:${filter}` : null, () => load(true));
+
+  useEffect(() => {
+    const bookingId = Array.isArray(notificationBookingId) ? notificationBookingId[0] : notificationBookingId;
+    const notificationKey = Array.isArray(notificationId) ? notificationId[0] : notificationId;
+    if (!session?.user?.id || !bookingId) return;
+    const key = notificationKey ?? bookingId;
+    if (lastOpenedNotification.current === key) return;
+    lastOpenedNotification.current = key;
+    let cancelled = false;
+
+    // Fetch independently of the current booking filter so even a cancelled
+    // refund booking opens while another filter is selected.
+    const openFromNotification = async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details), packages(*), reviews(id)')
+        .eq('id', bookingId)
+        .eq('customer_id', session.user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        Alert.alert('Booking unavailable', 'This booking could not be opened. It may no longer be accessible.');
+        return;
+      }
+      await openBookingDetails(data as Booking);
+    };
+
+    void openFromNotification();
+    return () => { cancelled = true; };
+  }, [notificationBookingId, notificationId, session?.user?.id]);
+
+
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -261,25 +452,20 @@ export default function CustomerBookings() {
       );
 
       if (checkoutStatus === 'success') {
-        const nowISO = new Date().toISOString();
-        const automatedReceiptRef = `Xendit Automated E-Receipt (${selectedPaymentMethod.toUpperCase()}) - ChargeID: ${paymentResult.chargeId}`;
-
-        await supabase
-          .from('bookings')
-          .update({
-            status: 'paid',
-            payment_method: selectedPaymentMethod,
-            payment_submitted_at: nowISO,
-            payment_verified_at: nowISO,
-            payment_receipt_url: automatedReceiptRef,
-          })
-          .eq('id', payingBookingId);
-
-        Alert.alert('Payment Successful!', `Downpayment verified automatically via Xendit (${selectedPaymentMethod.toUpperCase()}). Your booking is now secured!`);
+        // The mobile client never verifies or marks a booking as paid.
+        // Only the trusted Xendit webhook can update payment status.
         setPayingBookingId(null);
-        load();
+        await load();
+        Alert.alert(
+          'Payment Confirmed',
+          'Your downpayment has been verified and saved to your booking.'
+        );
       } else if (checkoutStatus === 'failed') {
         Alert.alert('Payment Failed', 'The Xendit transaction failed or was declined.');
+      } else if (checkoutStatus === 'pending') {
+        setPayingBookingId(null);
+        await load();
+        Alert.alert('Payment Processing', 'Confirmation is still pending. Your bookings will refresh automatically. Do not pay again while confirmation is pending.');
       } else {
         Alert.alert('Payment Cancelled', 'The payment session was closed or cancelled.');
       }
@@ -290,89 +476,263 @@ export default function CustomerBookings() {
     }
   };
 
+  // Cancellation preview; the same policy is recalculated before saving.
+  const getCancellationPreview = (booking: Booking | null) => {
+    if (!booking) return null;
+
+    const daysBeforeEvent = getDaysBeforeEvent(booking.event_date);
+    const hasVerifiedPayment =
+      booking.status === 'paid' && !!booking.payment_verified_at;
+    const percentage = hasVerifiedPayment
+      ? getCancellationRefundPercentage(
+          booking.event_date,
+          booking.payment_verified_at
+        )
+      : 0;
+    const amount = hasVerifiedPayment
+      ? calculateCancellationRefund(booking.downpayment_amount, percentage)
+      : 0;
+
+    const hoursSinceVerification = booking.payment_verified_at
+      ? (Date.now() - new Date(booking.payment_verified_at).getTime()) / 3600000
+      : -1;
+    const isGracePeriod =
+      hasVerifiedPayment &&
+      daysBeforeEvent >= 7 &&
+      Number.isFinite(hoursSinceVerification) &&
+      hoursSinceVerification >= 0 &&
+      hoursSinceVerification <= 24;
+
+    return { daysBeforeEvent, hasVerifiedPayment, percentage, amount, isGracePeriod };
+  };
+
   const getCancelWarningMessage = (booking: Booking | null) => {
-    if (!booking) return '';
-    const eventDate = new Date(booking.event_date);
-    const today = new Date();
-    eventDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const preview = getCancellationPreview(booking);
+    if (!booking || !preview) return '';
 
     if (booking.status === 'pending') {
-      return 'Are you sure you want to cancel this pending booking request?';
-    } else if (diffDays > 7) {
-      return booking.status === 'paid'
-        ? 'Since this is more than 7 days before your event, your booking will be cancelled and your downpayment is eligible for a full refund.'
-        : 'Since this is more than 7 days before your event, you can cancel freely with no penalty.';
-    } else {
-      return booking.status === 'paid'
-        ? '⚠️️ Warning: This is less than 7 days before your event. Per our policy, your downpayment is non-refundable because ingredients and staff have already been prepared.'
-        : '⚠️ Warning: This is less than 7 days before your event. Are you sure you want to cancel?';
+      return 'Your pending booking request can be cancelled. No payment refund is due.';
     }
+    if (!preview.hasVerifiedPayment) {
+      return 'No verified downpayment is recorded for this booking, so no refund is due.';
+    }
+    if (preview.daysBeforeEvent < 7) {
+      return 'This event is less than 7 days away. Customer cancellations receive a 0% refund.';
+    }
+    if (preview.isGracePeriod) {
+      return 'Your booking is within the 24-hour grace period after verified payment. A full refund applies.';
+    }
+    return `Based on the event date, ${preview.percentage}% of your verified downpayment is refundable.`;
   };
 
   const confirmCancelBooking = async () => {
-    if (!cancellingBooking) return;
-    
+    if (!cancellingBooking || isCancelling || !session?.user?.id) return;
     const finalReason = selectedReason === 'Other' ? customReason.trim() : selectedReason;
-    
-    if (!finalReason) {
-      Alert.alert("Missing Reason", "Please select or specify a reason for cancelling.");
+    if (finalReason.length < 3 || finalReason.length > 1000) {
+      Alert.alert('Invalid Reason', 'Please provide a cancellation reason between 3 and 1,000 characters.');
       return;
     }
 
-    const eventDate = new Date(cancellingBooking.event_date);
-    const today = new Date();
-    eventDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-    const isPaid = cancellingBooking.status === 'paid';
-    const isEligibleForRefund = isPaid && diffDays > 7;
-
-    if (isEligibleForRefund && !refundAccount.trim()) {
-      Alert.alert("GCash Details Required", "Please enter your GCash account details so platform staff can disburse your refund immediately.");
-      return;
+    // The server is authoritative; this estimate only determines whether
+    // to request refund account information in the form.
+    const preview = getCancellationPreview(cancellingBooking);
+    let accountDetails: Record<string, string | null> | null = null;
+    if (preview && preview.amount > 0) {
+      const holder = refundHolderName.trim();
+      const account = refundAccountNumber.trim();
+      const bank = refundBankName.trim();
+      const isWallet = refundMethod === 'gcash' || refundMethod === 'maya';
+      if (!holder || !account || (refundMethod === 'other_bank' && !bank)) {
+        Alert.alert('Missing Refund Details', 'Enter the account holder, account number and bank name if applicable.');
+        return;
+      }
+      if (isWallet && !/^09\d{9}$/.test(account)) {
+        Alert.alert('Invalid Mobile Number', 'Enter an 11-digit number beginning with 09.');
+        return;
+      }
+      if (!isWallet && !/^\\d{6,20}$/.test(account)) {
+        Alert.alert('Invalid Account Number', 'Enter a 6–20 digit bank account number.');
+        return;
+      }
+      if (holder.length > 120 || bank.length > 120) {
+        Alert.alert('Invalid Refund Details', 'Account holder or bank name is too long.');
+        return;
+      }
+      accountDetails = {
+        method: refundMethod,
+        bank_name: refundMethod === 'other_bank'
+          ? bank
+          : refundMethod === 'bpi' ? 'BPI' : refundMethod === 'bdo' ? 'BDO' : null,
+        account_holder: holder,
+        account_number: account,
+      };
     }
 
     setIsCancelling(true);
-    
-    const targetRefundStatus = isEligibleForRefund ? 'pending' : 'none';
-    const targetRefundAmount = isEligibleForRefund ? cancellingBooking.downpayment_amount : 0;
-
-    const { error } = await supabase
-      .from('bookings')
-      .update({ 
-        status: 'cancelled',
-        cancelled_by: 'customer',
-        cancellation_reason: finalReason,
-        cancelled_at: new Date().toISOString(),
-        refund_status: targetRefundStatus,
-        refund_amount: targetRefundAmount,
-        refund_account_details: isEligibleForRefund ? refundAccount.trim() : null
-      })
-      .eq('id', cancellingBooking.id);
-
-    setIsCancelling(false);
-
-    if (error) {
-      Alert.alert('Cancellation Failed', `Error: ${error.message}`);
-    } else {
-      if (isEligibleForRefund) {
-        Alert.alert('Refund Requested', 'Your booking is cancelled. Platform staff will review your GCash details and disburse your refund instantly.');
-      } else if (isPaid && diffDays <= 7) {
-        Alert.alert('Cancelled', 'Booking cancelled. As per policy (under 7 days), the downpayment is non-refundable.');
-      } else {
-        Alert.alert('Cancelled', 'Your booking has been successfully cancelled.');
+    try {
+      const { data, error } = await supabase.functions.invoke('cancel-customer-booking', {
+        body: {
+          booking_id: cancellingBooking.id,
+          reason: finalReason,
+          refund_account_details: accountDetails,
+        },
+      });
+      if (error) {
+        // FunctionHttpError may contain a useful JSON response.
+        let message = error.message || 'Cancellation request failed.';
+        const context = (error as any).context;
+        if (context && typeof context.json === 'function') {
+          try {
+            const payload = await context.json();
+            message = payload?.error || message;
+          } catch { /* Preserve original error */ }
+        }
+        throw new Error(message);
       }
-      
+      if (!data?.success || !data?.booking) {
+        throw new Error(data?.error || 'Cancellation was not completed.');
+      }
+
+      const amount = Number(data.booking.refund_amount ?? 0);
+      const percentage = Number(data.booking.refund_percentage ?? 0);
+      if (amount > 0) {
+        Alert.alert(
+          'Cancellation & Refund Requested',
+          `Booking cancelled. Refund: ${percentage}% (₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}). The caterer must transfer this amount directly to your refund account.`
+        );
+      } else {
+        Alert.alert('Booking Cancelled', 'Your booking was cancelled. No refund is due under the cancellation policy.');
+      }
+
       setCancellingBooking(null);
       setSelectedReason('');
       setCustomReason('');
       setRefundAccount('');
-      load();
+      setRefundMethod('gcash');
+      setRefundHolderName('');
+      setRefundAccountNumber('');
+      setRefundBankName('');
+      await load();
+    } catch (err: any) {
+      Alert.alert('Cancellation Failed', err?.message || 'Please try again.');
+    } finally {
+      setIsCancelling(false);
     }
   };
+
+  const openBookingDetails = async (booking: Booking) => {
+    setDetailBooking(booking);
+    setTransferEvidence([]);
+    if (booking.status !== 'cancelled' || Number(booking.refund_amount) <= 0) return;
+    setEvidenceLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('refund_transfer_submissions')
+        .select('*')
+        .eq('booking_id', booking.id);
+      if (error) throw error;
+      const rows = await Promise.all((data ?? []).map(async (row: any) => {
+        const path = row.proof_storage_path ?? row.proof_path ?? row.receipt_path ?? row.storage_path;
+        let proofUrl: string | null = null;
+        if (typeof path === 'string' && path.length) {
+          const { data: signed, error: signError } = await supabase.storage
+            .from('refund-proofs')
+            .createSignedUrl(path, 60 * 10);
+          if (!signError) proofUrl = signed?.signedUrl ?? null;
+        }
+        return { ...row, proofUrl };
+      }));
+      setTransferEvidence(rows);
+    } catch (error: any) {
+      Alert.alert('Evidence Unavailable', error?.message || 'Unable to load transfer evidence.');
+    } finally {
+      setEvidenceLoading(false);
+    }
+  };
+
+  const confirmRefundReceived = (booking: Booking) => {
+    Alert.alert(
+      'Confirm refund received?',
+      `Only confirm after checking that ₱${Number(booking.refund_amount).toLocaleString('en-PH')} has actually arrived in your wallet or bank account. A receipt screenshot alone is not confirmation.`,
+      [
+        { text: 'Not Yet', style: 'cancel' },
+        {
+          text: 'I Received the Refund',
+          onPress: async () => {
+            if (confirmingRefundId || !session?.user?.id) return;
+            setConfirmingRefundId(booking.id);
+            try {
+              // Authenticated Edge Function calls the service-role-only confirmation RPC.
+              const { data, error } = await supabase.functions.invoke('confirm-customer-refund', {
+                body: { booking_id: booking.id },
+              });
+              if (error) {
+                let message = error.message || 'Unable to confirm refund.';
+                const context = (error as any).context;
+                if (context && typeof context.json === 'function') {
+                  try {
+                    const payload = await context.json();
+                    message = payload?.error || message;
+                  } catch { /* Keep the original error message. */ }
+                }
+                throw new Error(message);
+              }
+              if (!data?.success || data?.refund_status !== 'processed') {
+                throw new Error(data?.error || 'Refund confirmation was not completed.');
+              }
+              Alert.alert('Refund Confirmed', 'Thank you. Your refund is now marked as processed. Platform Staff can monitor the record.');
+              await load();
+            } catch (err: any) {
+              Alert.alert('Unable to Confirm', err?.message || 'Please try again.');
+            } finally {
+              setConfirmingRefundId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const submitRefundDispute = async () => {
+    if (!disputeBooking || submittingDispute || !session?.user?.id) return;
+    const reason = disputeReason.trim();
+    if (reason.length < 10) {
+      Alert.alert('More Details Needed', 'Please describe the missing refund in at least 10 characters.');
+      return;
+    }
+    if (reason.length > 2000) {
+      Alert.alert('Too Long', 'Please keep the explanation under 2,000 characters.');
+      return;
+    }
+    if (disputeBooking.status !== 'cancelled' || !['pending', 'overdue', 'awaiting_customer_confirmation'].includes(disputeBooking.refund_status)) {
+      Alert.alert('Refund Updated', 'Only unresolved refunds can be reported.');
+      return;
+    }
+    setSubmittingDispute(true);
+    try {
+      const { error } = await supabase.from('refund_disputes').insert({
+        booking_id: disputeBooking.id,
+        customer_id: session.user.id,
+        reason,
+      });
+      if (error) throw error;
+      setRefundDisputes(prev => ({
+        ...prev,
+        [disputeBooking.id]: { status: 'open', reason, created_at: new Date().toISOString(), caterer_response: null, caterer_responded_at: null },
+      }));
+      setDisputeBooking(null);
+      setDisputeReason('');
+      Alert.alert('Issue Reported', 'Your missing-refund report has been recorded. The refund remains pending. Please contact the caterer while the issue is investigated.');
+    } catch (err: any) {
+      Alert.alert('Unable to Submit Report', err?.code === '23505'
+        ? 'A refund dispute has already been filed for this booking.'
+        : err?.message || 'Please try again.');
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
+
+  const cancellationPreview = getCancellationPreview(cancellingBooking);
 
   const activePaymentBooking = bookings.find(b => b.id === payingBookingId);
   const availableMethods = activePaymentBooking?.caterers?.accepted_payment_methods?.length 
@@ -527,6 +887,220 @@ export default function CustomerBookings() {
         </View>
       </Modal>
 
+      {/* Booking details and refund transfer evidence */}
+      <Modal visible={!!detailBooking} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailBooking(null)}>
+        <View style={styles.paymentModalRoot}>
+          <View style={styles.paymentModalHeader}>
+            <View style={styles.detailHeaderTitle}><ClipboardList size={21} color={Colors.orange} /><Text style={styles.paymentModalTitle}>Booking Details</Text></View>
+            <TouchableOpacity onPress={() => setDetailBooking(null)} style={styles.paymentCloseBtn}>
+              <X size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          {detailBooking && (
+            <ScrollView contentContainerStyle={styles.paymentModalBody}>
+              {detailBooking.status === 'cancelled' && (
+                <View style={styles.paySummaryCard}>
+                  <View style={styles.detailSectionHeading}><View style={[styles.detailSectionIcon, {backgroundColor: '#FEF2F2'}]}><Ban size={18} color="#B91C1C" /></View><Text style={styles.paySectionTitle}>Cancellation & Refund</Text></View>
+                  <Text style={styles.detailText}>Cancelled by: {detailBooking.cancelled_by ?? '—'}</Text>
+                  <Text style={styles.detailText}>Reason: {detailBooking.cancellation_reason ?? '—'}</Text>
+                  <Text style={styles.detailText}>Refund Status: {detailBooking.refund_status?.toUpperCase() ?? 'NONE'}</Text>
+                  <Text style={styles.detailText}>Refund Amount: ₱{Number(detailBooking.refund_amount).toLocaleString('en-PH')}</Text>
+                  {detailBooking.refund_account_details && (
+                    <Text style={styles.detailText} selectable>
+                      Destination: {'\n'}{formatRefundDestination(detailBooking.refund_account_details)}
+                    </Text>
+                  )}
+                  {detailBooking.refunded_at && (
+                    <Text style={styles.detailText}>Completed: {formatDate(detailBooking.refunded_at)}</Text>
+                  )}
+                </View>
+              )}
+              {detailBooking.status === 'cancelled' && Number(detailBooking.refund_amount) > 0 && (
+                <View style={styles.paySummaryCard}>
+                  <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><ReceiptText size={18} color={Colors.orange} /></View><Text style={styles.paySectionTitle}>Refund Transfer Evidence</Text></View>
+                  {evidenceLoading ? <ActivityIndicator color={Colors.orange} /> :
+                    transferEvidence.length === 0 ? (
+                      <Text style={styles.detailText}>No transfer evidence has been submitted yet.</Text>
+                    ) : transferEvidence.map((item, index) => (
+                      <View key={item.id ?? index} style={styles.evidenceItem}>
+                        <View style={styles.detailSubheading}><FileText size={15} color={Colors.orange} /><Text style={styles.detailText}>Submission {index + 1} · {item.status ?? 'submitted'}</Text></View>
+                        {(item.transfer_reference ?? item.reference_number ?? item.reference_id) && (
+                          <Text style={styles.detailText} selectable>
+                            Reference: {item.transfer_reference ?? item.reference_number ?? item.reference_id}
+                          </Text>
+                        )}
+                        {(item.submitted_at ?? item.created_at) && <Text style={styles.detailText}>Submitted: {formatDate(item.submitted_at ?? item.created_at)}</Text>}
+                        {item.proofUrl ? (
+                          <Image source={{ uri: item.proofUrl }} style={styles.evidenceImage} resizeMode="contain" />
+                        ) : (
+                          <Text style={styles.detailText}>Proof image is unavailable or access is restricted.</Text>
+                        )}
+                      </View>
+                    ))
+                  }
+                  {detailBooking.refund_status === 'awaiting_customer_confirmation' && transferEvidence.length > 0 && (
+                    <TouchableOpacity style={styles.refundConfirmButton} onPress={() => confirmRefundReceived(detailBooking)}>
+                      <Text style={styles.confirmPayBtnText}>I Received My Refund</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(refundDisputes[detailBooking.id] || ['pending', 'overdue', 'awaiting_customer_confirmation'].includes(detailBooking.refund_status)) && (
+                    refundDisputes[detailBooking.id] ? (
+                      <View style={styles.disputeNotice}>
+                        <AlertTriangle size={18} color="#B45309" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.disputeNoticeTitle}>Refund issue reported · {refundDisputes[detailBooking.id].status.toUpperCase()}</Text>
+                          <Text style={styles.detailText}>{refundDisputes[detailBooking.id].reason}</Text>
+                          <Text style={[styles.detailText, { fontSize: 11, color: Colors.textSecondary }]}>
+                            Reported: {new Date(refundDisputes[detailBooking.id].created_at).toLocaleString('en-PH')}
+                          </Text>
+                          <View style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' }}>
+                            <Text style={{ fontWeight: '800', fontSize: 13, color: Colors.black, marginBottom: 6 }}>
+                              Caterer's Investigation Response
+                            </Text>
+                            {refundDisputes[detailBooking.id].caterer_response?.trim() ? (
+                              <>
+                                <Text style={styles.detailText} selectable>
+                                  {refundDisputes[detailBooking.id].caterer_response}
+                                </Text>
+                                {refundDisputes[detailBooking.id].caterer_responded_at ? (
+                                  <Text style={[styles.detailText, { fontSize: 11, color: Colors.textSecondary }]}>
+                                    Replied: {new Date(refundDisputes[detailBooking.id].caterer_responded_at!).toLocaleString('en-PH')}
+                                  </Text>
+                                ) : null}
+                              </>
+                            ) : (
+                              <Text style={styles.detailText}>
+                                No investigation response has been submitted by the caterer yet.
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={styles.disputeButton} onPress={() => { setDisputeReason(''); setDetailBooking(null); setDisputeBooking(detailBooking); }}>
+                        <AlertTriangle size={17} color="#B91C1C" />
+                        <Text style={styles.disputeButtonText}>I Haven't Received My Refund</Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                  <Text style={styles.detailText}>Only confirm after checking your wallet or bank account. Platform Staff monitors the process but does not handle the payment.</Text>
+                </View>
+              )}
+              <View style={styles.paySummaryCard}>
+                <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><ClipboardList size={18} color={Colors.orange} /></View><View style={{flex:1}}><Text style={styles.paySectionTitle}>Booking Overview</Text><Text style={styles.detailSectionSubtitle}>{detailBooking.caterers?.business_name ?? 'Caterer'}</Text></View></View>
+                {([
+                  ['Booking ID', detailBooking.id, Hash],
+                  ['Status', STATUS_CONFIG[detailBooking.status]?.label ?? detailBooking.status, CheckCircle2],
+                  ['Package', detailBooking.packages?.name ?? '—', Package],
+                  ['Event', detailBooking.event_type ?? 'Catering Event', PartyPopper],
+                  ['Event Date', formatDate(detailBooking.event_date), CalendarDays],
+                  ['Guests', `${detailBooking.guest_count} pax`, Users],
+                  ['Venue', detailBooking.venue ?? '—', MapPin],
+                  ['Total Cost', `₱${Number(detailBooking.total_cost).toLocaleString('en-PH')}`, Wallet],
+                  ['Downpayment', `₱${Number(detailBooking.downpayment_amount).toLocaleString('en-PH')}`, CreditCard],
+                  ['Payment Method', detailBooking.payment_method?.toUpperCase() ?? '—', ReceiptText],
+                ] as [string, string, any][]).map(([label, value, RowIcon]) => (
+                  <View key={label} style={styles.paySummaryRow}>
+                    <View style={styles.detailLabelGroup}><RowIcon size={16} color={Colors.orange} /><Text style={styles.paySummaryLabel}>{label}</Text></View>
+                    <Text style={[styles.paySummaryVal, styles.detailRowValue]} selectable>{value}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.paySummaryCard}>
+                <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><UtensilsCrossed size={18} color={Colors.orange} /></View><Text style={styles.paySectionTitle}>What's Inside Your Package</Text></View>
+                <Text style={styles.detailText}>Package: {detailBooking.packages?.name ?? 'Not available'}</Text>
+                {detailBooking.packages?.tier && (
+                  <Text style={styles.detailText}>Tier: {detailBooking.packages.tier}</Text>
+                )}
+                {detailBooking.packages?.description && (
+                  <Text style={styles.detailText}>{String(detailBooking.packages.description)}</Text>
+                )}
+                {([
+                  ['Included Services', detailBooking.packages?.includes ?? detailBooking.packages?.inclusions],
+                  ['Food Inclusions', detailBooking.packages?.food_inclusions],
+                  ['Menu', detailBooking.packages?.menu ?? detailBooking.packages?.menu_items],
+                  ['Other Inclusions', detailBooking.packages?.included_items],
+                  ['Customizations', detailBooking.customized_items],
+                ] as [string, unknown][]).map(([heading, raw]) => {
+                  const entries = describePackageField(raw);
+                  return entries.length ? (
+                    <View key={heading} style={{ marginTop: 12 }}>
+                      <View style={styles.detailSubheading}><ListChecks size={15} color={Colors.orange} /><Text style={[styles.detailText, { fontWeight: '800', color: Colors.black, marginTop: 0 }]}>{heading}</Text></View>
+                      {entries.map((entry, index) => (
+                        <Text key={`${heading}-${index}`} style={styles.detailText}>• {entry}</Text>
+                      ))}
+                    </View>
+                  ) : null;
+                })}
+                {detailBooking.special_requests ? (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={[styles.detailText, { fontWeight: '800', color: Colors.black }]}>Special Requests</Text>
+                    <Text style={styles.detailText}>{detailBooking.special_requests}</Text>
+                  </View>
+                ) : null}
+                {![
+                  detailBooking.packages?.includes, detailBooking.packages?.inclusions,
+                  detailBooking.packages?.food_inclusions, detailBooking.packages?.menu,
+                  detailBooking.packages?.menu_items, detailBooking.packages?.included_items,
+                  detailBooking.customized_items,
+                ].some(value => describePackageField(value).length > 0) && (
+                  <Text style={styles.detailText}>Detailed package inclusions have not been provided in this package record.</Text>
+                )}
+              </View>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Missing refund dispute form: fixed footer keeps both actions visible on small screens */}
+      <Modal visible={!!disputeBooking} animationType="slide" transparent statusBarTranslucent={false} onRequestClose={() => !submittingDispute && setDisputeBooking(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.disputeModalContent]}>
+            <ScrollView
+              style={styles.disputeFormScroll}
+              contentContainerStyle={styles.disputeFormBody}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.detailSectionHeading}>
+                <AlertTriangle size={22} color="#B91C1C" />
+                <Text style={styles.paymentModalTitle}>Refund Not Received</Text>
+              </View>
+              <Text style={styles.detailText}>
+                Check your wallet or bank transaction history first. If the refund has not arrived, describe the issue below. The refund will stay pending.
+              </Text>
+              <Text style={[styles.paySectionTitle, { marginTop: 18 }]}>What happened?</Text>
+              <TextInput
+                style={[styles.customInput, { minHeight: 100, textAlignVertical: 'top', marginTop: 8 }]}
+                placeholder="Example: The caterer submitted a transfer receipt, but no funds have arrived in my GCash account as of today."
+                placeholderTextColor={Colors.textMuted}
+                multiline
+                maxLength={2000}
+                value={disputeReason}
+                onChangeText={setDisputeReason}
+              />
+              <Text style={styles.detailText}>{disputeReason.length}/2000 characters</Text>
+            </ScrollView>
+            <View style={styles.disputeModalFooter}>
+              <TouchableOpacity
+                style={[styles.closeBtn, styles.disputeFooterButton]}
+                disabled={submittingDispute}
+                onPress={() => { setDisputeBooking(null); setDisputeReason(''); }}
+              >
+                <Text style={styles.closeBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmCancelBtn, styles.disputeFooterButton, submittingDispute && { opacity: 0.6 }]}
+                disabled={submittingDispute}
+                onPress={submitRefundDispute}
+              >
+                {submittingDispute ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmCancelText}>Submit Report</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Review Modal */}
       <Modal visible={!!reviewBooking} animationType="slide" presentationStyle="pageSheet">
         {reviewBooking && (
@@ -558,11 +1132,32 @@ export default function CustomerBookings() {
       <Modal visible={!!cancellingBooking} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>Cancel Booking</Text>
             
             <Text style={styles.modalWarningText}>
               {getCancelWarningMessage(cancellingBooking)}
             </Text>
+
+            {cancellationPreview && (
+              <View style={styles.refundPreviewBox}>
+                <Text style={styles.refundPreviewHeading}>Estimated Cancellation Refund</Text>
+                <Text style={styles.refundPreviewAmount}>
+                  ₱{cancellationPreview.amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.refundPreviewDetail}>
+                  {cancellationPreview.percentage}% of verified downpayment · {cancellationPreview.daysBeforeEvent} days before event
+                </Text>
+                {cancellationPreview.isGracePeriod && (
+                  <Text style={styles.refundPreviewGrace}>
+                    24-hour grace period applied
+                  </Text>
+                )}
+                <Text style={styles.refundPreviewDisclaimer}>
+                  Estimated refund based on the current booking details. The final amount is recalculated when you confirm cancellation.
+                </Text>
+              </View>
+            )}
 
             <Text style={styles.modalSubPrompt}>Please let us know why you are cancelling:</Text>
             
@@ -595,29 +1190,81 @@ export default function CustomerBookings() {
               />
             )}
 
-            {cancellingBooking?.status === 'paid' && (() => {
-              const eventDate = new Date(cancellingBooking.event_date);
-              const today = new Date();
-              eventDate.setHours(0, 0, 0, 0);
-              today.setHours(0, 0, 0, 0);
-              const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-              
-              if (diffDays > 7) {
-                return (
-                  <View style={{ marginTop: 10, marginBottom: 10 }}>
-                    <Text style={styles.modalSubPrompt}>Enter GCash Number & Name for Refund:</Text>
+            {cancellationPreview && cancellationPreview.amount > 0 && (
+              <View style={styles.refundDestinationSection}>
+                <Text style={styles.modalSubPrompt}>Where should your refund be sent?</Text>
+                <Text style={styles.refundDestinationHint}>
+                  Choose a refund destination. The caterer will handle the transfer after cancellation.
+                </Text>
+                {REFUND_METHODS.map(method => {
+                  const selected = refundMethod === method.key;
+                  const MethodIcon = method.type === 'wallet' ? Smartphone : Building2;
+                  return (
+                    <TouchableOpacity
+                      key={method.key}
+                      style={[styles.refundMethodRow, selected && styles.refundMethodRowSelected]}
+                      onPress={() => {
+                        setRefundMethod(method.key);
+                        setRefundAccountNumber('');
+                        setRefundBankName('');
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <MethodIcon size={18} color={selected ? Colors.orange : Colors.textSecondary} />
+                      <Text style={[styles.refundMethodLabel, selected && styles.refundMethodLabelSelected]}>
+                        {method.label}
+                      </Text>
+                      <View style={[styles.radioCircle, selected && styles.radioCircleActive]}>
+                        {selected && <View style={styles.radioInnerDot} />}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {refundMethod === 'other_bank' && (
+                  <>
+                    <Text style={styles.refundFieldLabel}>Bank name</Text>
                     <TextInput
-                      style={styles.customInput}
-                      placeholder="e.g., 09123456789 - Juan Dela Cruz"
+                      style={styles.refundFieldInput}
+                      placeholder="Enter your bank name"
                       placeholderTextColor={Colors.textMuted}
-                      value={refundAccount}
-                      onChangeText={setRefundAccount}
+                      value={refundBankName}
+                      onChangeText={setRefundBankName}
+                      autoCapitalize="words"
                     />
-                  </View>
-                );
-              }
-              return null;
-            })()}
+                  </>
+                )}
+
+                <Text style={styles.refundFieldLabel}>Account holder's full name</Text>
+                <TextInput
+                  style={styles.refundFieldInput}
+                  placeholder="e.g., Juan Dela Cruz"
+                  placeholderTextColor={Colors.textMuted}
+                  value={refundHolderName}
+                  onChangeText={setRefundHolderName}
+                  autoCapitalize="words"
+                />
+
+                <Text style={styles.refundFieldLabel}>
+                  {refundMethod === 'gcash' || refundMethod === 'maya'
+                    ? 'Mobile wallet number'
+                    : 'Bank account number'}
+                </Text>
+                <TextInput
+                  style={styles.refundFieldInput}
+                  placeholder={refundMethod === 'gcash' || refundMethod === 'maya'
+                    ? '09XXXXXXXXX'
+                    : 'Enter bank account number'}
+                  placeholderTextColor={Colors.textMuted}
+                  value={refundAccountNumber}
+                  onChangeText={setRefundAccountNumber}
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.refundDestinationHint}>
+                  Your refund destination will be validated and saved when you confirm cancellation. The caterer will use these details to transfer any eligible refund.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity 
@@ -627,6 +1274,10 @@ export default function CustomerBookings() {
                   setSelectedReason('');
                   setCustomReason('');
                   setRefundAccount('');
+                  setRefundMethod('gcash');
+                  setRefundHolderName('');
+                  setRefundAccountNumber('');
+                  setRefundBankName('');
                 }}
                 disabled={isCancelling}
               >
@@ -643,6 +1294,7 @@ export default function CustomerBookings() {
                 </Text>
               </TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -712,7 +1364,7 @@ export default function CustomerBookings() {
             }
 
             return (
-              <View key={b.id} style={[styles.bookingCard, paymentOverdue && styles.bookingCardUrgent]}>
+              <TouchableOpacity key={b.id} style={[styles.bookingCard, paymentOverdue && styles.bookingCardUrgent]} onPress={() => openBookingDetails(b)} activeOpacity={0.94}>
                 {/* Status Bar Header */}
                 <View style={[styles.statusBar, { backgroundColor: sc.bg }]}>
                   <View style={styles.statusTextRow}>
@@ -802,55 +1454,18 @@ export default function CustomerBookings() {
                           <Text style={styles.cancelledText}>Reason: {b.cancellation_reason}</Text>
                         )}
                         
-                        {/* ── If Caterer Cancelled & Downpayment was paid, let customer enter account details ── */}
-                        {b.cancelled_by === 'caterer' && Number(b.downpayment_amount) > 0 && (!b.refund_account_details || b.refund_status === 'none') && (
-                          <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#FED7AA' }}>
-                            <Text style={{ fontSize: 12, fontWeight: '900', color: Colors.orange, marginBottom: 4 }}>
-                              Downpayment Refund Available (₱{Number(b.downpayment_amount).toLocaleString()})
-                            </Text>
-                            <Text style={{ fontSize: 11.5, color: Colors.textSecondary, marginBottom: 8, lineHeight: 16 }}>
-                              The caterer cancelled your booking. Please enter your GCash details so platform staff can disburse your refund.
-                            </Text>
-                            <TextInput
-                              style={[styles.customInput, { height: 44, padding: 10, marginBottom: 8, fontSize: 13 }]}
-                              placeholder="e.g., 09123456789 - Juan Dela Cruz"
-                              placeholderTextColor={Colors.textMuted}
-                              value={catererRefundInput}
-                              onChangeText={setCatererRefundInput}
-                            />
-                            <TouchableOpacity
-                              style={{ backgroundColor: Colors.orange, paddingVertical: 10, borderRadius: 10, alignItems: 'center' }}
-                              onPress={async () => {
-                                if (!catererRefundInput.trim()) {
-                                  Alert.alert("Missing Details", "Please enter your GCash account details.");
-                                  return;
-                                }
-                                setSubmittingCatererRefundId(b.id);
-                                const { error } = await supabase
-                                  .from('bookings')
-                                  .update({
-                                    refund_status: 'pending',
-                                    refund_amount: b.downpayment_amount,
-                                    refund_account_details: catererRefundInput.trim()
-                                  })
-                                  .eq('id', b.id);
-                                setSubmittingCatererRefundId(null);
-
-                                if (error) {
-                                  Alert.alert("Error", error.message);
-                                } else {
-                                  Alert.alert("Submitted", "Your GCash refund details have been submitted to platform staff.");
-                                  setCatererRefundInput('');
-                                  load();
-                                }
-                              }}
-                            >
-                              <Text style={{ color: Colors.white, fontWeight: '800', fontSize: 12.5 }}>
-                                {submittingCatererRefundId === b.id ? 'Submitting...' : 'Submit Refund Account Details'}
+                        {b.cancelled_by === 'caterer' &&
+                          Number(b.refund_amount) > 0 &&
+                          !b.refund_account_details && (
+                            <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FFF7ED', borderRadius: 10 }}>
+                              <Text style={{ color: '#9A3412', fontWeight: '800' }}>
+                                Refund destination needs to be collected securely
                               </Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
+                              <Text style={{ color: '#9A3412', marginTop: 5 }}>
+                                Please contact the caterer through booking chat. In-app submission will be available once the protected refund-account endpoint is deployed.
+                              </Text>
+                            </View>
+                          )}
 
                         {b.refund_status && b.refund_status !== 'none' && (
                           <View style={{ marginTop: 10, padding: 12, backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' }}>
@@ -870,19 +1485,58 @@ export default function CustomerBookings() {
 
                             {b.refund_account_details && (
                               <Text style={{ fontSize: 11.5, color: Colors.textSecondary, marginBottom: 4 }}>
-                                GCash Account: <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontWeight: '700' }}>{b.refund_account_details}</Text>
+                                Refund Destination: <Text style={{ fontWeight: '700' }}>{formatRefundDestination(b.refund_account_details)}</Text>
                               </Text>
                             )}
 
                             {b.refund_status === 'pending' && (
                               <Text style={{ fontSize: 11, color: '#D97706', marginTop: 4, fontWeight: '700' }}>
-                                ⏳ Platform staff are verifying your GCash details to disburse your refund immediately.
+                                ⏳ Your refund is pending. The caterer sends the money directly to you; Platform Staff only monitors progress.
                               </Text>
+                            )}
+
+                            {['pending', 'overdue', 'awaiting_customer_confirmation'].includes(b.refund_status) && Number(b.refund_amount) > 0 && (
+                              <View style={{ marginTop: 10, gap: 8 }}>
+                                <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '700' }}>
+                                  {refundEvidence[b.id]
+                                    ? 'The caterer submitted a transfer receipt. Check your wallet or bank balance before confirming.'
+                                    : 'No transfer receipt has been submitted yet. If your expected refund has not arrived, you can report the issue now.'}
+                                </Text>
+                                {b.refund_status === 'awaiting_customer_confirmation' && refundEvidence[b.id] && (
+                                  <TouchableOpacity
+                                    onPress={(event) => { event.stopPropagation(); confirmRefundReceived(b); }}
+                                    disabled={confirmingRefundId === b.id}
+                                    style={{ backgroundColor: '#15803D', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                                  >
+                                    {confirmingRefundId === b.id
+                                      ? <ActivityIndicator color="#FFF" />
+                                      : <Text style={{ color: '#FFF', fontWeight: '800' }}>I Received My Refund</Text>}
+                                  </TouchableOpacity>
+                                )}
+                                {refundDisputes[b.id] ? (
+                                  <View style={styles.disputeNotice}>
+                                    <AlertTriangle size={16} color="#B45309" />
+                                    <Text style={styles.disputeNoticeTitle}>Refund issue reported · {refundDisputes[b.id].status.toUpperCase()}</Text>
+                                  </View>
+                                ) : (
+                                  <TouchableOpacity style={styles.disputeButton} onPress={(event) => {
+                                    event.stopPropagation();
+                                    setDisputeReason('');
+                                    setDisputeBooking(b);
+                                  }}>
+                                    <AlertTriangle size={16} color="#B91C1C" />
+                                    <Text style={styles.disputeButtonText}>I Haven't Received My Refund</Text>
+                                  </TouchableOpacity>
+                                )}
+                                <Text style={{ fontSize: 11, color: Colors.textSecondary }}>
+                                  Haven't received it? Do not confirm. Contact the caterer while your report is investigated.
+                                </Text>
+                              </View>
                             )}
 
                             {b.refund_status === 'processed' && (
                               <Text style={{ fontSize: 11, color: '#16A34A', marginTop: 4, fontWeight: '700' }}>
-                                ✅ Refund successfully disbursed to your GCash account!
+                                ✅ You confirmed receiving the refund. This transaction is recorded as completed.
                               </Text>
                             )}
 
@@ -953,9 +1607,11 @@ export default function CustomerBookings() {
                     </View>
                   )}
 
+                  <View style={styles.detailOpenRow}><View style={styles.detailOpenLeft}><ClipboardList size={16} color={Colors.orange} /><Text style={styles.detailOpenText}>View Booking Details</Text></View><ChevronRight size={17} color={Colors.orange} /></View>
+
                   {/* Action buttons */}
                   <View style={styles.bookingActions}>
-                    {['confirmed', 'paid', 'ongoing', 'completed', 'cancelled'].includes(b.status) && (
+                    {['pending', 'confirmed', 'paid', 'ongoing', 'completed', 'cancelled'].includes(b.status) && (
                       <TouchableOpacity
                         style={styles.chatBtn}
                         onPress={() => setChatBooking(b)}
@@ -998,7 +1654,7 @@ export default function CustomerBookings() {
                     )}
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
@@ -1008,6 +1664,48 @@ export default function CustomerBookings() {
 }
 
 const styles = StyleSheet.create({
+  disputeModalContent: {
+    maxHeight: '82%',
+    paddingBottom: 16,
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    overflow: 'hidden',
+  },
+  disputeFormScroll: { flexShrink: 1, flexGrow: 0 },
+  disputeFormBody: { paddingBottom: 12 },
+  disputeModalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+  },
+  disputeFooterButton: {
+    minHeight: 50,
+    justifyContent: 'center',
+    marginTop: 0,
+  },
+
+  detailHeaderTitle: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  detailSectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  detailSectionIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center' },
+  detailSectionSubtitle: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  detailLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, paddingRight: 8 },
+  detailRowValue: { flexShrink: 1, maxWidth: '57%' },
+  detailSubheading: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 4 },
+  detailOpenRow: { marginTop: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 11, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  detailOpenLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailOpenText: { fontSize: 13, fontWeight: '800', color: Colors.orange },
+
+  disputeButton: { marginTop: 10, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2', borderRadius: 12, padding: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  disputeButtonText: { fontSize: 12, fontWeight: '800', color: '#B91C1C', flexShrink: 1 },
+  disputeNotice: { marginTop: 12, borderRadius: 12, padding: 12, backgroundColor: '#FFFBEB', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#FDE68A' },
+  disputeNoticeTitle: { fontSize: 12, fontWeight: '800', color: '#92400E', flexShrink: 1 },
+  detailText: { fontSize: 13, color: Colors.textSecondary, lineHeight: 20, marginTop: 7 },
+  evidenceItem: { borderTopWidth: 1, borderTopColor: '#E5E7EB', marginTop: 12, paddingTop: 12 },
+  evidenceImage: { width: '100%', height: 280, backgroundColor: '#F9FAFB', borderRadius: 12, marginTop: 10 },
+  refundConfirmButton: { backgroundColor: '#15803D', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 14 },
   root: { flex: 1, backgroundColor: '#F9FAFB' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   
@@ -1403,7 +2101,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, 
     borderRadius: 20, 
     padding: 24, 
-    width: '100%', 
+    width: '100%',
+    maxHeight: '90%',
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -1411,6 +2110,12 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
   },
   modalTitle: { fontSize: 20, fontWeight: '900', color: Colors.black, marginBottom: 8 },
+  refundPreviewBox: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', borderRadius: 12, padding: 12, marginBottom: 14 },
+  refundPreviewHeading: { fontSize: 12, fontWeight: '800', color: '#9A3412', marginBottom: 4 },
+  refundPreviewAmount: { fontSize: 24, fontWeight: '900', color: Colors.orange },
+  refundPreviewDetail: { fontSize: 12, fontWeight: '600', color: '#7C2D12', marginTop: 4 },
+  refundPreviewGrace: { fontSize: 12, fontWeight: '800', color: '#15803D', marginTop: 6 },
+  refundPreviewDisclaimer: { fontSize: 10, color: '#9A3412', marginTop: 8 },
   modalWarningText: { fontSize: 13, color: '#B91C1C', fontWeight: '600', lineHeight: 18, marginBottom: 16, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 10, borderWidth: 1, borderColor: '#FECACA' },
   modalSubPrompt: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 12 },
   
@@ -1431,6 +2136,24 @@ const styles = StyleSheet.create({
     marginBottom: 10, fontSize: 14, backgroundColor: '#F9FAFB'
   },
   
+  refundDestinationSection: { marginTop: 12, marginBottom: 10 },
+  refundDestinationHint: { fontSize: 11, color: Colors.textSecondary, lineHeight: 16, marginBottom: 12 },
+  refundMethodRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+    borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB',
+    marginBottom: 8,
+  },
+  refundMethodRowSelected: { borderColor: Colors.orange, backgroundColor: '#FFF7ED' },
+  refundMethodLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: Colors.black },
+  refundMethodLabelSelected: { color: Colors.orange },
+  refundFieldLabel: { fontSize: 12, fontWeight: '800', color: Colors.black, marginTop: 8, marginBottom: 6 },
+  refundFieldInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12,
+    backgroundColor: '#F9FAFB', paddingHorizontal: 14, height: 46,
+    marginBottom: 8, fontSize: 14, color: Colors.black,
+  },
+
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
   closeBtn: {
     flex: 1, padding: 14, borderRadius: 12, 

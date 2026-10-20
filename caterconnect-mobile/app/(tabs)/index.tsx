@@ -6,6 +6,7 @@ import {
   Dimensions,
   Image,
   ImageBackground,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -21,10 +22,12 @@ import { useAuth } from '../../context/AuthContext';
 import {
   CatererWithPackages,
   fetchApprovedCaterers,
+  fetchCatererReviewSummaries,
   getLowestPricePerGuest,
   getPlanBadge,
 } from '../../lib/caterers';
 import NotificationsScreen from '../../screens/auth/NotificationsScreen';
+import { filterCaterers, lowestPackageTotal, normalizeSearch, parseFilterNumbers, type CatererSort } from '../../lib/catererSearch';
 
 // ── Lucide Icons ──
 import {
@@ -40,6 +43,15 @@ const { width } = Dimensions.get('window');
 // Real buffet photo used as the hero banner background.
 const HERO_BUFFET_IMAGE = require('../../assets/images/hero-buffet.png');
 const LOGO_IMAGE = require('../../assets/images/caterlogo.png');
+
+// Format an amount while typing; keeps up to two decimals and valid thousands commas.
+const formatBudgetInput = (value: string): string => {
+  const cleaned = value.replace(/,/g, '').replace(/[^\d.]/g, '');
+  const dot = cleaned.indexOf('.');
+  const whole = (dot < 0 ? cleaned : cleaned.slice(0, dot)).replace(/^0+(?=\d)/, '');
+  const decimals = dot < 0 ? '' : '.' + cleaned.slice(dot + 1).replace(/\./g, '').slice(0, 2);
+  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decimals;
+};
 
 const EVENT_CATEGORIES = [
   { icon: LayoutGrid, label: 'All' },
@@ -64,9 +76,24 @@ export default function HomeScreen() {
   const [guests, setGuests] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [searched, setSearched] = useState(false);
+  const [matcherMode, setMatcherMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [minBudget, setMinBudget] = useState('');
+  const [city, setCity] = useState('');
+  const [sort, setSort] = useState<CatererSort>('priority');
+  const [appliedNumbers, setAppliedNumbers] = useState<ReturnType<typeof parseFilterNumbers>>({ minBudget: null, maxBudget: null, guests: null });
+  const [draft, setDraft] = useState({ minimum: '', maximum: '', guests: '', city: '', event: 'All', sort: 'priority' as CatererSort });
+  const [filterError, setFilterError] = useState<string | null>(null);
+  const [matcherError, setMatcherError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState(false);
+  const loadVersion = useRef(0);
+  const notificationVersion = useRef(0);
+  const account = useRef(session?.user.id);
+  account.current = session?.user.id;
 
   // State for expanding/collapsing all featured caterers horizontally
   const [showAllFeatured, setShowAllFeatured] = useState(false);
@@ -97,113 +124,108 @@ export default function HomeScreen() {
     ).start();
   }, [shimmerAnim]);
 
-  const loadCaterers = async () => {
+  const loadCaterers = async (initial = false) => {
+    const version = ++loadVersion.current;
+    if (initial) setLoading(true);
+    setLoadError(null);
     try {
       const data = await fetchApprovedCaterers();
-      setCaterers(data);
-
-      // Fetch actual reviews from Supabase for each caterer
-      const { supabase } = await import('../../lib/supabase');
-      const reviewsMap: Record<string, { avg: number; count: number }> = {};
-      
-      for (const cat of data) {
-        const { data: revs, error } = await supabase
-          .from('reviews')
-          .select('overall')
-          .eq('caterer_id', cat.id);
-        
-        if (!error && revs && revs.length > 0) {
-          const total = revs.reduce((acc, r) => acc + (r.overall || 0), 0);
-          reviewsMap[cat.id] = {
-            avg: Number((total / revs.length).toFixed(1)),
-            count: revs.length,
-          };
-        } else {
-          reviewsMap[cat.id] = { avg: 0, count: 0 };
-        }
-      }
-      setCatererReviews(reviewsMap);
-    } catch (err) {
-      console.error(err);
+      if (version !== loadVersion.current) return;
+      let summaries: Record<string, { avg: number; count: number }> = {};
+      let ratingsFailed = false;
+      try { summaries = await fetchCatererReviewSummaries(data.map(cat => cat.id)); }
+      catch { ratingsFailed = true; }
+      if (version !== loadVersion.current) return;
+      setCaterers(data); setCatererReviews(summaries); setReviewError(ratingsFailed);
+    } catch (error) {
+      if (version === loadVersion.current) setLoadError('Unable to refresh caterers. Pull down to try again.');
+    } finally {
+      if (version === loadVersion.current) { setLoading(false); setRefreshing(false); }
     }
   };
 
   const loadUnreadCount = async () => {
-    if (!session?.user?.id) return;
-    const { supabase } = await import('../../lib/supabase');
-    const { count } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', session.user.id)
-      .eq('is_read', false);
-    setUnreadCount(count ?? 0);
+    const userId = session?.user.id;
+    const version = ++notificationVersion.current;
+    if (!userId) { setUnreadCount(0); return; }
+    try {
+      const { supabase } = await import('../../lib/supabase');
+      const { count, error } = await supabase.from('notifications')
+        .select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', false);
+      if (!error && account.current === userId && notificationVersion.current === version) setUnreadCount(count ?? 0);
+    } catch { /* Preserve the current badge on a temporary connectivity failure. */ }
   };
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadCaterers();
-      setLoading(false);
-    })();
-    loadUnreadCount();
-  }, [session]);
+    setUnreadCount(0);
+    void loadCaterers(true);
+    void loadUnreadCount();
+    return () => { loadVersion.current++; notificationVersion.current++; };
+  }, [session?.user.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadCaterers();
-    await loadUnreadCount();
-    setRefreshing(false);
+    await Promise.all([loadCaterers(), loadUnreadCount()]);
   };
 
   const pricePerGuest = useMemo(() => {
-    const cleanBudget = budget.replace(/,/g, '');
-    const b = parseFloat(cleanBudget);
-    const g = parseFloat(guests);
-    if (!b || !g || g <= 0) return null;
-    return b / g;
+    try {
+      const numbers = parseFilterNumbers('', budget, guests);
+      return numbers.maxBudget !== null && numbers.guests !== null ? numbers.maxBudget / numbers.guests : null;
+    } catch { return null; }
   }, [budget, guests]);
 
-  const PLAN_PRIORITY: Record<string, number> = { premium: 0, standard: 1, basic: 2, free: 3 };
-
-  // ── FILTERING LOGIC (Categories + Search Bar + Budget Matcher) ──
-  const displayedCaterers = useMemo(() => {
-    let list = caterers;
-
-    // 1. Search Query Filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.business_name?.toLowerCase().includes(q) ||
-          c.city?.toLowerCase().includes(q) ||
-          c.business_description?.toLowerCase().includes(q)
-      );
-    }
-
-    // 2. Category Filter
-    if (activeCategory !== 'All') {
-      const cat = activeCategory.toLowerCase();
-      list = list.filter((c) => {
-        const searchStr = `${c.business_name} ${c.business_description} ${JSON.stringify(c.packages)}`.toLowerCase();
-        return searchStr.includes(cat);
-      });
-    }
-
-    // 3. Budget Matcher Filter
-    if (searched && pricePerGuest !== null) {
-      list = list.filter((c) => {
-        const lowest = getLowestPricePerGuest(c.packages);
-        return lowest !== null && lowest <= pricePerGuest;
-      });
-    }
-
-    // 4. Sort by Subscription Tier
-    return [...list].sort((a, b) => {
-      const pa = PLAN_PRIORITY[a.subscription_plan] ?? 99;
-      const pb = PLAN_PRIORITY[b.subscription_plan] ?? 99;
-      return pa - pb;
-    });
-  }, [caterers, pricePerGuest, searched, activeCategory, searchQuery]);
+  const displayedCaterers = useMemo(() => filterCaterers(caterers, {
+    query: searchQuery, city, eventType: activeCategory, sort,
+    ...(searched ? appliedNumbers : { minBudget: null, maxBudget: null, guests: null }),
+    mode: searched && matcherMode ? 'starting-price' : 'package-total',
+  }), [caterers, searchQuery, city, activeCategory, sort, searched, matcherMode, appliedNumbers]);
+  const featuredCaterers = useMemo(() => displayedCaterers
+    .filter(cat => ['premium', 'standard'].includes(cat.subscription_plan))
+    .sort((a, b) => (a.subscription_plan === 'premium' ? 0 : 1) - (b.subscription_plan === 'premium' ? 0 : 1)
+      || a.business_name.localeCompare(b.business_name)), [displayedCaterers]);
+  const cities = useMemo(() => [...new Set(caterers.map(cat => cat.city?.trim()).filter((value): value is string => !!value))].sort(), [caterers]);
+  const eventTypes = useMemo(() => [...new Set([...EVENT_CATEGORIES.map(cat => cat.label),
+    ...caterers.flatMap(cat => cat.packages.flatMap(pkg => pkg.event_types ?? []))]
+    .map(normalizeSearch).filter(Boolean))].map(value => value === 'all' ? 'All' : value[0].toUpperCase() + value.slice(1)), [caterers]);
+  const filtersActive = !!searchQuery.trim() || activeCategory !== 'All' || !!budget || !!guests || !!minBudget || !!city || sort !== 'priority';
+  const resetFilters = () => {
+    setSearchQuery(''); setActiveCategory('All'); setBudget(''); setGuests(''); setMinBudget('');
+    setCity(''); setSort('priority'); setSearched(false); setMatcherMode(false); setMatcherError(null); setFilterError(null);
+    setAppliedNumbers({ minBudget: null, maxBudget: null, guests: null });
+    setDraft({ minimum: '', maximum: '', guests: '', city: '', event: 'All', sort: 'priority' });
+  };
+  const openFilters = () => {
+    setDraft({ minimum: minBudget, maximum: budget, guests, city, event: activeCategory, sort });
+    setFilterError(null); setShowFilters(true);
+  };
+  const applyFilters = () => {
+    try {
+      const numbers = parseFilterNumbers(draft.minimum, draft.maximum, draft.guests);
+      setAppliedNumbers(numbers); setSearched(Object.values(numbers).some(value => value !== null)); setMatcherMode(false);
+      setMinBudget(draft.minimum); setBudget(draft.maximum); setGuests(draft.guests);
+      setCity(draft.city); setActiveCategory(draft.event); setSort(draft.sort);
+      setMatcherError(null); setFilterError(null); setShowFilters(false);
+    } catch (error) { setFilterError(error instanceof Error ? error.message : 'Check your filters.'); }
+  };
+  const matchBudget = () => {
+    try {
+      // Smart Budget Matcher is a standalone search: previously selected advanced
+      // filters must not silently exclude affordable catering packages.
+      const numbers = parseFilterNumbers('', budget, guests);
+      if (numbers.maxBudget === null || numbers.guests === null) throw new Error('Enter both your total budget and a positive whole number of guests.');
+      setMinBudget('');
+      setCity('');
+      setActiveCategory('All');
+      setSearchQuery('');
+      setSort('priority');
+      setAppliedNumbers(numbers);
+      setMatcherMode(true);
+      setSearched(true);
+      setMatcherError(null);
+      setFilterError(null);
+    } catch (error) { setMatcherError(error instanceof Error ? error.message : 'Check your budget and guest count.'); }
+  };
 
   const handleBookPress = (catererId?: string) => {
     if (!session) {
@@ -289,6 +311,51 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Notifications Modal */}
+      <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
+        <KeyboardAvoidingView style={styles.filterOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} accessibilityRole="button" accessibilityLabel="Close filters" onPress={() => setShowFilters(false)} />
+          <View style={styles.filterSheet}>
+            <View style={styles.filterHeader}>
+              <View><Text style={styles.sectionTitle}>Search Filters</Text><Text style={styles.filterHint}>Refine the current search and budget matcher</Text></View>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close filters" onPress={() => setShowFilters(false)} style={{ padding: 8 }}><X size={22} color={Colors.orange} /></TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
+              <Text style={styles.filterHint}>Budgets use the full fixed package price plus automatic per-guest charges above the included capacity. Minimum and maximum guest limits apply. Optional menu additions are excluded.</Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}><Text style={styles.filterLabel}>Minimum budget (₱)</Text>
+                  <TextInput accessibilityLabel="Minimum budget" style={styles.filterInput} keyboardType="decimal-pad" placeholder="No minimum" value={draft.minimum} onChangeText={minimum => setDraft(prev => ({ ...prev, minimum: formatBudgetInput(minimum) }))} /></View>
+                <View style={{ flex: 1 }}><Text style={styles.filterLabel}>Maximum budget (₱)</Text>
+                  <TextInput accessibilityLabel="Maximum budget" style={styles.filterInput} keyboardType="decimal-pad" placeholder="No maximum" value={draft.maximum} onChangeText={maximum => setDraft(prev => ({ ...prev, maximum: formatBudgetInput(maximum) }))} /></View>
+              </View>
+              <View><Text style={styles.filterLabel}>Number of guests</Text>
+                <TextInput accessibilityLabel="Guest count filter" style={styles.filterInput} keyboardType="number-pad" placeholder="Any guest count" value={draft.guests} onChangeText={value => setDraft(prev => ({ ...prev, guests: value }))} /></View>
+              <View><Text style={styles.filterLabel}>Caterer city</Text><View style={styles.filterChips}>
+                {['', ...cities].map(value => <TouchableOpacity key={value || 'all'} style={[styles.filterChip, draft.city === value && styles.filterChipActive]}
+                  accessibilityRole="button" accessibilityState={{ selected: draft.city === value }} onPress={() => setDraft(prev => ({ ...prev, city: value }))}>
+                  <Text style={[styles.filterChipText, draft.city === value && { color: Colors.white }]}>{value || 'All locations'}</Text></TouchableOpacity>)}
+              </View><Text style={styles.filterHint}>Matches the caterer's listed city, not a delivery coverage area.</Text></View>
+              <View><Text style={styles.filterLabel}>Event type</Text><View style={styles.filterChips}>
+                {eventTypes.map(value => <TouchableOpacity key={value} style={[styles.filterChip, normalizeSearch(draft.event) === normalizeSearch(value) && styles.filterChipActive]}
+                  accessibilityRole="button" accessibilityState={{ selected: normalizeSearch(draft.event) === normalizeSearch(value) }} onPress={() => setDraft(prev => ({ ...prev, event: value }))}>
+                  <Text style={[styles.filterChipText, normalizeSearch(draft.event) === normalizeSearch(value) && { color: Colors.white }]}>{value}</Text></TouchableOpacity>)}
+              </View></View>
+              <View><Text style={styles.filterLabel}>Sort Browse All</Text><View style={styles.filterChips}>
+                {([
+                  ['priority', 'Recommended'], ['price-asc', 'Price: Low to High'],
+                  ['price-desc', 'Price: High to Low'], ['name', 'Name: A–Z'],
+                ] as [CatererSort, string][]).map(([value, label]) => <TouchableOpacity key={value} style={[styles.filterChip, draft.sort === value && styles.filterChipActive]}
+                  accessibilityRole="button" accessibilityState={{ selected: draft.sort === value }} onPress={() => setDraft(prev => ({ ...prev, sort: value }))}>
+                  <Text style={[styles.filterChipText, draft.sort === value && { color: Colors.white }]}>{label}</Text></TouchableOpacity>)}
+              </View><Text style={styles.filterHint}>Price uses each caterer's lowest matching package total. Featured placement keeps Premium / Standard priority.</Text></View>
+              {filterError && <Text accessibilityRole="alert" style={{ color: Colors.error }}>{filterError}</Text>}
+            </ScrollView>
+            <View style={styles.filterFooter}>
+              <TouchableOpacity accessibilityRole="button" onPress={resetFilters} style={{ padding: 12 }}><Text style={styles.seeAll}>Reset All</Text></TouchableOpacity>
+              <TouchableOpacity accessibilityRole="button" onPress={applyFilters} style={[styles.matcherBtn, { flex: 1 }]}><Text style={styles.matcherBtnText}>Apply Filters</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
       <Modal visible={showNotifs} animationType="slide" presentationStyle="pageSheet">
         <NotificationsScreen />
         <TouchableOpacity
@@ -376,7 +443,7 @@ export default function HomeScreen() {
             <View style={styles.searchDivider} />
             <TouchableOpacity 
               activeOpacity={0.7} 
-              onPress={() => {}}
+              onPress={openFilters}
               style={styles.filterActionBtn}
             >
               <SlidersHorizontal size={14} color={Colors.orange} />
@@ -438,7 +505,9 @@ export default function HomeScreen() {
         </ScrollView>
 
         {/* ── FEATURED CATERERS ── */}
-        {displayedCaterers.length > 0 && (
+        {loadError && <Text style={{ color: Colors.error, marginHorizontal: 20, marginVertical: 10 }} accessibilityRole="alert">{loadError}</Text>}
+        {reviewError && <Text style={{ color: Colors.textSecondary, marginHorizontal: 20, marginBottom: 10 }}>Ratings could not be refreshed. Pull down to retry.</Text>}
+        {featuredCaterers.length > 0 && (
           <>
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>Featured Caterers</Text>
@@ -452,9 +521,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredRow} decelerationRate="fast" snapToInterval={240} snapToAlignment="start">
-              {displayedCaterers
-                .filter((c) => ['premium', 'standard'].includes(c.subscription_plan))
-                .sort((a, b) => (a.subscription_plan === 'premium' ? -1 : 1) - (b.subscription_plan === 'premium' ? -1 : 1))
+              {featuredCaterers
                 .slice(0, showAllFeatured ? undefined : 6)
                 .map((item) => {
                   const lowest = getLowestPricePerGuest(item.packages);
@@ -514,17 +581,17 @@ export default function HomeScreen() {
                         <View style={styles.ratingRow}>
                           <Star size={10} color="#F59E0B" fill="#F59E0B" />
                           <Text style={styles.ratingScore}>
-                            {revData.count > 0 ? revData.avg.toFixed(1) : 'New'}
+                            {reviewError ? 'Unavailable' : revData.count > 0 ? revData.avg.toFixed(1) : 'New'}
                           </Text>
                           <Text style={styles.ratingCount}>
-                            {revData.count > 0 ? `(${revData.count} reviews)` : '(No reviews)'}
+                            {reviewError ? '(Retry refresh)' : revData.count > 0 ? `(${revData.count} reviews)` : '(No reviews)'}
                           </Text>
                         </View>
 
                         <View style={styles.featCardBottom}>
                           {lowest !== null ? (
                             <View>
-                              <Text style={styles.featCardPrice}>₱{lowest.toFixed(0)}</Text>
+                              <Text style={styles.featCardPrice}>₱{lowest.toFixed(2)}</Text>
                               <Text style={styles.featCardUnit}>/guest</Text>
                             </View>
                           ) : (
@@ -585,7 +652,7 @@ export default function HomeScreen() {
                 <Text style={styles.matcherInstructionText}>
                   1. Enter your overall event <Text style={{ fontWeight: '700' }}>Total Budget</Text> (e.g., 50,000).{'\n'}
                   2. Enter your expected <Text style={{ fontWeight: '700' }}>No. of Guests</Text> (e.g., 100).{'\n'}
-                  3. Tap <Text style={{ fontWeight: '700' }}>Find Matching Caterers</Text> to instantly view packages fitting your budget per guest!
+                  3. Tap <Text style={{ fontWeight: '700' }}>Find Matching Caterers</Text>. The system compares your budget per guest with each published package's starting price per guest. Actual guest capacity and final pricing are checked when booking.
                 </Text>
               </View>
             )}
@@ -600,10 +667,10 @@ export default function HomeScreen() {
                   keyboardType="numeric"
                   value={budget}
                   onChangeText={(v) => {
-                    const numericOnly = v.replace(/\D/g, '');
-                    const formatted = numericOnly ? Number(numericOnly).toLocaleString('en-US') : '';
-                    setBudget(formatted);
+                    setBudget(formatBudgetInput(v));
+                    setMatcherError(null);
                     setSearched(false);
+                    setMatcherMode(false);
                   }}
                 />
               </View>
@@ -617,7 +684,9 @@ export default function HomeScreen() {
                   value={guests}
                   onChangeText={(v) => {
                     setGuests(v);
+                    setMatcherError(null);
                     setSearched(false);
+                    setMatcherMode(false);
                   }}
                 />
               </View>
@@ -625,14 +694,15 @@ export default function HomeScreen() {
 
             {pricePerGuest !== null && (
               <View style={styles.perGuestRow}>
-                <Text style={styles.perGuestLabel}>Estimated Price Per Guest</Text>
+                <Text style={styles.perGuestLabel}>Your Budget Per Guest</Text>
                 <Text style={styles.perGuestValue}>₱{pricePerGuest.toFixed(2)}</Text>
               </View>
             )}
 
+            {matcherError && <Text style={{ color: Colors.error, marginTop: 10 }} accessibilityRole="alert">{matcherError}</Text>}
             <TouchableOpacity 
               style={styles.matcherBtn} 
-              onPress={() => setSearched(true)} 
+              onPress={matchBudget} 
               activeOpacity={0.85}
             >
               <Text style={styles.matcherBtnText}>Find Matching Caterers</Text>
@@ -647,18 +717,14 @@ export default function HomeScreen() {
           onLayout={(e) => setBrowseAllY(e.nativeEvent.layout.y)}
         >
           <Text style={styles.sectionTitle}>
-            {searched && pricePerGuest !== null
+            {searched
               ? `Matched Caterers (${displayedCaterers.length})`
               : `Browse All (${displayedCaterers.length})`}
           </Text>
-          {searched && (
+          {filtersActive && (
             <TouchableOpacity
               style={styles.seeAllRow}
-              onPress={() => {
-                setSearched(false);
-                setBudget('');
-                setGuests('');
-              }}
+              onPress={resetFilters}
             >
               <Text style={styles.seeAll}>Clear Filters</Text>
               <X size={12} color={Colors.orange} />
@@ -674,12 +740,13 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.emptyTitle}>No caterers found</Text>
               <Text style={styles.emptySub}>
-                Try adjusting your search query, budget, or category to find more options.
+                {matcherMode && searched ? 'No published caterer package has a starting per-guest price within your budget. Try a larger budget.' : 'Try adjusting your search query, budget, or category to find more options.'}
               </Text>
             </View>
           ) : (
             displayedCaterers.map((item) => {
               const lowest = getLowestPricePerGuest(item.packages);
+              const matchingTotal = lowestPackageTotal(item.packages, searched ? appliedNumbers.guests : null);
               const planBadge = getPlanBadge(item.subscription_plan);
               const revData = catererReviews[item.id] || { avg: 0, count: 0 };
 
@@ -709,12 +776,14 @@ export default function HomeScreen() {
                       </Text>
                       {lowest !== null && (
                         <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={styles.listCardPrice}>₱{lowest.toFixed(0)}</Text>
+                          <Text style={styles.listCardPrice}>₱{lowest.toFixed(2)}</Text>
                           <Text style={styles.listCardPricePer}>per guest</Text>
                         </View>
                       )}
                     </View>
                     
+                    {(!matcherMode && (searched || sort === 'price-asc' || sort === 'price-desc')) && matchingTotal !== null &&
+                      <Text style={[styles.listCardMetaText, { color: Colors.orange, marginBottom: 6 }]}>Matching base total from {matchingTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</Text>}
                     <View style={styles.listCardMeta}>
                       {item.city && (
                         <View style={styles.metaRow}>
@@ -725,7 +794,7 @@ export default function HomeScreen() {
                       <View style={styles.metaRow}>
                         <Star size={10} color="#F59E0B" fill="#F59E0B" />
                         <Text style={styles.listCardMetaText}>
-                          {revData.count > 0 ? `${revData.avg.toFixed(1)} (${revData.count})` : 'New (0)'}
+                          {reviewError ? 'Ratings unavailable' : revData.count > 0 ? `${revData.avg.toFixed(1)} (${revData.count})` : 'New (0)'}
                         </Text>
                       </View>
                     </View>
@@ -774,6 +843,17 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  filterOverlay: { flex: 1, backgroundColor: 'rgba(17,17,17,0.45)', justifyContent: 'flex-end' },
+  filterSheet: { maxHeight: '90%', backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: Platform.OS === 'ios' ? 24 : 12 },
+  filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  filterHint: { fontSize: 12, lineHeight: 18, color: Colors.textSecondary, marginTop: 5 },
+  filterLabel: { fontSize: 13, fontWeight: '800', color: Colors.textPrimary, marginBottom: 8 },
+  filterInput: { borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bgInput, borderRadius: 12, padding: 13, color: Colors.textPrimary, fontSize: 14 },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterChip: { borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.orangeLight, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
+  filterChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
+  filterChipText: { color: Colors.orange, fontSize: 12, fontWeight: '700' },
+  filterFooter: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border },
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   skeletonBox: { backgroundColor: '#E5E7EB' },
 

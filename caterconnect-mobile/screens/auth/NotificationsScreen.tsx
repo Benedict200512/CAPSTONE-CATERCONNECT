@@ -8,23 +8,25 @@ import { useRouter, Href } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import type { NotificationType } from '../../lib/notifications';
 import {
   Bell, CheckCircle2, XCircle, CreditCard, PartyPopper,
   Sparkles, Check, Inbox, Clock, AlertCircle,
-  Star, MessageCircle, RefreshCw, AlertTriangle, ShieldCheck
+  Star, MessageCircle, MessageSquareText, RefreshCw, AlertTriangle, ShieldCheck,
+  ReceiptText, Wallet, FileWarning, FileCheck2
 } from 'lucide-react-native';
 
 type Notification = {
   id: string;
   title: string;
   message: string;
-  type: string;
+  type: NotificationType;
   booking_id: string | null;
   is_read: boolean;
   created_at: string;
 };
 
-const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: any }> = {
+const TYPE_CONFIG: Record<NotificationType, { color: string; bg: string; icon: any }> = {
   booking_submitted:    { color: '#2563EB', bg: '#EFF6FF', icon: Clock },
   booking_approved:     { color: '#166534', bg: '#DCFCE7', icon: CheckCircle2 },
   booking_rejected:     { color: '#DC2626', bg: '#FEE2E2', icon: XCircle },
@@ -39,10 +41,18 @@ const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: any }> = {
   new_review:           { color: '#F59E0B', bg: '#FEF3C7', icon: Star },
   subscription:         { color: '#7C3AED', bg: '#F5F3FF', icon: RefreshCw },
   downpayment_deadline: { color: '#DC2626', bg: '#FEE2E2', icon: AlertTriangle },
+  refund_dispute_opened: { color: '#D97706', bg: '#FEF3C7', icon: FileWarning },
+  refund_dispute_submitted: { color: '#D97706', bg: '#FEF3C7', icon: FileWarning },
+  refund_dispute_response: { color: '#2563EB', bg: '#EFF6FF', icon: MessageSquareText },
+  refund_dispute_responded: { color: '#2563EB', bg: '#EFF6FF', icon: MessageSquareText },
+  refund_transfer_submitted: { color: '#2563EB', bg: '#EFF6FF', icon: ReceiptText },
+  refund_confirmed: { color: '#166534', bg: '#DCFCE7', icon: FileCheck2 },
+  refund_received: { color: '#166534', bg: '#DCFCE7', icon: Wallet },
+  refund_overdue: { color: '#DC2626', bg: '#FEE2E2', icon: AlertTriangle },
 };
 
 export default function NotificationsScreen() {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,19 +95,31 @@ export default function NotificationsScreen() {
       await markRead(notif.id);
     }
 
-    if (notif.type.includes('message')) {
+    if (notif.type === 'new_message') {
       router.push({
-        pathname: '/messages',
-        params: { booking_id: notif.booking_id }
+        pathname: profile?.id === session?.user.id && profile?.role === 'caterer'
+          ? '/(caterer)/messages' : '/(tabs)/messages',
+        params: { booking_id: notif.booking_id ?? undefined }
       } as Href);
     } 
-    else if (notif.type.includes('review') || notif.type.includes('subscription')) {
+    else if (notif.type === 'new_review') {
+      // Reviews are associated with bookings, not the profile dashboard.
+      // Pass the booking ID so the bookings screen can open its summary.
+      router.push({
+        pathname: profile?.role === 'caterer' ? '/(caterer)/bookings' : '/bookings',
+        params: {
+          ...(notif.booking_id ? { id: notif.booking_id } : {}),
+          notification_id: notif.id,
+        },
+      } as Href);
+    }
+    else if (notif.type.includes('subscription')) {
       router.push('/profile' as Href);
-    } 
+    }
     else if (notif.booking_id) {
       router.push({
         pathname: '/bookings',
-        params: { id: notif.booking_id }
+        params: { id: notif.booking_id, notification_id: notif.id }
       } as Href);
     }
   };
@@ -161,7 +183,10 @@ export default function NotificationsScreen() {
             </View>
           ) : (
             notifications.map((notif) => {
-              const config = TYPE_CONFIG[notif.type] ?? { color: Colors.orange, bg: '#FFF7ED', icon: Bell };
+              const isRefundDisputeUpdate = notif.title.trim().toLowerCase() === 'refund dispute update';
+              const config = isRefundDisputeUpdate
+                ? { color: '#2563EB', bg: '#EFF6FF', icon: MessageSquareText }
+                : TYPE_CONFIG[notif.type] ?? { color: Colors.orange, bg: '#FFF7ED', icon: Bell };
               const IconComponent = config.icon;
               
               return (

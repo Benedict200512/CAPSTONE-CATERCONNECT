@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { 
   Plus, Edit3, Trash2, X, Check, CheckCircle2, 
   ChevronDown, UtensilsCrossed, Soup, CakeSlice, 
-  CupSoda, Scale, SearchX, DollarSign, Info
+  CupSoda, Scale, SearchX, Info
 } from 'lucide-react-native';
 
 type MenuItem = {
@@ -107,9 +107,9 @@ export default function MenuScreen() {
   const openEdit = (item: MenuItem) => {
     setEditing(item);
     setForm({
-      name:           item.name,
-      category:       item.category,
-      description:    item.description ?? '',
+      name:              item.name,
+      category:          item.category,
+      description:       item.description ?? '',
       price_per_guest: String(item.price_per_guest),
       serving_size:   item.serving_size ? String(item.serving_size) : '',
       serving_unit:   item.serving_unit ?? 'per person',
@@ -118,16 +118,16 @@ export default function MenuScreen() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim())          { Alert.alert('Required', 'Item name is required.'); return; }
+    if (!form.name.trim())           { Alert.alert('Required', 'Item name is required.'); return; }
     if (!form.price_per_guest)      { Alert.alert('Required', 'Price is required.'); return; }
-    if (!catererData?.id)           return;
+    if (!catererData?.id)            return;
 
     setSaving(true);
     const payload = {
-      caterer_id:      catererData.id,
-      name:            form.name.trim(),
-      category:        form.category,
-      description:     form.description.trim() || null,
+      caterer_id:       catererData.id,
+      name:             form.name.trim(),
+      category:         form.category,
+      description:      form.description.trim() || null,
       price_per_guest: parseFloat(form.price_per_guest) || 0,
       serving_size:    form.serving_size ? parseFloat(form.serving_size) : null,
       serving_unit:    form.serving_unit || null,
@@ -179,9 +179,8 @@ export default function MenuScreen() {
           <Text style={styles.pageTitle}>Menu Items</Text>
           <Text style={styles.pageSub}>{items.length} items across all categories</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.85}>
-          <Plus size={18} color={Colors.white} strokeWidth={3} />
-          <Text style={styles.addBtnText}>Add</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.85} accessibilityLabel="Add Item">
+          <Plus size={22} color={Colors.white} strokeWidth={3} />
         </TouchableOpacity>
       </View>
 
@@ -271,7 +270,7 @@ export default function MenuScreen() {
 
                   <View style={styles.itemBottom}>
                     <View style={styles.priceBadge}>
-                      <DollarSign size={14} color={Colors.orange} />
+                      <Text style={{ color: Colors.orange, fontSize: 14, fontWeight: '700' }}>₱</Text>
                       <Text style={styles.priceValue}>₱{item.price_per_guest.toLocaleString()}</Text>
                       <Text style={styles.pricePer}>/guest</Text>
                     </View>
@@ -422,14 +421,14 @@ export default function MenuScreen() {
                 <Text style={styles.formLabel}>Quick Serving Examples</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
                   {[
-                    { size: '1',   unit: 'kg',         label: '1 kg'        },
-                    { size: '500', unit: 'grams',      label: '500g'        },
-                    { size: '1',   unit: 'tub',        label: '1 tub'       },
-                    { size: '1',   unit: 'tray',       label: '1 tray'      },
-                    { size: '1',   unit: 'liter',      label: '1 liter'     },
+                    { size: '1',   unit: 'kg',        label: '1 kg'        },
+                    { size: '500', unit: 'grams',     label: '500g'        },
+                    { size: '1',   unit: 'tub',       label: '1 tub'       },
+                    { size: '1',   unit: 'tray',      label: '1 tray'      },
+                    { size: '1',   unit: 'liter',     label: '1 liter'     },
                     { size: '',    unit: 'per person', label: 'Per person'  },
-                    { size: '1',   unit: 'platter',    label: '1 platter'   },
-                    { size: '1',   unit: 'dozen',      label: '1 dozen'     },
+                    { size: '1',   unit: 'platter',   label: '1 platter'   },
+                    { size: '1',   unit: 'dozen',     label: '1 dozen'     },
                   ].map(ex => {
                     const isActive = form.serving_size === ex.size && form.serving_unit === ex.unit;
                     return (
@@ -515,13 +514,12 @@ const styles = StyleSheet.create({
   },
   pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
   pageSub:   { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
-  addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.orange, borderRadius: 24,
-    paddingHorizontal: 16, paddingVertical: 10,
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  addBtn: { 
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: Colors.orange, 
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 
   },
-  addBtnText: { color: Colors.white, fontWeight: '800', fontSize: 14 },
 
   tabsContainer: { backgroundColor: Colors.white, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   categoryTabs: { paddingHorizontal: 20, gap: 8 },

@@ -1,0 +1,18 @@
+# Local CLI configuration only; this does not create or link a hosted project.
+project_id = "caterconnect-mobile"
+
+[functions.create-staff-account]
+verify_jwt = true
+entrypoint = "./functions/create-staff-account/index.ts"
+
+# Xendit authenticates with x-callback-token, not a Supabase user JWT.
+# The handler fails closed on missing configuration and verifies booking charges
+# with Xendit's server API. This local setting requires separate deployment.
+[functions.xendit-webhook]
+verify_jwt = false
+
+[functions.xendit-payment]
+verify_jwt = true
+
+[functions.xendit-check-status]
+verify_jwt = true

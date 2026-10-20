@@ -1,6 +1,12 @@
+
 import { supabase } from './supabase';
+import { POLICY_VERSION } from '../constants/registrationPolicies';
 
 export type AppRole = 'customer' | 'caterer';
+
+// ==========================================
+// CUSTOMER & CATERER REGISTRATION
+// ==========================================
 
 export async function signUp(
   email: string,
@@ -9,109 +15,212 @@ export async function signUp(
   role: AppRole,
   phone?: string,
   address?: string,
-  businessName?: string, 
-  city?: string 
+  businessName?: string,
+  city?: string,
+  acceptedTerms: boolean = false
 ) {
+  // Require agreement to CaterConnect registration policies
+  if (!acceptedTerms) {
+    return {
+      data: null,
+      error: new Error(
+        'Please accept the CaterConnect registration policies.'
+      ),
+    };
+  }
+
+  // Validate required registration information
+  if (
+    !email.trim() ||
+    !password ||
+    !fullName.trim()
+  ) {
+    return {
+      data: null,
+      error: new Error(
+        'Please complete all required registration fields.'
+      ),
+    };
+  }
+
+  // Register customer or caterer using Supabase Auth
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: email.trim().toLowerCase(),
     password,
     options: {
       data: {
-        full_name: fullName,
-        role: role,
-        phone_number: phone,
-        address: address,
-        business_name: businessName,
-        city: city,
+        full_name: fullName.trim(),
+        role,
+        phone_number: phone?.trim() || null,
+        address: address?.trim() || null,
+        business_name: businessName?.trim() || null,
+        city: city?.trim() || null,
+
+        // Registration policy acceptance
+        accepted_terms: true,
+        policy_version: POLICY_VERSION,
       },
     },
   });
+
   return { data, error };
 }
 
-export async function signIn(email: string, password: string) {
+// ==========================================
+// GET ACCOUNT SUSPENSION REASON
+// ==========================================
+
+async function getSuspensionReason(
+  userId: string
+): Promise<string | null> {
+  try {
+    // Look for the latest recorded suspension action
+    const { data, error } = await supabase
+      .from('account_monitoring_events')
+      .select('reason')
+      .eq('user_id', userId)
+      .eq('action', 'suspend')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn(
+        'Unable to retrieve suspension reason:',
+        error.message
+      );
+      return null;
+    }
+
+    return data?.reason?.trim() || null;
+  } catch (error) {
+    console.error(
+      'Error retrieving suspension reason:',
+      error
+    );
+    return null;
+  }
+}
+
+// ==========================================
+// USER LOGIN & SUSPENSION CHECK
+// ==========================================
+
+export async function signIn(
+  email: string,
+  password: string
+) {
   const { data, error } = await supabase.auth.signInWithPassword({
-    email,
+    email: email.trim().toLowerCase(),
     password,
   });
 
+  // Return Supabase authentication errors
   if (error) {
     return { data, error };
   }
 
-  // Check if the account has been suspended
-  if (data.user) {
-    const { data: profileData, error: profileError } = await supabase
+  if (!data.user) {
+    return {
+      data: null,
+      error: new Error(
+        'Unable to verify your account. Please try again.'
+      ),
+    };
+  }
+
+  // Retrieve the user's account status
+  const { data: profileData, error: profileError } =
+    await supabase
       .from('profiles')
       .select('status, role')
       .eq('id', data.user.id)
       .maybeSingle();
 
-    if (!profileError && profileData?.status === 'suspended') {
-      // Force sign out immediately
-      await supabase.auth.signOut();
+  // Prevent access if account status cannot be verified
+  if (profileError || !profileData) {
+    await supabase.auth.signOut();
 
-      let balanceText = '';
-
-      // If the user is a caterer, calculate their exact outstanding balance
-      if (profileData.role === 'caterer') {
-        const { data: catererData } = await supabase
-          .from('caterers')
-          .select('id')
-          .eq('user_id', data.user.id)
-          .maybeSingle();
-
-        if (catererData) {
-          // Fetch processed refund bookings associated with this caterer
-          const { data: bookingData } = await supabase
-            .from('bookings')
-            .select('downpayment_amount, refund_amount')
-            .eq('caterer_id', catererData.id)
-            .eq('refund_status', 'processed');
-
-          // Sum up the total balance owed
-          const totalBalance = bookingData?.reduce(
-            (sum, b) => sum + Number(b.refund_amount || b.downpayment_amount || 0),
-            0
-          ) || 0;
-
-          if (totalBalance > 0) {
-            balanceText = ` Your total outstanding balance is ₱${totalBalance.toLocaleString()}.`;
-          }
-        }
-      }
-
-      // Tailor the error message dynamically
-      const errorMessage = profileData.role === 'caterer'
-        ? `Your caterer account has been suspended due to an unpaid balance.${balanceText} Please send your payment via GCash to 0917-XXX-XXXX (CaterConnect Hub) and email your reference screenshot to support@caterconnect.com to restore your account.`
-        : 'Your account has been suspended. Please contact support.';
-
-      return { 
-        data: null, 
-        error: new Error(errorMessage) 
-      };
-    }
+    return {
+      data: null,
+      error: new Error(
+        'Unable to verify your account status. Please try again or contact CaterConnect support.'
+      ),
+    };
   }
 
+  // ========================================
+  // SUSPENDED ACCOUNT
+  // ========================================
+
+  if (profileData.status === 'suspended') {
+    // Retrieve the latest suspension reason
+    const suspensionReason = await getSuspensionReason(
+      data.user.id
+    );
+
+    // Sign out to prevent access to the platform
+    await supabase.auth.signOut();
+
+    const accountType =
+      profileData.role === 'caterer'
+        ? 'caterer'
+        : profileData.role === 'customer'
+        ? 'customer'
+        : 'user';
+
+    const reasonText = suspensionReason
+      ? `Reason: ${suspensionReason}`
+      : 'Reason: Please contact CaterConnect support for details about your account suspension.';
+
+    const errorMessage =
+      `Your CaterConnect ${accountType} account has been suspended.\n\n` +
+      `${reasonText}\n\n` +
+      'You cannot access the platform while your account is suspended. ' +
+      'Please contact CaterConnect support if you need assistance or wish to request a review.';
+
+    return {
+      data: null,
+      error: new Error(errorMessage),
+    };
+  }
+
+  // Login successful
   return { data, error };
 }
 
+// ==========================================
+// SIGN OUT
+// ==========================================
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
+
   return { error };
 }
 
+// ==========================================
+// LOGOUT USER
+// ==========================================
+
 export async function logoutUser() {
   const { error } = await supabase.auth.signOut();
+
   if (error) {
     console.error('Logout error:', error.message);
   }
 }
 
-export async function resendVerificationEmail(email: string) {
+// ==========================================
+// RESEND EMAIL VERIFICATION
+// ==========================================
+
+export async function resendVerificationEmail(
+  email: string
+) {
   const { error } = await supabase.auth.resend({
     type: 'signup',
-    email,
+    email: email.trim().toLowerCase(),
   });
 
   if (error) {

@@ -90,9 +90,8 @@ async function pollChargeStatus(
       );
 
       const data = await res.json();
-      console.log(`Poll ${i + 1}/${maxAttempts} — status: ${data.status}`);
-
-      if (data.status === 'SUCCEEDED' || data.status === 'PAID') return 'SUCCEEDED';
+      if (!res.ok) continue;
+      if ((data.status === 'SUCCEEDED' || data.status === 'PAID') && data.databaseConfirmed === true) return 'SUCCEEDED';
       if (data.status === 'FAILED' || data.status === 'VOIDED' || data.status === 'EXPIRED') return 'FAILED';
     } catch (err) {
       console.warn('Poll error (will retry):', err);
@@ -106,7 +105,7 @@ export async function openGCashCheckout(
   checkoutUrl: string,
   chargeId: string,
   webUrl?: string
-): Promise<'success' | 'failed' | 'cancelled'> {
+): Promise<'success' | 'failed' | 'cancelled' | 'pending'> {
   try {
     // Open Xendit hosted checkout browser tab (supports GCash, Maya, Cards, Online Banking)
     await WebBrowser.openBrowserAsync(checkoutUrl, {
@@ -121,7 +120,7 @@ export async function openGCashCheckout(
 
     if (status === 'SUCCEEDED') return 'success';
     if (status === 'FAILED')    return 'failed';
-    return 'cancelled';
+    return 'pending';
 
   } catch (err: any) {
     console.error('openGCashCheckout error:', err.message);
@@ -137,6 +136,7 @@ export async function openGCashCheckout(
         const status = await pollChargeStatus(chargeId);
         if (status === 'SUCCEEDED') return 'success';
         if (status === 'FAILED')    return 'failed';
+        return 'pending';
       } catch (fallbackErr) {
         console.error('Fallback also failed:', fallbackErr);
       }

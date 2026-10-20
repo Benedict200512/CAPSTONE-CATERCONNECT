@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Dimensions, Image, Platform,
+  ActivityIndicator, Alert, Dimensions, Image, Platform,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import { useAuth } from '../../../context/AuthContext';
+import { usePackageBookmarks } from '../../../hooks/usePackageBookmarks';
+import { ComparePackageButton } from '../../../components/PackageComparisonControls';
 import { supabase } from '../../../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -14,7 +16,7 @@ import {
   ChevronLeft, ChevronRight, MapPin, Star, UtensilsCrossed,
   Soup, Cake, Wine, Package, Utensils, CheckCircle2,
   Phone, Mail, Scale, SearchX, Store, 
-  MessageSquareText, StarIcon
+  MessageSquareText, StarIcon, Heart
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -37,12 +39,13 @@ type Caterer = {
 };
 
 type Package = {
+  publication_status: 'published' | 'unpublished' | 'archived';
   id: string;
   name: string;
   tier: string;
   description: string | null;
   price: number;
-  guest_capacity: number;
+  guest_capacity: number; max_guests: number; min_guests: number | null;
   includes: string[] | null;
   food_inclusions: string[] | null;
   event_types: string[] | null;
@@ -109,9 +112,15 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
 }
 
 export default function CatererDetailScreen() {
-  const { catererId } = useLocalSearchParams<{ catererId: string }>();
+  const { catererId, packageId } = useLocalSearchParams<{ catererId: string; packageId?: string }>();
   const { session } = useAuth();
   const router = useRouter();
+  const saved = usePackageBookmarks();
+  const toggleBookmark = async (id: string) => {
+    if (!session) { router.push('/(auth)/login'); return; }
+    try { await (saved.isBookmarked(id) ? saved.unsave(id) : saved.save(id)); }
+    catch (error) { Alert.alert('Could not update saved package', error instanceof Error ? error.message : 'Please try again.'); }
+  };
 
   const [caterer, setCaterer]     = useState<Caterer | null>(null);
   const [packages, setPackages]   = useState<Package[]>([]);
@@ -132,6 +141,7 @@ export default function CatererDetailScreen() {
           .from('packages')
           .select('*')
           .eq('caterer_id', catererId)
+          .eq('publication_status', 'published')
           .order('price', { ascending: true }),
         supabase
           .from('menu_items')
@@ -378,6 +388,9 @@ export default function CatererDetailScreen() {
         {/* ── PACKAGES TAB ── */}
         {activeTab === 'packages' && (
           <View style={s.tabContent}>
+            {saved.error && <TouchableOpacity onPress={() => void saved.refresh()} style={{ padding: 12, backgroundColor: Colors.orangeLight, borderRadius: 12, marginBottom: 12 }}>
+              <Text style={{ color: Colors.error }}>Saved packages: {saved.error} Tap to retry.</Text>
+            </TouchableOpacity>}
             {packages.length === 0 ? (
               <View style={s.emptyTab}>
                 <View style={s.emptyTabIconWrap}>
@@ -390,7 +403,7 @@ export default function CatererDetailScreen() {
                 const tier = TIER_CONFIG[pkg.tier] ?? TIER_CONFIG.bronze;
                 const pricePerGuest = pkg.guest_capacity > 0 ? pkg.price / pkg.guest_capacity : 0;
                 return (
-                  <View key={pkg.id} style={s.pkgCard}>
+                  <View key={pkg.id} style={[s.pkgCard, packageId === pkg.id && { borderColor: Colors.orange, borderWidth: 2 }]}>
                     {pkg.image_url ? (
                       <Image source={{ uri: pkg.image_url }} style={s.pkgImg} resizeMode="cover" />
                     ) : (
@@ -400,6 +413,14 @@ export default function CatererDetailScreen() {
                     )}
 
                     <View style={s.pkgBody}>
+                      {caterer?.verification_status === 'approved' && <ComparePackageButton packageId={pkg.id} />}
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved.isBookmarked(pkg.id) ? `Unsave ${pkg.name}` : `Save ${pkg.name}`}
+                        accessibilityState={{ selected: saved.isBookmarked(pkg.id), disabled: saved.loading || saved.pending.has(pkg.id) }}
+                        disabled={saved.loading || saved.pending.has(pkg.id)} onPress={() => void toggleBookmark(pkg.id)}
+                        style={{ alignSelf: 'flex-end', padding: 10, borderRadius: 20, backgroundColor: Colors.orangeLight, opacity: saved.loading || saved.pending.has(pkg.id) ? 0.5 : 1 }}>
+                        {saved.pending.has(pkg.id) ? <ActivityIndicator size="small" color={Colors.orange} />
+                          : <Heart size={22} color={Colors.orange} fill={saved.isBookmarked(pkg.id) ? Colors.orange : 'transparent'} />}
+                      </TouchableOpacity>
                       <View style={[s.tierBadge, { backgroundColor: tier.bg }]}>
                         <Text style={[s.tierBadgeText, { color: tier.color }]}>{tier.label}</Text>
                       </View>
@@ -407,11 +428,11 @@ export default function CatererDetailScreen() {
                       <View style={s.pkgPriceRow}>
                         <View style={{ flex: 1 }}>
                            <Text style={s.pkgName}>{pkg.name}</Text>
-                           <Text style={s.pkgPriceSub}>For {pkg.guest_capacity} guests</Text>
+                           <Text style={s.pkgPriceSub}>{pkg.guest_capacity} guests included · maximum {pkg.max_guests}</Text>
                         </View>
                         <View style={s.pkgPerGuest}>
                           <Text style={s.pkgPrice}>₱{pkg.price.toLocaleString()}</Text>
-                          <Text style={s.pkgPerGuestLabel}>≈ ₱{pricePerGuest.toFixed(0)} / pax</Text>
+                          <Text style={s.pkgPerGuestLabel}>≈ ₱{pricePerGuest.toFixed(2)} / per guest</Text>
                         </View>
                       </View>
 

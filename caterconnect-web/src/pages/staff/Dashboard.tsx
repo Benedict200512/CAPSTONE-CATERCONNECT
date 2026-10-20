@@ -1,42 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Clock, MessageCircle, AlertTriangle, Calendar,
-  CheckCircle2, ShieldCheck, History, Loader2, ArrowRight, Banknote
-} from 'lucide-react';
+import { Clock, AlertTriangle, Calendar, CheckCircle2, ShieldCheck, History, Loader2, ArrowRight, Banknote } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
 export default function StaffDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ 
-    pending: 0, consultations: 0, complaints: 0, bookings: 0, approved: 0, rejected: 0, refunds: 0, pendingBookings: 0 
-  });
+  const [stats, setStats] = useState({ pending: 0, complaints: 0, bookings: 0, approved: 0, rejected: 0, refunds: 0, pendingBookings: 0 });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const [
-        pendingRes, consultRes, complaintRes, bookingRes, 
-        approvedRes, rejectedRes, refundRes, pendingBookingsRes, recentBookings, recentConsult
-      ] = await Promise.all([
+      const [pendingRes, complaintRes, bookingRes, approvedRes, rejectedRes, refundRes, pendingBookingsRes, recentBookings] = await Promise.all([
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-        supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'approved'),
         supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'rejected'),
         supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('refund_status', 'pending'),
-        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'), // Fetch actual pending bookings
-        supabase.from('bookings').select('id, status, created_at, profiles(full_name), caterers(business_name)').order('created_at', { ascending: false }).limit(4),
-        supabase.from('consultations').select('id, subject, from_name, status, created_at').eq('status', 'open').order('created_at', { ascending: false }).limit(4),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('bookings').select('id, status, created_at, profiles(full_name), caterers(business_name)').order('created_at', { ascending: false }).limit(3),
       ]);
 
       setStats({
         pending: pendingRes.count ?? 0,
-        consultations: consultRes.count ?? 0,
         complaints: complaintRes.count ?? 0,
         bookings: bookingRes.count ?? 0,
         approved: approvedRes.count ?? 0,
@@ -51,12 +40,7 @@ export default function StaffDashboard() {
           text: `${(b.profiles as any)?.full_name ?? '—'} booked ${(b.caterers as any)?.business_name ?? '—'}`,
           sub: `Status: ${b.status}`, time: b.created_at,
         })),
-        ...(recentConsult.data ?? []).map((c: any) => ({
-          Icon: MessageCircle, color: '#2563EB', bg: '#DBEAFE', border: '#BFDBFE',
-          text: `Consultation from ${c.from_name ?? '—'}`,
-          sub: c.subject, time: c.created_at,
-        })),
-      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 5);
+      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 3);
 
       setRecentActivity(activity);
       setLoading(false);
@@ -76,7 +60,6 @@ export default function StaffDashboard() {
   const cards = [
     { Icon: Clock, label: 'Pending Verifications', value: stats.pending, color: '#D97706', bg: '#FEF3C7', accent: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)', path: '/staff/verification', urgent: stats.pending > 0 },
     { Icon: AlertTriangle, label: 'Open Complaints', value: stats.complaints, color: '#DC2626', bg: '#FEE2E2', accent: 'linear-gradient(135deg, #DC2626 0%, #F87171 100%)', path: '/staff/complaints', urgent: stats.complaints > 0 },
-    { Icon: MessageCircle, label: 'Open Consultations', value: stats.consultations, color: '#2563EB', bg: '#DBEAFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)', path: '/staff/consultations', urgent: stats.consultations > 0 },
     { Icon: Calendar, label: 'Total Bookings', value: stats.bookings, color: '#16A34A', bg: '#DCFCE7', accent: 'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)', path: '/staff/bookings', urgent: false },
     { Icon: Banknote, label: 'Pending Refunds', value: stats.refunds, color: '#9333EA', bg: '#F3E8FF', accent: 'linear-gradient(135deg, #9333EA 0%, #A855F7 100%)', path: '/staff/refunds', urgent: stats.refunds > 0 },
   ];
@@ -84,8 +67,7 @@ export default function StaffDashboard() {
   const actions = [
     { Icon: CheckCircle2, title: 'Review Applications', desc: 'Process pending caterer verification queues', path: '/staff/verification', color: '#D97706', bg: '#FEF3C7', count: stats.pending },
     { Icon: AlertTriangle, title: 'Handle Complaints', desc: 'Investigate and resolve active platform disputes', path: '/staff/complaints', color: '#DC2626', bg: '#FEE2E2', count: stats.complaints },
-    { Icon: MessageCircle, title: 'Answer Consultations', desc: 'Respond to customer and vendor inquiries', path: '/staff/consultations', color: '#2563EB', bg: '#DBEAFE', count: stats.consultations },
-    { Icon: Calendar, title: 'Monitor Bookings', desc: 'Track event statuses across the marketplace', path: '/staff/bookings', color: '#16A34A', bg: '#DCFCE7', count: stats.pendingBookings }, // Now uses actual pending bookings count
+    { Icon: Calendar, title: 'Monitor Bookings', desc: 'Track event statuses across the marketplace', path: '/staff/bookings', color: '#16A34A', bg: '#DCFCE7', count: stats.pendingBookings },
     { Icon: Banknote, title: 'Process Refunds', desc: 'Manage and disburse pending customer refunds', path: '/staff/refunds', color: '#9333EA', bg: '#F3E8FF', count: stats.refunds },
   ];
 
@@ -95,7 +77,7 @@ export default function StaffDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>
-            Welcome back, {profile?.full_name?.split('  ')[0] ?? 'Staff'}! 👋
+            Welcome back, {profile?.full_name?.split(' ')[0] ?? 'Staff'}! 👋
           </h1>
           <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>
             Here is your live operations and queue overview for today.
@@ -106,7 +88,6 @@ export default function StaffDashboard() {
           {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </div>
       </div>
-
       {/* Primary KPI Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
         {cards.map((card, i) => {
@@ -115,9 +96,7 @@ export default function StaffDashboard() {
             <div key={i} onClick={() => navigate(card.path)} style={{ position: 'relative', background: '#FFFFFF', borderRadius: 20, padding: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -2px rgba(0,0,0,0.02)', cursor: 'pointer', transition: 'all 0.2s ease', overflow: 'hidden' }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 20px -3px rgba(0,0,0,0.08)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.02)'; }}>
-              
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: card.accent }} />
-
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, marginTop: 4 }}>
                 <div style={{ width: 42, height: 42, borderRadius: 12, background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={20} color={card.color} />
@@ -128,7 +107,6 @@ export default function StaffDashboard() {
                   </span>
                 )}
               </div>
-              
               <div>
                 <div style={{ fontSize: 28, fontWeight: 900, color: '#111', letterSpacing: '-1px', marginBottom: 4 }}>
                   {loading ? <Loader2 size={20} className="animate-spin" color="#9CA3AF" /> : card.value}
@@ -139,21 +117,18 @@ export default function StaffDashboard() {
           );
         })}
       </div>
-
       {/* Main Content Split Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
-        
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
         {/* Left Column: Quick Operations Grid */}
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, letterSpacing: '-0.5px' }}>Quick Operations</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }}>
             {actions.map((a, i) => {
               const ActionIcon = a.Icon;
               return (
                 <div key={i} onClick={() => navigate(a.path)} style={{ background: '#FFFFFF', borderRadius: 20, padding: 24, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.06)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.02)'; }}>
-                  
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                       <div style={{ width: 44, height: 44, borderRadius: 14, background: a.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -168,7 +143,6 @@ export default function StaffDashboard() {
                     <div style={{ fontSize: 16, fontWeight: 900, color: '#111', marginBottom: 6 }}>{a.title}</div>
                     <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5, marginBottom: 16 }}>{a.desc}</div>
                   </div>
-
                   <div style={{ fontSize: 13, fontWeight: 800, color: a.color, display: 'flex', alignItems: 'center', gap: 4 }}>
                     Access Queue <ArrowRight size={14} />
                   </div>
@@ -177,10 +151,8 @@ export default function StaffDashboard() {
             })}
           </div>
         </div>
-
         {/* Right Column: Verification Summary & Recent Activity */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'stretch' }}>
           {/* Verification Breakdown Widget */}
           <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', padding: 24 }}>
             <h3 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0', letterSpacing: '-0.5px' }}>
@@ -199,7 +171,6 @@ export default function StaffDashboard() {
               ))}
             </div>
           </div>
-
           {/* Live Activity Feed */}
           <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', padding: 24, flex: 1 }}>
             <h3 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0', letterSpacing: '-0.5px' }}>
@@ -231,7 +202,6 @@ export default function StaffDashboard() {
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Home, CalendarDays, MessageSquare, User } from 'lucide-react-native';
+import { PackageComparisonProvider } from '../../context/PackageComparisonContext';
+import { PackageComparisonBar, useComparisonBarVisible } from '../../components/PackageComparisonControls';
 
 const ORANGE = '#F97316';
 const GRAY = '#9CA3AF';
@@ -25,12 +27,19 @@ function TabItem({ label, icon: Icon, focused }: { label: string; icon: any; foc
 }
 
 export default function TabLayout() {
+  return <PackageComparisonProvider><CustomerTabs /></PackageComparisonProvider>;
+}
+
+function CustomerTabs() {
+  const comparisonVisible = useComparisonBarVisible();
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: styles.tabBar,
+        sceneStyle: { paddingBottom: comparisonVisible ? 112 : 0 },
       }}
     >
       <Tabs.Screen
@@ -67,13 +76,19 @@ export default function TabLayout() {
       />
 
       {/* Hidden screens */}
-      <Tabs.Screen name="consultation"     options={{ href: null }} />
+      <Tabs.Screen name="package-comparison" options={{ href: null }} />
+      <Tabs.Screen name="my-reviews" options={{ href: null }} />
+      <Tabs.Screen name="saved-packages" options={{ href: null }} />
+      <Tabs.Screen name="faq"     options={{ href: null }} />
       <Tabs.Screen name="notifications"    options={{ href: null }} />
       <Tabs.Screen name="book/[catererId]" options={{ href: null }} />
       <Tabs.Screen name="complaints"       options={{ href: null }} />
       <Tabs.Screen name="edit-profile"     options={{ href: null }} />
       <Tabs.Screen name="caterer/[catererId]" options={{ href: null }} />
+      
     </Tabs>
+    <PackageComparisonBar />
+    </View>
   );
 }
 

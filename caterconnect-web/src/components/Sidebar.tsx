@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, ShieldCheck, CreditCard, MessageCircle,
+  LayoutDashboard, ShieldCheck, ShieldAlert, CreditCard,
   AlertTriangle, Calendar, Users, Wallet, TrendingUp, Activity,
-  Settings, UserCog, LogOut, Check, X
+  Settings, UserCog, LogOut, Check, X, Shield
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -13,10 +13,10 @@ const staffNav = [
   { path: '/staff',             icon: LayoutDashboard, label: 'Dashboard'            },
   { path: '/staff/verification',  icon: ShieldCheck,       label: 'Caterer Verification' },
   { path: '/staff/subscriptions', icon: CreditCard,        label: 'Subscriptions'        },
-  { path: '/staff/consultations', icon: MessageCircle,     label: 'Consultations'        },
   { path: '/staff/complaints',    icon: AlertTriangle,     label: 'Complaints'           },
   { path: '/staff/bookings',      icon: Calendar,          label: 'Booking Monitor'      },
-  { path: '/staff/refunds',       icon: Wallet,            label: 'Process Refunds'      },
+  { path: '/staff/account-monitoring', icon: ShieldAlert, label: 'Account Monitoring'    },
+  { path: '/staff/refunds',       icon: Wallet,            label: 'Refund Management'    },
 ];
 
 const adminNav = [
@@ -26,6 +26,7 @@ const adminNav = [
   { path: '/admin/reports',     icon: TrendingUp,      label: 'Reports'            },
   { path: '/admin/activity',    icon: Activity,        label: 'Activity Logs'      },
   { path: '/admin/settings',    icon: Settings,        label: 'Platform Settings'  },
+  { path: '/admin/maintenance-security', icon: Shield, label: 'Maintenance & Security' },
 ];
 
 export default function Sidebar() {

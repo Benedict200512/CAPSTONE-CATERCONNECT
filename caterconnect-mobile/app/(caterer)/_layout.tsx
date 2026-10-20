@@ -94,8 +94,10 @@ export default function CatererLayout() {
       />
 
       {/* Hidden screens */}
+      <Tabs.Screen name="reports" options={{ href: null }} />
+      <Tabs.Screen name="availability" options={{ href: null }} />
       <Tabs.Screen name="edit-profile"  options={{ href: null }} />
-      <Tabs.Screen name="consultation"  options={{ href: null }} />
+      <Tabs.Screen name="faq"  options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="complaints"    options={{ href: null }} />
     </Tabs>

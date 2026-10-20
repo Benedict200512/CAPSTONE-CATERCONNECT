@@ -1,9 +1,12 @@
 import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
-export async function pickImage(aspect: [number, number] = [1, 1]): Promise<ImagePicker.ImagePickerAsset | null> {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== 'granted') {
+export async function pickImage(
+  aspect: [number, number] = [1, 1]
+): Promise<ImagePicker.ImagePickerAsset | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) {
     throw new Error('Permission to access photos was denied.');
   }
 
@@ -12,10 +15,10 @@ export async function pickImage(aspect: [number, number] = [1, 1]): Promise<Imag
     allowsEditing: true,
     aspect,
     quality: 0.8,
-    base64: true, // ← ask expo-image-picker to return base64 directly
+    base64: true,
   });
 
-  if (result.canceled || !result.assets[0]) return null;
+  if (result.canceled || !result.assets?.[0]) return null;
   return result.assets[0];
 }
 
@@ -25,32 +28,33 @@ export async function uploadImage(
   userId: string,
   fileName: string
 ): Promise<string> {
-  // Use base64 directly from the asset — no file system read needed
-  const base64 = asset.base64;
-  if (!base64) throw new Error('No base64 data in image asset.');
-
-  const uri = asset.uri;
-  const ext = uri.split('.').pop()?.toLowerCase().split('?')[0] ?? 'jpg';
-  const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-  const path = `${userId}/${fileName}.${ext}`;
-
-  // Decode base64 → Uint8Array
-  const byteChars = atob(base64);
-  const byteArray = new Uint8Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) {
-    byteArray[i] = byteChars.charCodeAt(i);
+  if (!asset.base64) {
+    throw new Error('The selected image did not contain upload data. Please choose another photo.');
   }
 
-  const { error } = await supabase.storage
+  // Cropped images usually arrive as JPEG, even when the original was PNG/HEIC.
+  const mimeType = asset.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
+  const extension = mimeType === 'image/png' ? 'png' : 'jpg';
+  const safeName = fileName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  // A new object path avoids old-image caching and does not require Storage UPDATE permission.
+  const path = `${userId}/${safeName}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
     .from(bucket)
-    .upload(path, byteArray, {
+    .upload(path, decode(asset.base64), {
       contentType: mimeType,
-      upsert: true,
+      upsert: false,
     });
 
-  if (error) throw new Error(error.message);
+  if (uploadError) {
+    throw new Error(`Image upload failed: ${uploadError.message}`);
+  }
 
+  // This URL is usable only when the selected Storage bucket is public.
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  if (!data?.publicUrl) {
+    throw new Error('Image uploaded but no public URL was returned.');
+  }
   return data.publicUrl;
 }
 
@@ -62,5 +66,5 @@ export async function pickAndUpload(
 ): Promise<string | null> {
   const asset = await pickImage(aspect);
   if (!asset) return null;
-  return await uploadImage(asset, bucket, userId, fileName);
+  return uploadImage(asset, bucket, userId, fileName);
 }

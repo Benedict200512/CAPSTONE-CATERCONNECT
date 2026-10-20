@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { 
   CreditCard, Search, Clock, 
   AlertCircle, CheckCircle2, Building2,
-  X, Loader2, DollarSign, RefreshCw, Send 
+  X, Loader2, DollarSign, RefreshCw, Send, Settings2 
 } from 'lucide-react';
 
 type Payment = {
@@ -108,29 +108,41 @@ export default function SubscriptionManager() {
   }, []);
 
   const handleNotifyCaterer = async (caterer: Caterer & { daysLeft: number }) => {
-    if (!caterer.user_id) return;
+    setNotifyingId(caterer.id);
     try {
-      setNotifyingId(caterer.id);
-      const message = caterer.daysLeft < 0 
-        ? `Your ${caterer.subscription_plan.toUpperCase()} subscription has expired. Please renew your plan to keep your premium features active.`
-        : `Your ${caterer.subscription_plan.toUpperCase()} subscription is expiring in ${caterer.daysLeft} day(s). Please renew your subscription soon.`;
-
-      const { error } = await supabase.from('notifications').insert({
-        user_id: caterer.user_id,
-        title: 'Subscription Expiry Notice',
-        message: message,
-        type: 'subscription', // Satisfies the not-null constraint on 'type'
-        is_read: false,
-      });
-
+      const { error } = await supabase.rpc('staff_send_subscription_reminder', { p_caterer_id: caterer.id });
       if (error) throw error;
-      alert(`Successfully sent notification to ${caterer.business_name}!`);
+      alert(`Reminder sent to ${caterer.business_name}.`);
     } catch (err: any) {
-      console.error('Error sending notification:', err);
-      alert('Failed to send notification: ' + err.message);
-    } finally {
-      setNotifyingId(null);
+      alert(`Reminder not sent: ${err?.message ?? 'Unknown error'}. Secure staff RPC required.`);
+    } finally { setNotifyingId(null); }
+  };
+
+  const [editing, setEditing] = useState<Caterer | null>(null);
+  const [newPlan, setNewPlan] = useState('basic');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const correctPlan = async () => {
+    if (!editing || saving) return;
+    if (!paymentRef.trim() || reason.trim().length < 10) {
+      alert('Enter a confirmed payment reference and a reason of at least 10 characters.');
+      return;
     }
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc('staff_correct_subscription_plan', {
+        p_caterer_id: editing.id, p_plan_id: newPlan,
+        p_payment_reference: paymentRef.trim(), p_reason: reason.trim(),
+      });
+      if (error) throw error;
+      setEditing(null);
+      await Promise.all([loadCaterers(), loadPayments()]);
+      alert('Plan correction recorded.');
+    } catch (err: any) {
+      alert(`Plan not changed: ${err?.message ?? 'Unknown error'}. Secure payment-verifying RPC required.`);
+    } finally { setSaving(false); }
   };
 
   const planStyle = (planId: string) => PLANS.find((p) => p.id === planId) ?? PLANS[0];
@@ -317,7 +329,7 @@ export default function SubscriptionManager() {
                       <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Owner Details</th>
                       <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Current Plan</th>
                       <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Expiration Date</th>
-                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Bookings</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Bookings</th><th style={{ padding: '16px 20px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -364,6 +376,14 @@ export default function SubscriptionManager() {
 
                           <td style={{ padding: '18px 20px', fontWeight: 900, fontSize: 15, color: '#F97316' }}>
                             {c.monthly_booking_count ?? 0}
+                          </td>
+                          <td style={{ padding: '18px 20px' }}>
+                            <button type="button" onClick={() => {
+                              setEditing(c); setNewPlan(c.subscription_plan === 'free' ? 'basic' : c.subscription_plan);
+                              setPaymentRef(''); setReason('');
+                            }} style={{ border: '1px solid #FED7AA', borderRadius: 10, background: '#FFF7ED', color: '#C2410C', padding: '8px 12px', cursor: 'pointer', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <Settings2 size={14} /> Manage Plan
+                            </button>
                           </td>
                         </tr>
                       );
@@ -519,6 +539,103 @@ export default function SubscriptionManager() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Improved Modal for Correct Subscription / Manage Plan */}
+      {editing && (
+        <div role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 20 }} onMouseDown={e => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div role="dialog" aria-modal="true" aria-label="Correct subscription" style={{ background: '#FFF', borderRadius: 24, padding: 32, width: '100%', maxWidth: 500, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #E5E7EB', paddingBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FFF7ED', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Settings2 size={22} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0, color: '#111' }}>Manage Subscription</h2>
+                  <p style={{ fontSize: 13, color: '#6B7280', margin: '2px 0 0', fontWeight: 600 }}>{editing.business_name}</p>
+                </div>
+              </div>
+              <button style={{ background: 'transparent', border: '1px solid #E5E7EB', borderRadius: '50%', width: 36, height: 36, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#4B5563', transition: 'background 0.2s' }} onClick={() => setEditing(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Notice / Warning Banner */}
+            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+              <span>Requires an existing confirmed Xendit payment. Staff cannot mark payments as paid manually.</span>
+            </div>
+
+            {/* Form Fields */}
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Select Plan</label>
+                <select 
+                  value={newPlan} 
+                  onChange={e => setNewPlan(e.target.value)} 
+                  style={{ 
+                    display: 'block', width: '100%', boxSizing: 'border-box', padding: '12px 14px', 
+                    borderRadius: 12, border: '1px solid #D1D5DB', fontSize: 14, fontWeight: 700,
+                    backgroundColor: PLANS.find(p => p.id === newPlan)?.bg ?? '#FFF',
+                    color: PLANS.find(p => p.id === newPlan)?.color ?? '#111',
+                    outline: 'none', cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                >
+                  {PLANS.filter(p => p.id !== 'free').map(p => (
+                    <option key={p.id} value={p.id} style={{ background: '#FFF', color: '#111' }}>
+                      {p.label} Plan (₱{p.price}/mo)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Confirmed Payment Reference</label>
+                <input 
+                  type="text"
+                  placeholder="Enter Xendit reference ID..."
+                  value={paymentRef} 
+                  onChange={e => setPaymentRef(e.target.value)} 
+                  maxLength={200}
+                  style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1px solid #D1D5DB', fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Reason for Correction</label>
+                <textarea 
+                  placeholder="Provide a detailed reason (at least 10 characters)..."
+                  value={reason} 
+                  onChange={e => setReason(e.target.value)} 
+                  rows={3} 
+                  maxLength={1000}
+                  style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1px solid #D1D5DB', fontSize: 14, outline: 'none', background: '#FFF', color: '#111', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid #E5E7EB' }}>
+              <button 
+                disabled={saving} 
+                onClick={() => setEditing(null)} 
+                style={{ flex: 1, padding: '12px 16px', background: '#F3F4F6', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}
+              >
+                Cancel
+              </button>
+              <button 
+                disabled={saving} 
+                onClick={correctPlan} 
+                style={{ flex: 1, padding: '12px 16px', background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 12px rgba(249,115,22,0.25)', opacity: saving ? 0.7 : 1 }}
+              >
+                {saving && <Loader2 size={16} className="animate-spin" />}
+                {saving ? 'Verifying...' : 'Verify and Correct'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

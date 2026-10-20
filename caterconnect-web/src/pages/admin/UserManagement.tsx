@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Users, Search, Eye, Ban, X, Store, Loader2, Mail, Hash, CalendarDays, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { 
+  Users, Search, Eye, Ban, X, Store, Loader2, Mail, Hash, 
+  CalendarDays, ShieldAlert, AlertTriangle, Layers, Shield, UserCheck 
+} from 'lucide-react';
 
 type User = {
   id: string; 
@@ -10,6 +13,8 @@ type User = {
   created_at: string; 
   avatar_url?: string | null;
   status?: string;
+  business_name?: string | null;
+  logo_url?: string | null;
 };
 
 export default function UserManagement() {
@@ -26,8 +31,34 @@ export default function UserManagement() {
     setLoading(true);
     let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (filter !== 'all') query = query.eq('role', filter);
-    const { data } = await query;
-    setUsers(data ?? []);
+    const { data: profileData } = await query;
+    
+    let fetchedUsers: User[] = profileData ?? [];
+
+    const catererIds = fetchedUsers.filter(u => u.role === 'caterer').map(u => u.id);
+    if (catererIds.length > 0) {
+      const { data: catererData } = await supabase
+        .from('caterers')
+        .select('user_id, business_name, logo_url')
+        .in('user_id', catererIds);
+      
+      if (catererData) {
+        const catererMap = new Map(catererData.map(c => [c.user_id, c]));
+        fetchedUsers = fetchedUsers.map(u => {
+          if (u.role === 'caterer') {
+            const cInfo = catererMap.get(u.id);
+            return {
+              ...u,
+              business_name: cInfo?.business_name ?? null,
+              logo_url: cInfo?.logo_url ?? null,
+            };
+          }
+          return u;
+        });
+      }
+    }
+
+    setUsers(fetchedUsers);
 
     const allRoles = ['customer', 'caterer', 'staff', 'admin'];
     const countResults = await Promise.all(
@@ -58,32 +89,41 @@ export default function UserManagement() {
   };
 
   const handleSuspendAccount = async () => {
-    if (!confirmSuspend) return;
+    if (!confirmSuspend || actionLoading) return;
     setActionLoading(true);
 
     const newStatus = confirmSuspend.status === 'suspended' ? 'active' : 'suspended';
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ status: newStatus })
-      .eq('id', confirmSuspend.id);
-
-    if (error) {
-      alert('Failed to update account status: ' + error.message);
-    } else {
-      setUsers(users.map(u => u.id === confirmSuspend.id ? { ...u, status: newStatus } : u));
-      if (selected && selected.id === confirmSuspend.id) {
-        setSelected({ ...selected, status: newStatus });
+    // Direct reactivation is currently blocked by the database suspension trigger.
+    // Keep this direct write: Account Monitoring requires a reason and audit events.
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ status: newStatus })
+        .eq('id', confirmSuspend.id)
+        .select('id, status')
+        .single();
+      if (error) throw error;
+      if (!data || data.id !== confirmSuspend.id || data.status !== newStatus) {
+        throw new Error('The requested status change could not be confirmed. Refresh and try again.');
       }
+      setUsers(prev => prev.map(u => u.id === data.id ? { ...u, status: data.status } : u));
+      setSelected(prev => prev && prev.id === data.id ? { ...prev, status: data.status } : prev);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? String(error.message) : 'Unexpected error. Please try again.';
+      alert('Failed to update account status: ' + message);
+    } finally {
+      setActionLoading(false);
+      setConfirmSuspend(null);
     }
-
-    setActionLoading(false);
-    setConfirmSuspend(null);
   };
 
   const filtered = users.filter(u =>
     (u.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (u.email ?? '').toLowerCase().includes(search.toLowerCase())
+    (u.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (u.business_name ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   const roleColor: Record<string, string> = {
@@ -97,6 +137,14 @@ export default function UserManagement() {
   };
   
   const tabs = ['all', 'customer', 'caterer', 'staff', 'admin'];
+
+  const tabIcons: Record<string, any> = {
+    all: Layers,
+    customer: Users,
+    caterer: Store,
+    staff: UserCheck,
+    admin: Shield,
+  };
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -112,28 +160,33 @@ export default function UserManagement() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 20, flexWrap: 'wrap' }}>
         
         {/* Segmented Control Tabs */}
-        <div style={{ display: 'flex', gap: 6, background: '#F3F4F6', padding: 6, borderRadius: 14, border: '1px solid #E5E7EB' }}>
-          {tabs.map(t => (
-            <button 
-              key={t} 
-              onClick={() => setFilter(t)} 
-              style={{ 
-                padding: '8px 18px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 10, cursor: 'pointer', textTransform: 'capitalize', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                background: filter === t ? '#FFFFFF' : 'transparent', 
-                color: filter === t ? '#111' : '#6B7280',
-                boxShadow: filter === t ? '0 2px 4px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)' : 'none'
-              }}
-            >
-              {t} <span style={{ opacity: 0.6, marginLeft: 4, fontWeight: 600 }}>{counts[t] !== undefined ? counts[t] : ''}</span>
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 6, background: '#F3F4F6', padding: 6, borderRadius: 14, border: '1px solid #E5E7EB', flexWrap: 'wrap' }}>
+          {tabs.map(t => {
+            const Icon = tabIcons[t] || Users;
+            return (
+              <button 
+                key={t} 
+                onClick={() => setFilter(t)} 
+                style={{ 
+                  padding: '8px 18px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 10, cursor: 'pointer', textTransform: 'capitalize', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  background: filter === t ? '#FFFFFF' : 'transparent', 
+                  color: filter === t ? '#111' : '#6B7280',
+                  boxShadow: filter === t ? '0 2px 4px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}
+              >
+                <Icon size={14} color={filter === t ? '#F97316' : '#9CA3AF'} />
+                {t} <span style={{ opacity: 0.6, marginLeft: 2, fontWeight: 600 }}>{counts[t] !== undefined ? counts[t] : ''}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search Bar */}
         <div style={{ position: 'relative', width: '100%', maxWidth: 380 }}>
           <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
           <input 
-            placeholder="Search by name or email address..."
+            placeholder="Search by name, email, or business..."
             value={search} 
             onChange={e => setSearch(e.target.value)}
             style={{ 
@@ -177,28 +230,35 @@ export default function UserManagement() {
               <tbody>
                 {filtered.map((u, i) => {
                   const isSuspended = u.status === 'suspended';
+                  const displayName = u.role === 'caterer' && u.business_name ? u.business_name : (u.full_name ?? '—');
+                  
                   return (
                     <tr key={u.id} style={{ borderBottom: i === filtered.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.2s ease', background: isSuspended ? '#FEF2F2' : 'transparent' }}
                       onMouseEnter={e => (e.currentTarget.style.background = isSuspended ? '#FEE2E2' : '#F9FAFB')}
                       onMouseLeave={e => (e.currentTarget.style.background = isSuspended ? '#FEF2F2' : 'transparent')}>
                       <td style={{ padding: '20px 24px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                          {u.avatar_url ? (
+                          {u.role === 'caterer' && u.logo_url ? (
+                            <img src={u.logo_url} alt={displayName} style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', border: '1px solid #E5E7EB', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', background: '#FFF' }} />
+                          ) : u.avatar_url ? (
                             <img src={u.avatar_url} alt={u.full_name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '1px solid #E5E7EB', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }} />
                           ) : (
-                            <div style={{ width: 44, height: 44, borderRadius: '50%', background: roleBg[u.role] ?? '#F3F4F6', border: `1px solid ${roleBorder[u.role] ?? '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: roleColor[u.role] ?? '#6B7280', fontSize: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                              {(u.full_name ?? 'U').charAt(0).toUpperCase()}
+                            <div style={{ width: 44, height: 44, borderRadius: u.role === 'caterer' ? 12 : '50%', background: roleBg[u.role] ?? '#F3F4F6', border: `1px solid ${roleBorder[u.role] ?? '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: roleColor[u.role] ?? '#6B7280', fontSize: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                              {displayName.charAt(0).toUpperCase()}
                             </div>
                           )}
                           <div>
                             <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              {u.full_name ?? '—'}
+                              {displayName}
                               {isSuspended && (
                                 <span style={{ background: '#FEE2E2', color: '#DC2626', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6, border: '1px solid #FECACA' }}>
                                   SUSPENDED
                                 </span>
                               )}
                             </div>
+                            {u.role === 'caterer' && u.business_name && (
+                              <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>Owner: {u.full_name ?? '—'}</div>
+                            )}
                             <div style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'monospace', background: '#F3F4F6', padding: '2px 6px', borderRadius: 6, display: 'inline-block' }}>ID: {u.id.slice(0, 10)}</div>
                           </div>
                         </div>
@@ -276,7 +336,7 @@ export default function UserManagement() {
                   <img src={selected.avatar_url} alt={selected.full_name} style={{ width: 88, height: 88, borderRadius: '50%', objectFit: 'cover', border: '4px solid #FFFFFF', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', background: '#FFF' }} />
                 ) : (
                   <div style={{ width: 88, height: 88, borderRadius: selected.role === 'caterer' ? 20 : '50%', background: roleBg[selected.role] ?? '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: roleColor[selected.role] ?? '#6B7280', fontSize: 36, border: '4px solid #FFFFFF', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                    {(selected.full_name ?? 'U').charAt(0).toUpperCase()}
+                    {(selected.role === 'caterer' && selected.caterer_info?.business_name ? selected.caterer_info.business_name : (selected.full_name ?? 'U')).charAt(0).toUpperCase()}
                   </div>
                 )}
                 <span style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 800, textTransform: 'capitalize', background: roleBg[selected.role], color: roleColor[selected.role], border: `1px solid ${roleBorder[selected.role]}` }}>
@@ -286,10 +346,12 @@ export default function UserManagement() {
 
               {/* Name & Title */}
               <div style={{ marginBottom: 28 }}>
-                <h2 style={{ fontSize: 26, fontWeight: 900, color: '#111', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>{selected.full_name}</h2>
-                {selected.role === 'caterer' && selected.caterer_info?.business_name && (
+                <h2 style={{ fontSize: 26, fontWeight: 900, color: '#111', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>
+                  {selected.role === 'caterer' && selected.caterer_info?.business_name ? selected.caterer_info.business_name : selected.full_name}
+                </h2>
+                {selected.role === 'caterer' && (
                   <div style={{ fontSize: 15, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-                    <Store size={18} color="#7C3AED" /> {selected.caterer_info.business_name}
+                    <Store size={18} color="#7C3AED" /> Owner: {selected.full_name}
                   </div>
                 )}
               </div>
@@ -368,7 +430,7 @@ export default function UserManagement() {
             </h3>
             
             <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5, marginBottom: 24 }}>
-              Are you sure you want to {confirmSuspend.status === 'suspended' ? 'restore platform access for' : 'suspend platform access for'} <strong style={{ color: '#111' }}>{confirmSuspend.full_name}</strong> ({confirmSuspend.email})?
+              Are you sure you want to {confirmSuspend.status === 'suspended' ? 'restore platform access for' : 'suspend platform access for'} <strong style={{ color: '#111' }}>{confirmSuspend.role === 'caterer' && confirmSuspend.business_name ? confirmSuspend.business_name : confirmSuspend.full_name}</strong> ({confirmSuspend.email})?
             </p>
 
             <div style={{ display: 'flex', gap: 12 }}>

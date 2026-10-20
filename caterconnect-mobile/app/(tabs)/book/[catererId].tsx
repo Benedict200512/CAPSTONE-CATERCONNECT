@@ -1,15 +1,18 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   ActivityIndicator, Alert, Image, Platform,
   ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View, Dimensions, Modal, Keyboard,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import { useAuth } from '../../../context/AuthContext';
 import { supabase } from '../../../lib/supabase';
-import { sendNotification } from '../../../lib/notifications';
+import { calculatePackagePricing, formatPricingMoney } from '../../../lib/packagePricing';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import AvailabilityMonthCalendar from '../../../components/AvailabilityMonthCalendar';
+import { fetchUnavailableDates, manilaToday } from '../../../lib/availability';
+import { requirePublishedPackage, type PackagePublicationStatus } from '../../../lib/packagePublication';
 import MapView, { Marker, MapPressEvent } from 'react-native-maps';
 import * as Location from 'expo-location';
 
@@ -45,8 +48,9 @@ import {
 const { width, height } = Dimensions.get('window');
 
 type Package = {
+  publication_status: PackagePublicationStatus;
   id: string; name: string; tier: string; description: string | null;
-  price: number; min_guests: number; guest_capacity: number; image_url: string | null;
+  price: number; min_guests: number | null; guest_capacity: number; max_guests: number; image_url: string | null;
   includes: string[] | null;
   food_inclusions: string[] | null;
   event_types: string[];
@@ -131,13 +135,14 @@ export default function BookingWizard() {
     catererId: string;
     preSelectedPackageId?: string;
   }>();
-  const { session, profile } = useAuth();
+  const { session } = useAuth();
   const router = useRouter();
 
   const [caterer, setCaterer]        = useState<Caterer | null>(null);
   const [packages, setPackages]      = useState<Package[]>([]);
   const [menuItems, setMenuItems]    = useState<MenuItem[]>([]);
   const [fullyBookedDates, setFullyBookedDates] = useState<string[]>([]);
+  const [availabilityError, setAvailabilityError] = useState(false);
   const [loading, setLoading]        = useState(true);
   const [submitting, setSubmitting]  = useState(false);
   const [step, setStep]              = useState(0);
@@ -145,9 +150,29 @@ export default function BookingWizard() {
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
 
   // Date & Time states
-  const [eventDate, setEventDate]     = useState<Date>(new Date());
+  const [eventDate, setEventDate]     = useState<Date>(() => new Date(`${manilaToday()}T12:00:00`));
   const [eventTime, setEventTime]     = useState<Date>(new Date());
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(() => manilaToday().slice(0, 7));
+  const [availabilityLoading, setAvailabilityLoading] = useState(true);
+  const availabilityVersion = useRef(0);
+  const refreshAvailability = useCallback(async () => {
+    const request = ++availabilityVersion.current;
+    setAvailabilityLoading(true);
+    try {
+      const dates = await fetchUnavailableDates(catererId);
+      if (request !== availabilityVersion.current) return;
+      setFullyBookedDates(dates); setAvailabilityError(false);
+    } catch {
+      if (request === availabilityVersion.current) setAvailabilityError(true);
+    } finally {
+      if (request === availabilityVersion.current) setAvailabilityLoading(false);
+    }
+  }, [catererId]);
+  useFocusEffect(useCallback(() => {
+    void refreshAvailability();
+    return () => { availabilityVersion.current++; };
+  }, [refreshAvailability]));
   const [isTimePickerVisible, setTimePickerVisible] = useState(false);
 
   const [guestCount, setGuestCount]   = useState('');
@@ -169,8 +194,9 @@ export default function BookingWizard() {
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
-      const [catererRes, packagesRes, menuRes, bookingsRes] = await Promise.all([
+      const [catererRes, packagesRes, menuRes] = await Promise.all([
         supabase.from('caterers')
           .select('id, business_name, business_description, logo_url, cover_photo_url, city, contact_phone, downpayment_percent')
           .eq('id', catererId)
@@ -178,29 +204,22 @@ export default function BookingWizard() {
         supabase.from('packages')
           .select('*')
           .eq('caterer_id', catererId)
+          .eq('publication_status', 'published')
           .order('price', { ascending: true }),
         supabase.from('menu_items')
           .select('*')
           .eq('caterer_id', catererId)
           .order('category'),
-        supabase.from('bookings')
-          .select('event_date')
-          .eq('caterer_id', catererId)
-          .in('status', ['confirmed', 'paid', 'ongoing']),
       ]);
 
+      if (!active) return;
       if (catererRes.data) setCaterer(catererRes.data);
       if (packagesRes.data) setPackages(packagesRes.data as any);
       if (menuRes.data) setMenuItems(menuRes.data);
-      if (bookingsRes.data) {
-        const normalizedDates = bookingsRes.data
-          .map(b => b.event_date ? String(b.event_date).split('T')[0] : '')
-          .filter(Boolean);
-        setFullyBookedDates(normalizedDates);
-      }
       setLoading(false);
     };
     if (catererId) load();
+    return () => { active = false; };
   }, [catererId]);
 
   useEffect(() => {
@@ -213,18 +232,19 @@ export default function BookingWizard() {
     }
   }, [packages, preSelectedPackageId]);
 
-  const guests = parseInt(guestCount) || 0;
-
-  const customizationTotal = useMemo(() =>
-    customItems.reduce((sum, c) => sum + c.menuItem.price_per_guest * guests * c.quantity, 0),
-    [customItems, guests]
-  );
-
-  const packageMultiplier = selectedPkg ? Math.ceil(guests / (selectedPkg.guest_capacity || 1)) : 0;
-  const baseTotal = selectedPkg ? selectedPkg.price * packageMultiplier : 0;
-  
-  const totalCost = baseTotal + customizationTotal;
-  const downpayment = caterer ? totalCost * (caterer.downpayment_percent / 100) : 0;
+  const guests = /^\d+$/.test(guestCount) ? Number(guestCount) : 0;
+  const pricing = useMemo(() => {
+    if (!selectedPkg || !caterer) return { quote: null, error: null };
+    try {
+      return { quote: calculatePackagePricing(selectedPkg, guests, customItems.map(c => ({
+        price_per_guest: c.menuItem.price_per_guest, quantity: c.quantity,
+      })), caterer.downpayment_percent), error: null };
+    } catch (error) { return { quote: null, error: error instanceof Error ? error.message : 'Check the guest count and package pricing.' }; }
+  }, [selectedPkg, guests, customItems, caterer]);
+  const customizationTotal = pricing.quote?.addOnTotal ?? 0;
+  const baseTotal = pricing.quote?.baseTotal ?? 0;
+  const totalCost = pricing.quote?.total ?? 0;
+  const downpayment = pricing.quote?.downpayment ?? 0;
 
   const addItem = (item: MenuItem) => {
     setCustomItems(prev => {
@@ -253,8 +273,13 @@ export default function BookingWizard() {
     if (step === 0 && !selectedPkg) {
       Alert.alert('Select a Package', 'Please choose a catering package to continue.'); return false;
     }
+    if (step >= 1 && pricing.error) { Alert.alert('Check guest count', pricing.error); return false; }
     if (step === 1) {
-      if (!eventDate) {
+      if (availabilityError || availabilityLoading) {
+        Alert.alert('Check Availability', 'Please refresh date availability and wait for it to finish.');
+        return false;
+      }
+      if (!eventDate || formattedDateString < manilaToday()) {
         Alert.alert('Invalid Date', 'Please select a valid event date.'); return false;
       }
       if (fullyBookedDates.includes(formattedDateString)) {
@@ -352,25 +377,32 @@ export default function BookingWizard() {
   };
 
   const handleSubmit = async () => {
-    if (!session?.user?.id || !selectedPkg || !caterer) return;
+    if (!session?.user?.id || !selectedPkg || !caterer || submitting) return;
+
+    if (availabilityError || availabilityLoading) {
+      Alert.alert('Availability Unavailable', 'Unable to check booked dates. Please reopen this page and try again.');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const { data: conflicting, error: checkError } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('caterer_id', caterer.id)
-        .eq('event_date', formattedDateString)
-        .in('status', ['confirmed', 'paid', 'ongoing']);
+      await requirePublishedPackage(selectedPkg.id, caterer.id);
+      if (formattedDateString < manilaToday()) throw new Error('Choose today or a future event date.');
+      let normalizedDates: string[];
+      try { normalizedDates = await fetchUnavailableDates(caterer.id); }
+      catch {
+        setAvailabilityError(true);
+        throw new Error('Could not verify date availability. Please reopen this page and try again.');
+      }
 
-      if (checkError) throw checkError;
+      setFullyBookedDates(normalizedDates);
+      setAvailabilityError(false);
 
-      if (conflicting && conflicting.length > 0) {
+      if (normalizedDates.includes(formattedDateString)) {
         Alert.alert(
           'Date Fully Booked',
-          'Sorry, but another client just booked this date. Please choose a different day.'
+          'This date is blocked or has reached daily booking capacity. Please choose another date.'
         );
-        setSubmitting(false);
         return;
       }
 
@@ -395,7 +427,7 @@ export default function BookingWizard() {
           quantity: c.quantity,
           price_per_guest: c.menuItem.price_per_guest,
         })) : null,
-      }).select('id').single();
+      }).select('id,total_cost,downpayment_amount').single();
 
       if (error) throw error;
 
@@ -411,17 +443,8 @@ export default function BookingWizard() {
         );
       }
 
-      const { data: catererProfile } = await supabase
-        .from('caterers').select('user_id').eq('id', caterer.id).single();
-      if (catererProfile?.user_id) {
-        await sendNotification({
-          user_id: catererProfile.user_id,
-          title: 'New Booking Request',
-          message: `${profile?.full_name ?? 'A customer'} has requested a booking for ${eventType} on ${formattedDateString} at ${formattedTimeString}.`,
-          type: 'new_booking_request',
-          booking_id: booking?.id,
-        });
-      }
+      // The database booking INSERT trigger sends the caterer notification.
+      // Do not send a duplicate notification from the client.
 
       Alert.alert('Booking Submitted!',
         `Your booking request for ${caterer.business_name} has been sent. They will confirm within 24 hours.`,
@@ -429,6 +452,7 @@ export default function BookingWizard() {
       );
     } catch (err: any) {
       Alert.alert('Error', err.message);
+      if (err.code === '23514') void refreshAvailability();
     } finally {
       setSubmitting(false);
     }
@@ -459,7 +483,7 @@ export default function BookingWizard() {
   }
 
   const isCurrentDateBooked = fullyBookedDates.includes(formattedDateString);
-  const isGuestBelowMinimum = Boolean(selectedPkg && guests > 0 && guests < (selectedPkg?.min_guests ?? 0));
+
 
   return (
     <View style={styles.root}>
@@ -543,11 +567,11 @@ export default function BookingWizard() {
                       <View style={styles.pkgPricing}>
                         <View>
                           <Text style={styles.pkgPrice}>₱{pkg.price.toLocaleString()}</Text>
-                          <Text style={styles.pkgPriceSub}>capacity: up to {pkg.guest_capacity} pax</Text>
+                          <Text style={styles.pkgPriceSub}>{pkg.guest_capacity} guests included · maximum {pkg.max_guests}</Text>
                         </View>
                         <View style={styles.pkgPricePerGuest}>
-                          <Text style={styles.pkgPricePerGuestNum}>₱{pricePerGuest.toFixed(0)}</Text>
-                          <Text style={styles.pkgPricePerGuestLabel}>per head</Text>
+                          <Text style={styles.pkgPricePerGuestNum}>₱{pricePerGuest.toFixed(2)}</Text>
+                          <Text style={styles.pkgPricePerGuestLabel}>per extra guest (approx.)</Text>
                         </View>
                       </View>
 
@@ -608,7 +632,7 @@ export default function BookingWizard() {
                   </Text>
                 </View>
                 <Text style={styles.selectedPkgName}>{selectedPkg.name}</Text>
-                <Text style={styles.selectedPkgPrice}>₱{selectedPkg.price.toLocaleString()} / up to {selectedPkg.guest_capacity} guests (Min recommendation: {selectedPkg.min_guests} pax)</Text>
+                <Text style={styles.selectedPkgPrice}>₱{selectedPkg.price.toLocaleString()} fixed · {selectedPkg.min_guests ?? 1}–{selectedPkg.max_guests} guests · {selectedPkg.guest_capacity} included</Text>
               </View>
             )}
 
@@ -617,7 +641,13 @@ export default function BookingWizard() {
               <Text style={styles.fieldLabel}>Event Date *</Text>
               <TouchableOpacity
                 style={[styles.datePickerButton, isCurrentDateBooked && { borderColor: Colors.error, backgroundColor: '#FEF2F2' }]}
-                onPress={() => setDatePickerVisible(true)}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setPickerMonth(formattedDateString.slice(0, 7) < manilaToday().slice(0, 7)
+                    ? manilaToday().slice(0, 7) : formattedDateString.slice(0, 7));
+                  setDatePickerVisible(true);
+                  void refreshAvailability();
+                }}
               >
                 {isCurrentDateBooked ? (
                   <AlertTriangle size={18} color={Colors.error} />
@@ -625,24 +655,40 @@ export default function BookingWizard() {
                   <CalendarDays size={18} color={Colors.orange} />
                 )}
                 <Text style={[styles.datePickerButtonText, isCurrentDateBooked && { color: Colors.error }]}>
-                  {formattedDateString} {isCurrentDateBooked ? ' (Fully Booked)' : ''}
+                  {formattedDateString} {isCurrentDateBooked ? ' (Unavailable)' : ''}
                 </Text>
               </TouchableOpacity>
+              {availabilityError && (
+                <Text style={{ color: Colors.error, fontSize: 12, marginTop: 6 }}>
+                  Date availability could not be loaded. Tap the date to retry.
+                </Text>
+              )}
               {isCurrentDateBooked && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
                   <AlertTriangle size={14} color={Colors.error} />
                   <Text style={{ fontSize: 12, color: Colors.error, fontWeight: '700' }}>
-                    Sorry, but this date is fully booked. Please select another day.
+                    This date is blocked or full. Please select another day.
                   </Text>
                 </View>
               )}
-              <DateTimePickerModal
-                isVisible={isDatePickerVisible}
-                mode="date"
-                onConfirm={handleConfirmDate}
-                onCancel={() => setDatePickerVisible(false)}
-                minimumDate={new Date()}
-              />
+              <Modal visible={isDatePickerVisible} transparent animationType="slide" onRequestClose={() => setDatePickerVisible(false)}>
+                <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+                  <View style={{ borderRadius: 20, padding: 16, backgroundColor: Colors.white }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <Text style={styles.fieldLabel}>Choose event date</Text>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close date picker" onPress={() => setDatePickerVisible(false)} style={{ padding: 10 }}><X size={22} color={Colors.orange} /></TouchableOpacity>
+                    </View>
+                    {availabilityLoading && <ActivityIndicator color={Colors.orange} />}
+                    {availabilityError && <TouchableOpacity accessibilityRole="button" onPress={() => void refreshAvailability()} style={{ paddingVertical: 12 }}>
+                      <Text style={{ color: Colors.error }}>Unable to load availability. Tap to retry.</Text>
+                    </TouchableOpacity>}
+                    <AvailabilityMonthCalendar month={pickerMonth} selected={formattedDateString} onMonthChange={setPickerMonth}
+                      blocked={fullyBookedDates} disableUnavailable disabled={availabilityLoading || availabilityError}
+                      onSelect={date => handleConfirmDate(new Date(`${date}T12:00:00`))} />
+                    <Text style={styles.fieldHint}>Shaded dates are unavailable. Availability is checked again when you submit.</Text>
+                  </View>
+                </View>
+              </Modal>
             </View>
 
             {/* Event Time Field */}
@@ -674,11 +720,11 @@ export default function BookingWizard() {
                 onChangeText={setGuestCount}
                 keyboardType="number-pad"
               />
-              {isGuestBelowMinimum ? (
+              {pricing.error && guestCount ? (
                 <View style={styles.inlineNoticeBox}>
                   <Info size={16} color={Colors.orange} />
                   <Text style={styles.inlineNoticeText}>
-                    Note: This package is optimized for at least {selectedPkg?.min_guests} guests. You can proceed, but pricing is calculated based on the baseline package capacity.
+                    {pricing.error}
                   </Text>
                 </View>
               ) : selectedPkg && guests > 0 ? (
@@ -686,10 +732,10 @@ export default function BookingWizard() {
                   <View style={styles.guestCalcTextRow}>
                     <PackageIcon size={14} color="#92400E" />
                     <Text style={styles.guestCalcText}>
-                      {packageMultiplier} × {selectedPkg.name} ({selectedPkg.guest_capacity} pax capacity)
+                      {selectedPkg.name}: fixed package + {pricing.quote?.extraGuests ?? 0} extra guests
                     </Text>
                   </View>
-                  <Text style={styles.guestCalcPrice}>₱{baseTotal.toLocaleString()}</Text>
+                  <Text style={styles.guestCalcPrice}>₱{formatPricingMoney(baseTotal)}</Text>
                 </View>
               ) : null}
             </View>
@@ -774,7 +820,7 @@ export default function BookingWizard() {
                 {customItems.length > 0 && (
                   <View style={styles.customTotal}>
                     <Text style={styles.customTotalLabel}>Customization Add-ons</Text>
-                    <Text style={styles.customTotalValue}>+₱{customizationTotal.toLocaleString()}</Text>
+                    <Text style={styles.customTotalValue}>+₱{formatPricingMoney(customizationTotal)}</Text>
                   </View>
                 )}
 
@@ -955,7 +1001,7 @@ export default function BookingWizard() {
                           <Text style={styles.reviewRowLabel}>{c.menuItem.name} ×{c.quantity}</Text>
                         </View>
                         <Text style={styles.reviewRowValue}>
-                          +₱{(c.menuItem.price_per_guest * guests * c.quantity).toLocaleString()}
+                          +₱{formatPricingMoney(c.menuItem.price_per_guest * guests * c.quantity)}
                         </Text>
                       </View>
                     );
@@ -971,26 +1017,30 @@ export default function BookingWizard() {
               </View>
               <View style={styles.reviewCard}>
                 <View style={styles.reviewRow}>
-                  <Text style={styles.reviewRowLabel}>Package cost ({packageMultiplier}x)</Text>
-                  <Text style={styles.reviewRowValue}>₱{baseTotal.toLocaleString()}</Text>
+                  <Text style={styles.reviewRowLabel}>Fixed package price</Text>
+                  <Text style={styles.reviewRowValue}>₱{formatPricingMoney(pricing.quote?.fixedPrice ?? 0)}</Text>
                 </View>
+                {(pricing.quote?.extraGuests ?? 0) > 0 && <View style={styles.reviewRow}>
+                  <Text style={styles.reviewRowLabel}>Extra guests ({pricing.quote?.extraGuests})</Text>
+                  <Text style={styles.reviewRowValue}>+₱{formatPricingMoney(pricing.quote?.extraGuestTotal ?? 0)}</Text>
+                </View>}
                 {customizationTotal > 0 && (
                   <View style={styles.reviewRow}>
                     <Text style={styles.reviewRowLabel}>Add-ons</Text>
-                    <Text style={styles.reviewRowValue}>+₱{customizationTotal.toLocaleString()}</Text>
+                    <Text style={styles.reviewRowValue}>+₱{formatPricingMoney(customizationTotal)}</Text>
                   </View>
                 )}
                 <View style={[styles.reviewRow, styles.reviewRowDivider]} />
                 <View style={styles.reviewRow}>
                   <Text style={styles.reviewTotalLabel}>TOTAL</Text>
-                  <Text style={styles.reviewTotalValue}>₱{totalCost.toLocaleString()}</Text>
+                  <Text style={styles.reviewTotalValue}>₱{formatPricingMoney(totalCost)}</Text>
                 </View>
                 <View style={[styles.downpaymentBanner]}>
                   <View>
                     <Text style={styles.downpaymentLabel}>Downpayment Required ({caterer.downpayment_percent}%)</Text>
                     <Text style={styles.downpaymentNote}>Deadline: 48 hours after caterer confirms</Text>
                   </View>
-                  <Text style={styles.downpaymentAmount}>₱{downpayment.toLocaleString()}</Text>
+                  <Text style={styles.downpaymentAmount}>₱{formatPricingMoney(downpayment)}</Text>
                 </View>
               </View>
             </View>
