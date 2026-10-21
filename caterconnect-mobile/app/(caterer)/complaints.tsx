@@ -12,14 +12,14 @@ import {
 } from 'lucide-react-native';
 
 const COMPLAINT_TYPES = [
-  'Fraudulent Customer',
-  'False Booking / No-Show',
-  'Abusive Customer Behavior',
-  'Payment Dispute',
-  'Unfair Review / False Rating',
-  'Platform Policy Issue',
-  'Technical Issue',
-  'Other',
+  'Login & Account Issues',
+  'Booking System Error',
+  'Payment System Issue',
+  'Notification Issue',
+  'Chat & Messaging Issue',
+  'App Performance Issue',
+  'Privacy & Security Issue',
+  'Other Technical Issue',
 ];
 
 type Complaint = {
@@ -40,7 +40,7 @@ export default function CatererComplaints() {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [complaintType, setComplaintType] = useState('');
-  const [against, setAgainst] = useState('');
+  const [showIssueTypes, setShowIssueTypes] = useState(false);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -71,7 +71,6 @@ export default function CatererComplaints() {
     const { error } = await supabase.from('complaints').insert({
       reporter_id:    session.user.id,
       reporter_role:  'caterer',
-      against_name:   against.trim() || null,
       complaint_type: complaintType,
       subject:        subject.trim() || null,
       description:    description.trim(),
@@ -85,9 +84,9 @@ export default function CatererComplaints() {
 
     Alert.alert(
       'Complaint Submitted',
-      'Our platform staff will review your complaint within 24–48 hours.',
+      'Your technical report has been submitted to Platform Staff for review.',
       [{ text: 'OK', onPress: () => {
-        setComplaintType(''); setAgainst(''); setSubject('');
+        setComplaintType(''); setShowIssueTypes(false); setSubject('');
         setDescription(''); setPriority('medium');
         setTab('history');
       }}]
@@ -112,8 +111,8 @@ export default function CatererComplaints() {
           <ShieldAlert size={24} color={Colors.orange} />
         </View>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.pageTitle}>Support & Complaints</Text>
-          <Text style={styles.pageSub}>Report issues with customers or platform problems</Text>
+          <Text style={styles.pageTitle}>Technical Support & System Issues</Text>
+          <Text style={styles.pageSub}>Report technical problems with the CaterConnect platform</Text>
         </View>
       </View>
 
@@ -139,35 +138,41 @@ export default function CatererComplaints() {
       {tab === 'new' && (
         <View style={styles.formWrap}>
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>COMPLAINT TYPE *</Text>
-            <View style={styles.typeGrid}>
-              {COMPLAINT_TYPES.map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.typeChip, complaintType === t && styles.typeChipActive]}
-                  onPress={() => setComplaintType(t)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.typeChipText, complaintType === t && styles.typeChipTextActive]}>
-                    {t}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel}>AGAINST (CUSTOMER NAME)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Juan Dela Cruz"
-              placeholderTextColor={Colors.textMuted}
-              value={against}
-              onChangeText={setAgainst}
-            />
+            <Text style={styles.fieldLabel}>TYPE OF ISSUE *</Text>
+            <TouchableOpacity
+              style={styles.issuePicker}
+              activeOpacity={0.8}
+              onPress={() => setShowIssueTypes(value => !value)}
+              accessibilityRole="button"
+              accessibilityLabel="Select type of technical issue"
+            >
+              <Text style={[styles.issuePickerText, !complaintType && { color: Colors.textMuted }]}>
+                {complaintType || 'Select a technical issue'}
+              </Text>
+              <ChevronRight size={17} color={Colors.textSecondary}
+                style={{ transform: [{ rotate: showIssueTypes ? '-90deg' : '90deg' }] }} />
+            </TouchableOpacity>
+            {showIssueTypes && (
+              <View style={styles.issueOptions}>
+                {COMPLAINT_TYPES.map(t => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.issueOption, complaintType === t && styles.issueOptionActive]}
+                    onPress={() => { setComplaintType(t); setShowIssueTypes(false); }}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.issueOptionText, complaintType === t && styles.issueOptionTextActive]}>
+                      {complaintType === t ? '✓  ' : '    '}{t}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.fieldLabel}>SUBJECT</Text>
             <TextInput
               style={styles.input}
-              placeholder="Brief title for your complaint"
+              placeholder="e.g. Payment completed but booking still unpaid"
               placeholderTextColor={Colors.textMuted}
               value={subject}
               onChangeText={setSubject}
@@ -176,7 +181,7 @@ export default function CatererComplaints() {
             <Text style={styles.fieldLabel}>DESCRIPTION *</Text>
             <TextInput
               style={[styles.input, styles.textarea]}
-              placeholder="Describe the issue in detail. Include booking IDs, dates, amounts..."
+              placeholder="Describe what happened, when it happened, and any error message. Do not include passwords or card details."
               placeholderTextColor={Colors.textMuted}
               value={description}
               onChangeText={setDescription}
@@ -210,7 +215,7 @@ export default function CatererComplaints() {
           <View style={styles.infoBox}>
             <AlertTriangle size={18} color="#1D4ED8" style={{ marginTop: 2 }} />
             <Text style={styles.infoBoxText}>
-              Complaints are reviewed by our platform staff within 24–48 hours. Provide as much detail as possible to help us resolve the issue quickly.
+              This form is for CaterConnect app, account, payment-system, and technical problems.
             </Text>
           </View>
 
@@ -222,7 +227,7 @@ export default function CatererComplaints() {
           >
             {submitting
               ? <ActivityIndicator color="white" />
-              : <Text style={styles.submitBtnText}>Submit Complaint</Text>
+              : <Text style={styles.submitBtnText}>Submit Technical Report</Text>
             }
           </TouchableOpacity>
         </View>
@@ -237,8 +242,8 @@ export default function CatererComplaints() {
               <View style={styles.emptyIconWrap}>
                 <Inbox size={40} color={Colors.textMuted} />
               </View>
-              <Text style={styles.emptyTitle}>No complaints submitted</Text>
-              <Text style={styles.emptySub}>Your submitted complaint history and resolution updates will appear here.</Text>
+              <Text style={styles.emptyTitle}>No technical reports submitted</Text>
+              <Text style={styles.emptySub}>Your technical reports and staff resolutions will appear here.</Text>
             </View>
           ) : (
             complaints.map((c) => {
@@ -313,6 +318,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2
   },
   fieldLabel: { fontSize: 11, fontWeight: '800', color: Colors.textSecondary, letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  issuePicker: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  issuePickerText: { flex: 1, fontSize: 14, color: Colors.black, fontWeight: '600' },
+  issueOptions: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, padding: 8, marginTop: 6 },
+  issueOption: { paddingHorizontal: 10, paddingVertical: 12, borderRadius: 9 },
+  issueOptionActive: { backgroundColor: '#FFF7ED' },
+  issueOptionText: { fontSize: 13, color: Colors.textPrimary, fontWeight: '500' },
+  issueOptionTextActive: { fontWeight: '800', color: Colors.orange },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0' },
   typeChipActive: { backgroundColor: '#FFF7ED', borderColor: Colors.orange },

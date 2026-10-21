@@ -8,8 +8,9 @@ import SubscriptionScreen from '../../screens/auth/SubscriptionScreen';
 import { 
   Hourglass, CheckCircle2, XCircle, FileEdit, 
   CreditCard, CircleHelp, 
-  Bell, AlertTriangle, UtensilsCrossed, ChevronRight,
-  LogOut, Camera, Edit3, Building2, MapPin, AlertCircle
+  Bell, UtensilsCrossed, ChevronRight,
+  LogOut, Camera, Edit3, Building2, MapPin, AlertCircle,
+  ShieldAlert
 } from 'lucide-react-native';
 
 type VerificationStatus = 'pending' | 'approved' | 'rejected' | 'unsubmitted' | null;
@@ -83,9 +84,9 @@ export default function CatererProfile() {
       onPress: () => router.push('/(caterer)/notifications') 
     },
     { 
-      icon: AlertTriangle, 
-      label: 'File a Complaint', 
-      sub: 'Report issues with customers or platform', 
+      icon: ShieldAlert, 
+      label: 'Technical Support', 
+      sub: 'Report app errors and platform issues', 
       onPress: () => router.push('/(caterer)/complaints') 
     },
   ];

@@ -95,8 +95,8 @@ export default function ProfileScreen() {
     },
     {
       icon: ShieldAlert, 
-      label: 'File a Complaint',
-      sub: 'Report issues with caterers or platform',
+      label: 'Technical Support',
+      sub: 'Report app errors and platform issues',
       onPress: () => router.push('/(tabs)/complaints'),
     },
     {

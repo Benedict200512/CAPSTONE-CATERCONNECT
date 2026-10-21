@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShieldCheck, ShieldAlert, CreditCard,
-  AlertTriangle, Calendar, Users, Wallet, TrendingUp, Activity,
+  Headset, Calendar, Users, Wallet, TrendingUp, Activity,
   Settings, UserCog, LogOut, Check, X, Shield
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -13,7 +13,7 @@ const staffNav = [
   { path: '/staff',             icon: LayoutDashboard, label: 'Dashboard'            },
   { path: '/staff/verification',  icon: ShieldCheck,       label: 'Caterer Verification' },
   { path: '/staff/subscriptions', icon: CreditCard,        label: 'Subscriptions'        },
-  { path: '/staff/complaints',    icon: AlertTriangle,     label: 'Complaints'           },
+  { path: '/staff/complaints',    icon: Headset,     label: 'Support Tickets'           },
   { path: '/staff/bookings',      icon: Calendar,          label: 'Booking Monitor'      },
   { path: '/staff/account-monitoring', icon: ShieldAlert, label: 'Account Monitoring'    },
   { path: '/staff/refunds',       icon: Wallet,            label: 'Refund Management'    },

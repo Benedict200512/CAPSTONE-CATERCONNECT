@@ -25,3 +25,9 @@ dist-ssr
 
 # large build files
 caterconnect-mobile/Expo-Go-54.0.7.tar.app
+
+caterconnect-mobile/Expo-Go-54.0.7.tar.app/
+caterconnect-mobile/supabase/.temp/
+**/.env
+**/.env.*
+!**/.env.example

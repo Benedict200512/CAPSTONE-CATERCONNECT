@@ -51,6 +51,24 @@ type Booking = {
   special_requests?: string | null;
 };
 
+// Display only the payment channel recorded on the verified booking.
+// Never guess GCash, card or another channel when the provider did not record one.
+const displayXenditPaymentMethod = (method: string | null | undefined): string => {
+  const normalized = (method ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const labels: Record<string, string> = {
+    gcash: 'GCash', maya: 'Maya', paymaya: 'Maya',
+    bpi: 'BPI Online Banking', bdo: 'BDO Online Banking',
+    card: 'Credit / Debit Card', credit_card: 'Credit / Debit Card',
+    debit_card: 'Credit / Debit Card',
+    bank: 'Bank Transfer', bank_transfer: 'Bank Transfer',
+    ewallet: 'E-Wallet', e_wallet: 'E-Wallet',
+  };
+  if (!normalized || ['online', 'online_gateway', 'xendit', 'unknown'].includes(normalized)) {
+    return 'Payment method not recorded';
+  }
+  return labels[normalized] ?? method!.trim();
+};
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending:   { label: 'Pending Review',   color: '#B45309', bg: '#FEF3C7', icon: Clock },
   confirmed: { label: 'Confirmed',        color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
@@ -302,6 +320,58 @@ export default function CustomerBookings() {
 
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // Refund destination after a caterer-initiated emergency cancellation.
+  const [refundDestinationBooking, setRefundDestinationBooking] = useState<Booking | null>(null);
+  const [savingRefundDestination, setSavingRefundDestination] = useState(false);
+  const [emergencyRefundMethod, setEmergencyRefundMethod] = useState<RefundMethod>('gcash');
+  const [emergencyRefundHolder, setEmergencyRefundHolder] = useState('');
+  const [emergencyRefundNumber, setEmergencyRefundNumber] = useState('');
+  const [emergencyRefundBank, setEmergencyRefundBank] = useState('');
+
+  const submitEmergencyRefundDestination = async () => {
+    if (!refundDestinationBooking || savingRefundDestination || !session?.user?.id) return;
+    const holder = emergencyRefundHolder.trim();
+    const account = emergencyRefundNumber.trim();
+    const bank = emergencyRefundBank.trim();
+    const wallet = emergencyRefundMethod === 'gcash' || emergencyRefundMethod === 'maya';
+    if (!holder || !account || (emergencyRefundMethod === 'other_bank' && !bank)) {
+      Alert.alert('Missing information', 'Provide the account holder, number, and bank name if needed.');
+      return;
+    }
+    if (holder.length > 120 || bank.length > 120 ||
+      (wallet ? !/^09\d{9}$/.test(account) : !/^\d{6,20}$/.test(account))) {
+      Alert.alert('Invalid refund account', wallet
+        ? 'Use an 11-digit Philippine mobile number starting with 09.'
+        : 'Use a 6–20 digit bank account number, and keep names below 120 characters.');
+      return;
+    }
+    setSavingRefundDestination(true);
+    try {
+      const { error } = await supabase.rpc('submit_emergency_refund_account', {
+        p_booking_id: refundDestinationBooking.id,
+        p_account_details: {
+          method: emergencyRefundMethod,
+          bank_name: emergencyRefundMethod === 'other_bank' ? bank
+            : emergencyRefundMethod === 'bpi' ? 'BPI'
+            : emergencyRefundMethod === 'bdo' ? 'BDO' : null,
+          account_holder: holder,
+          account_number: account,
+        },
+      });
+      if (error) throw error;
+      setRefundDestinationBooking(null);
+      setEmergencyRefundHolder('');
+      setEmergencyRefundNumber('');
+      setEmergencyRefundBank('');
+      setEmergencyRefundMethod('gcash');
+      Alert.alert('Refund account submitted', 'The caterer can now view your refund destination and arrange the transfer. Do not share an OTP or PIN.');
+      await load(true);
+    } catch (e: any) {
+      Alert.alert('Could not submit refund account', e?.message ?? 'Please retry.');
+    } finally {
+      setSavingRefundDestination(false);
+    }
+  };
   // Caterer Cancelled Direct Refund Input State
 
   const loadScope = useRef('');
@@ -998,7 +1068,7 @@ export default function CustomerBookings() {
                   ['Venue', detailBooking.venue ?? '—', MapPin],
                   ['Total Cost', `₱${Number(detailBooking.total_cost).toLocaleString('en-PH')}`, Wallet],
                   ['Downpayment', `₱${Number(detailBooking.downpayment_amount).toLocaleString('en-PH')}`, CreditCard],
-                  ['Payment Method', detailBooking.payment_method?.toUpperCase() ?? '—', ReceiptText],
+                  ['Payment Method', displayXenditPaymentMethod(detailBooking.payment_method), ReceiptText],
                 ] as [string, string, any][]).map(([label, value, RowIcon]) => (
                   <View key={label} style={styles.paySummaryRow}>
                     <View style={styles.detailLabelGroup}><RowIcon size={16} color={Colors.orange} /><Text style={styles.paySummaryLabel}>{label}</Text></View>
@@ -1126,6 +1196,64 @@ export default function CustomerBookings() {
             onClose={() => setChatBooking(null)}
           />
         )}
+      </Modal>
+
+      {/* Emergency cancellation: customer provides the refund destination. */}
+      <Modal visible={!!refundDestinationBooking} animationType="slide" presentationStyle="pageSheet"
+        onRequestClose={() => { if (!savingRefundDestination) setRefundDestinationBooking(null); }}>
+        <View style={styles.paymentModalRoot}>
+          <View style={styles.paymentModalHeader}>
+            <Text style={styles.paymentModalTitle}>Submit Refund Account</Text>
+            <TouchableOpacity disabled={savingRefundDestination} onPress={() => setRefundDestinationBooking(null)}>
+              <X size={22} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.paymentModalBody}>
+            <Text style={styles.detailText}>
+              Your caterer cancelled this booking. Submit the account where you want to receive your refund.
+              Only the relevant parties should have access to these details. Never enter your wallet PIN or OTP.
+            </Text>
+            {refundDestinationBooking && (
+              <Text style={[styles.paySectionTitle, { marginTop: 15, marginBottom: 10 }]}>
+                Refund due: ₱{Number(refundDestinationBooking.refund_amount).toLocaleString('en-PH')}
+              </Text>
+            )}
+            <Text style={styles.paySectionTitle}>Choose refund destination</Text>
+            {REFUND_METHODS.map(method => (
+              <TouchableOpacity key={method.key}
+                style={[styles.refundMethodRow, emergencyRefundMethod === method.key && styles.refundMethodRowSelected]}
+                onPress={() => setEmergencyRefundMethod(method.key)}>
+                <Text style={[styles.refundMethodLabel, emergencyRefundMethod === method.key && styles.refundMethodLabelSelected]}>
+                  {method.label}
+                </Text>
+                {emergencyRefundMethod === method.key && <Check size={18} color={Colors.orange} />}
+              </TouchableOpacity>
+            ))}
+            {emergencyRefundMethod === 'other_bank' && (
+              <TextInput style={styles.customInput} placeholder="Bank name" placeholderTextColor={Colors.textMuted}
+                maxLength={120} value={emergencyRefundBank} onChangeText={setEmergencyRefundBank} />
+            )}
+            <Text style={[styles.paySectionTitle, { marginTop: 14 }]}>Account holder's full name</Text>
+            <TextInput style={styles.customInput} placeholder="Name registered to the wallet or bank"
+              placeholderTextColor={Colors.textMuted} maxLength={120}
+              value={emergencyRefundHolder} onChangeText={setEmergencyRefundHolder} />
+            <Text style={[styles.paySectionTitle, { marginTop: 14 }]}>
+              {['gcash', 'maya'].includes(emergencyRefundMethod) ? 'Mobile number' : 'Bank account number'}
+            </Text>
+            <TextInput style={styles.customInput} keyboardType="number-pad" maxLength={20}
+              placeholder={['gcash', 'maya'].includes(emergencyRefundMethod) ? '09XXXXXXXXX' : 'Account number'}
+              placeholderTextColor={Colors.textMuted}
+              value={emergencyRefundNumber} onChangeText={setEmergencyRefundNumber} />
+            <TouchableOpacity style={[styles.confirmPayBtn, { marginTop: 20 }, savingRefundDestination && { opacity: 0.6 }]}
+              disabled={savingRefundDestination} onPress={submitEmergencyRefundDestination}>
+              {savingRefundDestination ? <ActivityIndicator color="#FFFFFF" /> :
+                <Text style={styles.confirmPayBtnText}>Submit Refund Account</Text>}
+            </TouchableOpacity>
+            <Text style={[styles.detailText, { marginTop: 12 }]}>
+              This does not transfer money automatically. The caterer submits transfer proof afterward, and you confirm receiving the refund.
+            </Text>
+          </ScrollView>
+        </View>
       </Modal>
 
       {/* Cancellation Reason Modal */}
@@ -1459,11 +1587,17 @@ export default function CustomerBookings() {
                           !b.refund_account_details && (
                             <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FFF7ED', borderRadius: 10 }}>
                               <Text style={{ color: '#9A3412', fontWeight: '800' }}>
-                                Refund destination needs to be collected securely
+                                Action needed: submit your refund account
                               </Text>
-                              <Text style={{ color: '#9A3412', marginTop: 5 }}>
-                                Please contact the caterer through booking chat. In-app submission will be available once the protected refund-account endpoint is deployed.
+                              <Text style={{ color: '#9A3412', marginTop: 5, marginBottom: 10 }}>
+                                Your caterer cancelled this booking. Enter a GCash, Maya, or bank account so the caterer can transfer your refund of ₱{Number(b.refund_amount).toLocaleString('en-PH')}.
                               </Text>
+                              <TouchableOpacity
+                                style={{ backgroundColor: Colors.orange, borderRadius: 9, padding: 12, alignItems: 'center' }}
+                                onPress={() => { setRefundDestinationBooking(b); setEmergencyRefundMethod('gcash'); }}
+                              >
+                                <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>Submit Refund Account</Text>
+                              </TouchableOpacity>
                             </View>
                           )}
 
@@ -1596,7 +1730,7 @@ export default function CustomerBookings() {
                   {b.status === 'paid' && (
                     <View style={styles.statusMessageBox}>
                       <CheckCircle2 size={16} color="#15803D" />
-                      <Text style={styles.statusMessageText}>Downpayment secured via Xendit ({b.payment_method?.toUpperCase() || 'ONLINE'}). E-receipt generated automatically!</Text>
+                      <Text style={styles.statusMessageText}>Downpayment secured via Xendit — {displayXenditPaymentMethod(b.payment_method)}. E-receipt generated automatically!</Text>
                     </View>
                   )}
 

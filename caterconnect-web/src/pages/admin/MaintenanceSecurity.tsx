@@ -14,10 +14,22 @@ const toLocalDateTimeInput = (iso: string | null) => {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 };
 const formatAction = (v: string) => v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+function getErrorMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const e = error as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+    if (parts.length) return parts.join(' | ');
+    if (error instanceof Error) return error.message;
+    try { return JSON.stringify(error); } catch { return 'An unknown error occurred.'; }
+  }
+  return String(error);
+}
+
 export default function MaintenanceSecurity() {
   const { profile } = useAuth();
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -36,8 +48,9 @@ export default function MaintenanceSecurity() {
   const [endAt, setEndAt] = useState('');
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+
   const load = useCallback(async () => {
-    setError(''); setSecurityError(''); setHealth('checking'); setRefreshing(true);
+    setSecurityError(''); setHealth('checking'); setRefreshing(true);
     try {
       const [settingsRes, auditRes, eventRes] = await Promise.all([
         supabase.from('system_settings').select('id, maintenance_enabled, maintenance_message, estimated_end_at, updated_at, updated_by').eq('id', 'main').single(),
@@ -45,25 +58,31 @@ export default function MaintenanceSecurity() {
         supabase.from('account_monitoring_events').select('id, action, reason, created_at, actor_id, user_id').order('created_at', { ascending: false }).limit(10)
       ]);
       setHealthTime(new Date().toISOString());
-      if (settingsRes.error) { setHealth('error'); setHealthError(settingsRes.error.message); setError('Unable to load maintenance settings: ' + settingsRes.error.message); }
-      else {
+      if (settingsRes.error) {
+        setHealth('error'); setHealthError(getErrorMessage(settingsRes.error));
+        setError('Unable to load maintenance settings: ' + getErrorMessage(settingsRes.error));
+      } else {
         const row = settingsRes.data as Settings;
-        setSettings(row); setMessage(row.maintenance_message); setEndAt(toLocalDateTimeInput(row.estimated_end_at)); setHealth('connected'); setHealthError('');
+        setSettings(row); setMessage(row.maintenance_message); setEndAt(toLocalDateTimeInput(row.estimated_end_at));
+        setHealth('connected'); setHealthError('');
       }
-      if (auditRes.error || eventRes.error) setSecurityError([auditRes.error?.message, eventRes.error?.message].filter(Boolean).join(' | '));
+      if (auditRes.error || eventRes.error) setSecurityError([auditRes.error && getErrorMessage(auditRes.error), eventRes.error && getErrorMessage(eventRes.error)].filter(Boolean).join(' | '));
       setAudits((auditRes.data ?? []) as Audit[]);
       setEvents((eventRes.data ?? []) as Event[]);
-    } catch (e) { setHealth('error'); setHealthError(String(e)); setError(String(e)); }
-    finally { setLoading(false); setRefreshing(false); }
+    } catch (e) {
+      setHealth('error'); setHealthError(getErrorMessage(e)); setError('Unable to refresh maintenance data: ' + getErrorMessage(e));
+    } finally { setLoading(false); setRefreshing(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
   const save = async () => {
     if (confirm === null || saving || !settings || profile?.role !== 'admin') return;
+    const desiredState = confirm;
     const cleanMessage = message.trim(), cleanReason = reason.trim();
     if (cleanMessage.length < 10 || cleanMessage.length > 500) { setError('Maintenance message must be 10–500 characters.'); setConfirm(null); return; }
     if (cleanReason.length < 5 || cleanReason.length > 500) { setError('Change reason must be 5–500 characters.'); setConfirm(null); return; }
     let end: string | null = null;
-    if (confirm && endAt) {
+    if (desiredState && endAt) {
       const parsed = new Date(endAt);
       if (Number.isNaN(parsed.getTime())) { setError('Invalid estimated restoration date.'); setConfirm(null); return; }
       end = parsed.toISOString();
@@ -71,31 +90,27 @@ export default function MaintenanceSecurity() {
     setSaving(true); setError(''); setNotice('');
     try {
       const { error: rpcError } = await supabase.rpc('set_maintenance_mode', {
-        p_enabled: confirm,
-        p_message: cleanMessage,
-        p_reason: cleanReason,
-        p_estimated_end_at: end
+        p_enabled: desiredState, p_message: cleanMessage, p_reason: cleanReason, p_estimated_end_at: end
       });
       if (rpcError) throw rpcError;
-      const enabled = confirm;
-      setReason('');
-      setConfirm(null);
+      const { data: verified, error: verifyError } = await supabase.from('system_settings')
+        .select('maintenance_enabled').eq('id', 'main').single();
+      if (verifyError) throw verifyError;
+      if (verified?.maintenance_enabled !== desiredState) throw new Error('Database did not confirm the requested maintenance state.');
+      setReason(''); setConfirm(null);
       await load();
-      setNotice(enabled
-        ? 'Maintenance notice enabled successfully. Application operations are not automatically blocked.'
-        : 'Maintenance notice disabled successfully.');
+      setNotice(desiredState ? 'Maintenance mode enabled successfully.' : 'Maintenance mode disabled successfully.');
     } catch (e) {
-      setError('Unable to change maintenance mode: ' + (e instanceof Error ? e.message : String(e)));
-    } finally {
-      setSaving(false);
-    }
+      console.error('set_maintenance_mode failed:', e);
+      setError('Unable to change maintenance mode: ' + getErrorMessage(e));
+    } finally { setSaving(false); }
   };
   const isAdmin = profile?.role === 'admin';
   return (
     <div style={{ paddingBottom: 40, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 26 }}>
-        <div><h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 6, color: '#111' }}>Maintenance & Security</h1><p style={{ fontSize: 14, color: '#6B7280' }}>Manage maintenance settings, review system connectivity and monitor security activity.</p></div>
-        <button style={{ ...btn, background: '#FFF', border: '1px solid #E5E7EB', color: '#374151' }} disabled={refreshing} onClick={() => void load()}><RefreshCw size={16} className={refreshing ? 'spin' : ''} /> Refresh</button>
+        <div><h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 6, color: '#111' }}>Maintenance &amp; Security</h1><p style={{ fontSize: 14, color: '#6B7280' }}>Manage maintenance settings, review system connectivity and monitor security activity.</p></div>
+        <button style={{ ...btn, background: '#FFF', border: '1px solid #E5E7EB', color: '#374151' }} disabled={refreshing} onClick={() => { setError(''); void load(); }}><RefreshCw size={16} className={refreshing ? 'spin' : ''} /> Refresh</button>
       </div>
       {error && <div role="alert" style={{ padding: 15, marginBottom: 16, borderRadius: 12, background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}>{error}</div>}
       {notice && <div role="status" style={{ padding: 15, marginBottom: 16, borderRadius: 12, background: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0' }}>{notice}</div>}

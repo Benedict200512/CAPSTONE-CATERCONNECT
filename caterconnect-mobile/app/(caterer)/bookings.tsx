@@ -80,6 +80,24 @@ type RefundDispute = {
   caterer_responded_at: string | null;
 };
 
+// Display only the payment channel recorded on the verified booking.
+// Never guess GCash, card or another channel when the provider did not record one.
+const displayXenditPaymentMethod = (method: string | null | undefined): string => {
+  const normalized = (method ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const labels: Record<string, string> = {
+    gcash: 'GCash', maya: 'Maya', paymaya: 'Maya',
+    bpi: 'BPI Online Banking', bdo: 'BDO Online Banking',
+    card: 'Credit / Debit Card', credit_card: 'Credit / Debit Card',
+    debit_card: 'Credit / Debit Card',
+    bank: 'Bank Transfer', bank_transfer: 'Bank Transfer',
+    ewallet: 'E-Wallet', e_wallet: 'E-Wallet',
+  };
+  if (!normalized || ['online', 'online_gateway', 'xendit', 'unknown'].includes(normalized)) {
+    return 'Payment method not recorded';
+  }
+  return labels[normalized] ?? method!.trim();
+};
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending:   { label: 'Pending',    color: '#B45309', bg: '#FEF3C7', icon: Clock },
   confirmed: { label: 'Confirmed', color: '#15803D', bg: '#DCFCE7', icon: CheckCircle },
@@ -1098,13 +1116,13 @@ export default function CatererBookings() {
                   
                   <View style={styles.receiptDetailRow}>
                     <Text style={styles.receiptLabel}>Payment Channel:</Text>
-                    <Text style={styles.receiptVal}>{selected.payment_method?.toUpperCase() || 'ONLINE GATEWAY'}</Text>
+                    <Text style={styles.receiptVal}>{displayXenditPaymentMethod(selected.payment_method)}</Text>
                   </View>
 
                   <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptLabel}>Added to Account:</Text>
+                    <Text style={styles.receiptLabel}>Verified Downpayment:</Text>
                     <Text style={[styles.receiptVal, { color: '#15803D', fontWeight: '900' }]}>
-                      ₱{Number(selected.downpayment_amount).toLocaleString()} ({selected.payment_method?.toUpperCase() || 'GCASH'} · {catererData?.business_name || 'Account'})
+                      ₱{Number(selected.downpayment_amount).toLocaleString()} · {displayXenditPaymentMethod(selected.payment_method)} via Xendit
                     </Text>
                   </View>
 
