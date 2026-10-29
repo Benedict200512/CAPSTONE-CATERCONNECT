@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -20,18 +19,6 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-type User = {
-  id: string;
-  full_name: string;
-  email: string;
-  role: string;
-  created_at: string;
-  avatar_url?: string | null;
-  status?: string;
-  business_name?: string | null;
-  logo_url?: string | null;
-};
-
 type CatererInfo = {
   business_name?: string | null;
   logo_url?: string | null;
@@ -42,25 +29,102 @@ type CatererInfo = {
   subscription_plan?: string | null;
 };
 
-type SelectedUser = User & {
+type User = {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  created_at: string;
+  avatar_url?: string | null;
+  status?: string | null;
+  business_name?: string | null;
+  logo_url?: string | null;
   caterer_info?: CatererInfo | null;
 };
 
-type AccountAction = 'suspend' | 'reactivate';
+function ProfileImage({
+  src,
+  alt,
+  square = false,
+  size = 44,
+  fallback = 'U',
+  background = '#F3F4F6',
+  color = '#6B7280',
+}: {
+  src?: string | null;
+  alt: string;
+  square?: boolean;
+  size?: number;
+  fallback?: string;
+  background?: string;
+  color?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  const commonStyle: CSSProperties = {
+    width: size,
+    height: size,
+    minWidth: size,
+    minHeight: size,
+    display: 'block',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    borderRadius: square ? Math.max(12, size * 0.22) : '50%',
+    border: '1px solid #E5E7EB',
+    background: '#FFFFFF',
+    flexShrink: 0,
+  };
+
+  if (!src || failed) {
+    return (
+      <div
+        aria-label={alt}
+        title={alt}
+        style={{
+          ...commonStyle,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background,
+          color,
+          fontWeight: 800,
+          fontSize: Math.max(16, size * 0.36),
+        }}
+      >
+        {(fallback.trim().charAt(0) || 'U').toUpperCase()}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setFailed(true)}
+      style={commonStyle}
+    />
+  );
+}
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<SelectedUser | null>(null);
+  const [selected, setSelected] = useState<User | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [confirmSuspend, setConfirmSuspend] = useState<User | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [reason, setReason] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const load = async () => {
     setLoading(true);
+    setLoadError('');
 
     try {
       let query = supabase
@@ -68,16 +132,12 @@ export default function UserManagement() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (filter !== 'all') {
-        query = query.eq('role', filter);
-      }
+      if (filter !== 'all') query = query.eq('role', filter);
 
       const { data: profileData, error: profileError } = await query;
-
       if (profileError) throw profileError;
 
       let fetchedUsers: User[] = (profileData ?? []) as User[];
-
       const catererIds = fetchedUsers
         .filter(user => user.role === 'caterer')
         .map(user => user.id);
@@ -85,34 +145,43 @@ export default function UserManagement() {
       if (catererIds.length > 0) {
         const { data: catererData, error: catererError } = await supabase
           .from('caterers')
-          .select('user_id, business_name, logo_url')
+          .select(
+            'user_id, business_name, logo_url, cover_photo_url, city, contact_phone, verification_status, subscription_plan'
+          )
           .in('user_id', catererIds);
 
         if (catererError) throw catererError;
 
-        if (catererData) {
-          const catererMap = new Map(
-            catererData.map(caterer => [caterer.user_id, caterer])
-          );
+        const catererMap = new Map<string, CatererInfo>(
+          (catererData ?? []).map((caterer: any) => [
+            caterer.user_id,
+            {
+              business_name: caterer.business_name ?? null,
+              logo_url: caterer.logo_url ?? null,
+              cover_photo_url: caterer.cover_photo_url ?? null,
+              city: caterer.city ?? null,
+              contact_phone: caterer.contact_phone ?? null,
+              verification_status: caterer.verification_status ?? null,
+              subscription_plan: caterer.subscription_plan ?? null,
+            },
+          ])
+        );
 
-          fetchedUsers = fetchedUsers.map(user => {
-            if (user.role !== 'caterer') return user;
-
-            const caterer = catererMap.get(user.id);
-
-            return {
-              ...user,
-              business_name: caterer?.business_name ?? null,
-              logo_url: caterer?.logo_url ?? null,
-            };
-          });
-        }
+        fetchedUsers = fetchedUsers.map(user => {
+          if (user.role !== 'caterer') return user;
+          const caterer = catererMap.get(user.id);
+          return {
+            ...user,
+            business_name: caterer?.business_name ?? null,
+            logo_url: caterer?.logo_url ?? null,
+            caterer_info: caterer ?? null,
+          };
+        });
       }
 
       setUsers(fetchedUsers);
 
       const roles = ['customer', 'caterer', 'staff', 'admin'];
-
       const countResults = await Promise.all(
         roles.map(role =>
           supabase
@@ -126,21 +195,18 @@ export default function UserManagement() {
       if (countError?.error) throw countError.error;
 
       const newCounts: Record<string, number> = { all: 0 };
-
       roles.forEach((role, index) => {
         newCounts[role] = countResults[index].count ?? 0;
         newCounts.all += countResults[index].count ?? 0;
       });
-
       setCounts(newCounts);
     } catch (error: unknown) {
       const message =
         error instanceof Error
           ? error.message
           : 'Unable to load user directory.';
-
       console.error('User directory loading failed:', error);
-      alert('Failed to load users: ' + message);
+      setLoadError('Failed to load users: ' + message);
     } finally {
       setLoading(false);
     }
@@ -148,11 +214,22 @@ export default function UserManagement() {
 
   useEffect(() => {
     void load();
+    // Reload when the role tab changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  const handleViewUser = async (user: User) => {
-    let extra: { caterer_info?: CatererInfo | null } = {};
+  const displayName = (user: User) =>
+    user.role === 'caterer'
+      ? user.caterer_info?.business_name?.trim() ||
+        user.business_name?.trim() ||
+        user.full_name ||
+        'Unnamed caterer'
+      : user.full_name || 'Unnamed user';
 
+  const roleLabel = (role: string) =>
+    role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Unknown';
+
+  const handleViewUser = async (user: User) => {
     if (user.role === 'caterer') {
       const { data, error } = await supabase
         .from('caterers')
@@ -167,10 +244,16 @@ export default function UserManagement() {
         return;
       }
 
-      extra = { caterer_info: data as CatererInfo | null };
+      setSelected({
+        ...user,
+        business_name: data?.business_name ?? user.business_name ?? null,
+        logo_url: data?.logo_url ?? user.logo_url ?? null,
+        caterer_info: data ?? null,
+      });
+      return;
     }
 
-    setSelected({ ...user, ...extra });
+    setSelected(user);
   };
 
   const openStatusConfirmation = (user: User) => {
@@ -184,13 +267,12 @@ export default function UserManagement() {
     setReason('');
   };
 
-  // Admin uses its own RPC. The Staff RPC remains unchanged.
+  // Uses the existing authorized RPC and records the reason in the audit trail.
   const handleSuspendAccount = async () => {
     if (!confirmSuspend || actionLoading) return;
 
     const target = confirmSuspend;
-    const action: AccountAction =
-      target.status === 'suspended' ? 'reactivate' : 'suspend';
+    const action = target.status === 'suspended' ? 'reactivate' : 'suspend';
     const trimmedReason = reason.trim();
 
     if (trimmedReason.length < 10 || trimmedReason.length > 2000) {
@@ -198,19 +280,17 @@ export default function UserManagement() {
       return;
     }
 
-    if (target.role === 'admin' || !['customer', 'caterer'].includes(target.role)) {
-      alert('Only customer and caterer accounts can be managed here.');
-      return;
-    }
-
     setActionLoading(true);
 
     try {
-      const { error } = await supabase.rpc('admin_account_status_action', {
-        p_user_id: target.id,
-        p_action: action,
-        p_reason: trimmedReason,
-      });
+      const { error } = await supabase.rpc(
+        'staff_account_monitoring_action',
+        {
+          p_user_id: target.id,
+          p_action: action,
+          p_reason: trimmedReason,
+        }
+      );
 
       if (error) throw error;
 
@@ -222,48 +302,68 @@ export default function UserManagement() {
 
       if (statusError) throw statusError;
 
-      if (!updatedProfile) {
-        throw new Error('The account action completed, but the profile could not be reloaded.');
-      }
+      const actualStatus =
+        updatedProfile?.status ??
+        (action === 'suspend' ? 'suspended' : 'active');
 
-      const actualStatus = updatedProfile.status ?? 'unknown';
-
-      await load();
-
+      setUsers(current =>
+        current.map(user =>
+          user.id === target.id ? { ...user, status: actualStatus } : user
+        )
+      );
       setSelected(previous =>
         previous && previous.id === target.id
           ? { ...previous, status: actualStatus }
           : previous
       );
 
-      setConfirmSuspend(null);
-      setReason('');
+      // Refresh directory counts/data, then reapply the confirmed status locally
+      // so the current UI remains consistent if a read is slightly delayed.
+      await load();
+      setUsers(current =>
+        current.map(user =>
+          user.id === target.id ? { ...user, status: actualStatus } : user
+        )
+      );
+      setSelected(previous =>
+        previous && previous.id === target.id
+          ? { ...previous, status: actualStatus }
+          : previous
+      );
 
       alert(
         action === 'suspend'
           ? 'Account suspended successfully.'
-          : `Account reactivation completed. Current status: ${actualStatus}.`
+          : 'Account reactivated successfully.'
       );
+
+      setConfirmSuspend(null);
+      setReason('');
     } catch (error: unknown) {
       const message =
-        typeof error === 'object' &&
-        error !== null &&
-        'message' in error
-          ? String(error.message)
-          : 'Unexpected error. Please try again.';
-
-      console.error('Admin account status update failed:', error);
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'message' in error
+            ? String(error.message)
+            : 'Unexpected error. Please try again.';
+      console.error('Account status update failed:', error);
       alert('Failed to update account status: ' + message);
     } finally {
       setActionLoading(false);
     }
   };
 
-  const filtered = users.filter(user =>
-    (user.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (user.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (user.business_name ?? '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = users.filter(user => {
+    const term = search.toLowerCase();
+    return (
+      displayName(user).toLowerCase().includes(term) ||
+      (user.full_name ?? '').toLowerCase().includes(term) ||
+      (user.email ?? '').toLowerCase().includes(term) ||
+      (user.business_name ?? '').toLowerCase().includes(term)
+    );
+  });
 
   const roleColor: Record<string, string> = {
     customer: '#2563EB',
@@ -271,24 +371,20 @@ export default function UserManagement() {
     staff: '#16A34A',
     admin: '#F97316',
   };
-
   const roleBg: Record<string, string> = {
     customer: '#EFF6FF',
     caterer: '#F5F3FF',
     staff: '#F0FDF4',
     admin: '#FFF7ED',
   };
-
   const roleBorder: Record<string, string> = {
     customer: '#BFDBFE',
     caterer: '#DDD6FE',
     staff: '#BBF7D0',
     admin: '#FFEDD5',
   };
-
   const tabs = ['all', 'customer', 'caterer', 'staff', 'admin'];
-
-  const tabIcons: Record<string, typeof Users> = {
+  const tabIcons: Record<string, any> = {
     all: Layers,
     customer: Users,
     caterer: Store,
@@ -301,78 +397,30 @@ export default function UserManagement() {
   const reasonValid = reasonLength >= 10 && reasonLength <= 2000;
 
   return (
-    <div style={{ paddingBottom: 40 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          marginBottom: 32,
-        }}
-      >
+    <div className="user-management" style={pageStyle}>
+      <div style={headerStyle}>
         <div>
-          <h1
-            style={{
-              fontSize: 28,
-              fontWeight: 900,
-              color: '#111',
-              marginBottom: 6,
-              letterSpacing: '-0.5px',
-            }}
-          >
-            User Directory
-          </h1>
-          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>
+          <h1 style={pageTitleStyle}>User Directory</h1>
+          <p style={subtitleStyle}>
             Securely manage, review, and control all platform accounts.
           </p>
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-          gap: 20,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            gap: 6,
-            background: '#F3F4F6',
-            padding: 6,
-            borderRadius: 14,
-            border: '1px solid #E5E7EB',
-            flexWrap: 'wrap',
-          }}
-        >
+      <div style={controlsStyle}>
+        <div style={tabsContainerStyle}>
           {tabs.map(tab => {
             const Icon = tabIcons[tab] || Users;
-
             return (
               <button
                 key={tab}
                 onClick={() => setFilter(tab)}
                 style={{
-                  padding: '8px 18px',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  border: 'none',
-                  borderRadius: 10,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
+                  ...tabButtonStyle,
                   background: filter === tab ? '#FFFFFF' : 'transparent',
-                  color: filter === tab ? '#111' : '#6B7280',
+                  color: filter === tab ? '#111827' : '#6B7280',
                   boxShadow:
-                    filter === tab
-                      ? '0 2px 4px rgba(0,0,0,0.04)'
-                      : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
+                    filter === tab ? '0 2px 4px rgba(0,0,0,0.04)' : 'none',
                 }}
               >
                 <Icon
@@ -388,84 +436,53 @@ export default function UserManagement() {
           })}
         </div>
 
-        <div style={{ position: 'relative', width: '100%', maxWidth: 380 }}>
-          <Search
-            size={18}
-            color="#9CA3AF"
-            style={{
-              position: 'absolute',
-              left: 16,
-              top: '50%',
-              transform: 'translateY(-50%)',
-            }}
-          />
+        <div style={searchWrapStyle}>
+          <Search size={18} color="#9CA3AF" style={searchIconStyle} />
           <input
             placeholder="Search by name, email, or business..."
             value={search}
             onChange={event => setSearch(event.target.value)}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '12px 16px 12px 44px',
-              borderRadius: 14,
-              border: '1px solid #E5E7EB',
-              outline: 'none',
-              fontSize: 14,
-              color: '#111',
-              background: '#FFFFFF',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-            }}
+            style={searchInputStyle}
           />
         </div>
       </div>
 
-      <div
-        style={{
-          background: '#FFFFFF',
-          borderRadius: 20,
-          border: '1px solid #E5E7EB',
-          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)',
-          overflow: 'hidden',
-        }}
-      >
+      {loadError && (
+        <div role="alert" style={errorStyle}>
+          {loadError}
+          <button onClick={() => void load()} style={retryButtonStyle}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div style={tableCardStyle}>
         {loading ? (
-          <div
-            style={{
-              padding: 80,
-              textAlign: 'center',
-              color: '#9CA3AF',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 16,
-            }}
-          >
+          <div style={emptyStateStyle}>
             <Loader2
               size={36}
               color="#F97316"
-              style={{ animation: 'spin 1s linear infinite' }}
+              style={{ animation: 'ccSpin 1s linear infinite' }}
             />
             <div style={{ fontSize: 15, fontWeight: 600 }}>
               Syncing user directory...
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF' }}>
-            <Users size={32} color="#D1D5DB" />
-            <h3 style={{ color: '#111' }}>No users found</h3>
-            <p>
-              We couldn't find anyone matching your current search or filters.
-            </p>
+          <div style={emptyStateStyle}>
+            <div style={emptyIconStyle}>
+              <Users size={32} color="#D1D5DB" />
+            </div>
+            <div>
+              <div style={emptyTitleStyle}>No users found</div>
+              <div style={subtitleStyle}>
+                We couldn't find anyone matching your current search or filters.
+              </div>
+            </div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                textAlign: 'left',
-              }}
-            >
+            <table style={tableStyle}>
               <thead>
                 <tr style={{ background: '#F9FAFB' }}>
                   <th style={thStyle}>User Profile</th>
@@ -477,10 +494,7 @@ export default function UserManagement() {
               <tbody>
                 {filtered.map((user, index) => {
                   const isSuspended = user.status === 'suspended';
-                  const displayName =
-                    user.role === 'caterer' && user.business_name
-                      ? user.business_name
-                      : user.full_name ?? '—';
+                  const name = displayName(user);
 
                   return (
                     <tr
@@ -494,81 +508,34 @@ export default function UserManagement() {
                       }}
                     >
                       <td style={tdStyle}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 16,
-                          }}
-                        >
-                          {user.role === 'caterer' && user.logo_url ? (
-                            <img
-                              src={user.logo_url}
-                              alt={displayName}
-                              style={avatarStyle(true)}
-                            />
-                          ) : user.avatar_url ? (
-                            <img
-                              src={user.avatar_url}
-                              alt={user.full_name}
-                              style={avatarStyle(false)}
-                            />
-                          ) : (
-                            <div
-                              style={{
-                                ...avatarStyle(user.role === 'caterer'),
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: roleBg[user.role] ?? '#F3F4F6',
-                                color: roleColor[user.role] ?? '#6B7280',
-                                fontWeight: 800,
-                              }}
-                            >
-                              {displayName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-
+                        <div style={profileCellStyle}>
+                          <ProfileImage
+                            src={
+                              user.role === 'caterer'
+                                ? user.logo_url || user.avatar_url
+                                : user.avatar_url
+                            }
+                            alt={name}
+                            square={user.role === 'caterer'}
+                            fallback={name}
+                            background={roleBg[user.role] ?? '#F3F4F6'}
+                            color={roleColor[user.role] ?? '#6B7280'}
+                          />
                           <div>
-                            <div
-                              style={{
-                                fontWeight: 800,
-                                fontSize: 15,
-                                color: '#111',
-                                marginBottom: 4,
-                              }}
-                            >
-                              {displayName}
+                            <div style={userNameStyle}>
+                              {name}
                               {isSuspended && (
-                                <span
-                                  style={{
-                                    marginLeft: 8,
-                                    background: '#FEE2E2',
-                                    color: '#DC2626',
-                                    fontSize: 10,
-                                    fontWeight: 800,
-                                    padding: '2px 8px',
-                                    borderRadius: 6,
-                                  }}
-                                >
+                                <span style={suspendedBadgeStyle}>
                                   SUSPENDED
                                 </span>
                               )}
                             </div>
-
-                            {user.role === 'caterer' && user.business_name && (
-                              <div style={{ fontSize: 12, color: '#6B7280' }}>
-                                Owner: {user.full_name ?? '—'}
+                            {user.role === 'caterer' && (
+                              <div style={smallSecondaryStyle}>
+                                Owner: {user.full_name || '—'}
                               </div>
                             )}
-
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: '#9CA3AF',
-                                fontFamily: 'monospace',
-                              }}
-                            >
+                            <div style={userIdStyle}>
                               ID: {user.id.slice(0, 10)}
                             </div>
                           </div>
@@ -576,51 +543,45 @@ export default function UserManagement() {
                       </td>
 
                       <td style={tdStyle}>
-                        <div style={{ fontSize: 14, color: '#4B5563' }}>
-                          <Mail size={14} style={inlineIconStyle} />
-                          {user.email}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: '#9CA3AF',
-                            marginTop: 6,
-                          }}
-                        >
-                          <CalendarDays size={14} style={inlineIconStyle} />
-                          Joined{' '}
-                          {user.created_at
-                            ? new Date(user.created_at).toLocaleDateString(
-                                'en-PH',
-                                {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                }
-                              )
-                            : '—'}
+                        <div style={accountDetailStyle}>
+                          <div>
+                            <Mail size={14} style={inlineIconStyle} />
+                            {user.email || '—'}
+                          </div>
+                          <div style={smallSecondaryStyle}>
+                            <CalendarDays size={14} style={inlineIconStyle} />
+                            Joined{' '}
+                            {user.created_at
+                              ? new Date(user.created_at).toLocaleDateString(
+                                  'en-PH',
+                                  {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  }
+                                )
+                              : '—'}
+                          </div>
                         </div>
                       </td>
 
                       <td style={tdStyle}>
                         <span
                           style={{
-                            padding: '6px 12px',
-                            borderRadius: 20,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            textTransform: 'capitalize',
+                            ...roleBadgeStyle,
                             background: roleBg[user.role] ?? '#F3F4F6',
                             color: roleColor[user.role] ?? '#6B7280',
-                            border: `1px solid ${roleBorder[user.role] ?? '#E5E7EB'}`,
+                            border: `1px solid ${
+                              roleBorder[user.role] ?? '#E5E7EB'
+                            }`,
                           }}
                         >
-                          {user.role}
+                          {roleLabel(user.role)}
                         </span>
                       </td>
 
                       <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: 10 }}>
+                        <div style={actionsStyle}>
                           <button
                             onClick={() => void handleViewUser(user)}
                             style={buttonStyle}
@@ -629,19 +590,19 @@ export default function UserManagement() {
                             Profile
                           </button>
 
-                          {user.role !== 'admin' && (
-                            <button
-                              onClick={() => openStatusConfirmation(user)}
-                              style={{
-                                ...buttonStyle,
-                                background: isSuspended ? '#DC2626' : '#FFF5F5',
-                                color: isSuspended ? '#FFFFFF' : '#DC2626',
-                              }}
-                            >
-                              <Ban size={16} />
-                              {isSuspended ? 'Unsuspend' : 'Suspend'}
-                            </button>
-                          )}
+                          {/* Intentionally available for every role, including staff and admin. */}
+                          <button
+                            onClick={() => openStatusConfirmation(user)}
+                            style={{
+                              ...buttonStyle,
+                              background: isSuspended ? '#DC2626' : '#FFF5F5',
+                              color: isSuspended ? '#FFFFFF' : '#DC2626',
+                              borderColor: '#FEE2E2',
+                            }}
+                          >
+                            <Ban size={16} />
+                            {isSuspended ? 'Unsuspend' : 'Suspend'}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -653,6 +614,7 @@ export default function UserManagement() {
         )}
       </div>
 
+      {/* User Detail Modal */}
       {selected && (
         <div style={overlayStyle} onClick={() => setSelected(null)}>
           <div
@@ -662,21 +624,26 @@ export default function UserManagement() {
             <div
               style={{
                 position: 'relative',
-                height: selected.caterer_info?.cover_photo_url ? 180 : 100,
-                background: '#F3F4F6',
+                height:
+                  selected.role === 'caterer' &&
+                  selected.caterer_info?.cover_photo_url
+                    ? 180
+                    : 100,
+                background: 'linear-gradient(135deg, #F9FAFB 0%, #E5E7EB 100%)',
+                flexShrink: 0,
               }}
             >
-              {selected.caterer_info?.cover_photo_url && (
-                <img
-                  src={selected.caterer_info.cover_photo_url}
-                  alt="Cover"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
-                />
-              )}
+              {selected.role === 'caterer' &&
+                selected.caterer_info?.cover_photo_url && (
+                  <img
+                    src={selected.caterer_info.cover_photo_url}
+                    alt="Business cover"
+                    onError={event => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                    style={coverImageStyle}
+                  />
+                )}
               <button
                 style={closeButtonStyle}
                 onClick={() => setSelected(null)}
@@ -686,160 +653,168 @@ export default function UserManagement() {
               </button>
             </div>
 
-            <div style={{ padding: '0 32px 32px' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-end',
-                  marginTop: -40,
-                  marginBottom: 16,
-                }}
-              >
-                {selected.caterer_info?.logo_url ? (
-                  <img
-                    src={selected.caterer_info.logo_url}
-                    alt="Business logo"
-                    style={avatarStyle(true, 88)}
-                  />
-                ) : selected.avatar_url ? (
-                  <img
-                    src={selected.avatar_url}
-                    alt={selected.full_name}
-                    style={avatarStyle(false, 88)}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      ...avatarStyle(selected.role === 'caterer', 88),
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: roleBg[selected.role] ?? '#F3F4F6',
-                      fontSize: 32,
-                      fontWeight: 900,
-                    }}
-                  >
-                    {(selected.full_name ?? 'U').charAt(0).toUpperCase()}
-                  </div>
-                )}
+            <div style={detailContentStyle}>
+              <div style={overlapAvatarRowStyle}>
+                <ProfileImage
+                  src={
+                    selected.role === 'caterer'
+                      ? selected.caterer_info?.logo_url ||
+                        selected.logo_url ||
+                        selected.avatar_url
+                      : selected.avatar_url
+                  }
+                  alt={
+                    selected.role === 'caterer'
+                      ? selected.caterer_info?.business_name ||
+                        selected.business_name ||
+                        'Business logo'
+                      : selected.full_name || 'User avatar'
+                  }
+                  square={selected.role === 'caterer'}
+                  size={88}
+                  fallback={
+                    selected.role === 'caterer'
+                      ? selected.caterer_info?.business_name ||
+                        selected.business_name ||
+                        selected.full_name ||
+                        'C'
+                      : selected.full_name || 'U'
+                  }
+                  background={roleBg[selected.role] ?? '#F3F4F6'}
+                  color={roleColor[selected.role] ?? '#6B7280'}
+                />
 
                 <span
                   style={{
+                    ...roleBadgeStyle,
                     padding: '6px 14px',
-                    borderRadius: 20,
-                    fontSize: 13,
-                    fontWeight: 800,
                     background: roleBg[selected.role] ?? '#F3F4F6',
                     color: roleColor[selected.role] ?? '#6B7280',
+                    border: `1px solid ${
+                      roleBorder[selected.role] ?? '#E5E7EB'
+                    }`,
                   }}
                 >
-                  {selected.role} Account
+                  {roleLabel(selected.role)} Account
                 </span>
               </div>
 
-              <h2 style={{ color: '#111' }}>
-                {selected.caterer_info?.business_name ??
-                  selected.business_name ??
-                  selected.full_name}
-              </h2>
-
-              {selected.role === 'caterer' && (
-                <p style={{ color: '#4B5563' }}>
-                  <Store size={16} style={inlineIconStyle} />
-                  Owner: {selected.full_name}
-                </p>
-              )}
-
-              <h4>System Details</h4>
-              <div style={detailCardStyle}>
-                <DetailRow
-                  icon={<Mail size={16} />}
-                  label="Email"
-                  value={selected.email}
-                />
-                <DetailRow
-                  icon={<Hash size={16} />}
-                  label="User ID"
-                  value={selected.id}
-                />
-                <DetailRow
-                  icon={<CalendarDays size={16} />}
-                  label="Joined"
-                  value={
-                    selected.created_at
-                      ? new Date(selected.created_at).toLocaleDateString(
-                          'en-PH',
-                          {
-                            month: 'long',
-                            day: 'numeric',
-                            year: 'numeric',
-                          }
-                        )
-                      : '—'
-                  }
-                />
-                <DetailRow
-                  icon={<Shield size={16} />}
-                  label="Account status"
-                  value={selected.status ?? '—'}
-                />
+              <div style={{ marginBottom: 24 }}>
+                <h2 style={profileHeadingStyle}>{displayName(selected)}</h2>
+                {selected.role === 'caterer' && (
+                  <div style={ownerLineStyle}>
+                    <Store size={16} color="#7C3AED" />
+                    Owner: {selected.full_name || '—'}
+                  </div>
+                )}
               </div>
 
-              {selected.role === 'caterer' && selected.caterer_info && (
-                <>
-                  <h4>Vendor Profile</h4>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    selected.role === 'caterer' && selected.caterer_info
+                      ? 'repeat(auto-fit, minmax(220px, 1fr))'
+                      : '1fr',
+                  gap: 20,
+                }}
+              >
+                <div>
+                  <h4 style={sectionHeadingStyle}>System Details</h4>
                   <div style={detailCardStyle}>
                     <DetailRow
-                      label="City"
-                      value={selected.caterer_info.city ?? '—'}
+                      icon={<Mail size={16} />}
+                      label="Email"
+                      value={selected.email || '—'}
                     />
                     <DetailRow
-                      label="Phone"
-                      value={selected.caterer_info.contact_phone ?? '—'}
+                      icon={<Hash size={16} />}
+                      label="User ID"
+                      value={selected.id}
                     />
                     <DetailRow
-                      label="Clearance"
-                      value={selected.caterer_info.verification_status ?? '—'}
-                    />
-                    <DetailRow
-                      label="Plan"
+                      icon={<CalendarDays size={16} />}
+                      label="Joined"
                       value={
-                        selected.caterer_info.subscription_plan?.toUpperCase() ??
-                        '—'
+                        selected.created_at
+                          ? new Date(selected.created_at).toLocaleDateString(
+                              'en-PH',
+                              {
+                                month: 'long',
+                                day: 'numeric',
+                                year: 'numeric',
+                              }
+                            )
+                          : '—'
                       }
                     />
+                    <DetailRow
+                      icon={<Shield size={16} />}
+                      label="Account status"
+                      value={roleLabel(selected.status ?? 'active')}
+                      last
+                    />
                   </div>
-                </>
-              )}
+                </div>
 
-              {selected.role !== 'admin' && (
+                {selected.role === 'caterer' && selected.caterer_info && (
+                  <div>
+                    <h4 style={sectionHeadingStyle}>Vendor Profile</h4>
+                    <div style={detailCardStyle}>
+                      <DetailRow
+                        label="City"
+                        value={selected.caterer_info.city ?? '—'}
+                      />
+                      <DetailRow
+                        label="Phone"
+                        value={selected.caterer_info.contact_phone ?? '—'}
+                      />
+                      <DetailRow
+                        label="Clearance"
+                        value={
+                          roleLabel(
+                            selected.caterer_info.verification_status ?? '—'
+                          )
+                        }
+                      />
+                      <DetailRow
+                        label="Plan"
+                        value={
+                          selected.caterer_info.subscription_plan?.toUpperCase() ??
+                          '—'
+                        }
+                        last
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Available to manage every account role, including staff/admin. */}
+              <div style={modalActionFooterStyle}>
                 <button
                   onClick={() => openStatusConfirmation(selected)}
                   style={{
-                    width: '100%',
-                    padding: 14,
-                    marginTop: 24,
+                    ...primaryStatusButtonStyle,
                     background:
-                      selected.status === 'suspended' ? '#111' : '#FEF2F2',
-                    color: selected.status === 'suspended' ? '#FFF' : '#DC2626',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 14,
-                    fontWeight: 800,
-                    cursor: 'pointer',
+                      selected.status === 'suspended' ? '#111827' : '#FEF2F2',
+                    borderColor:
+                      selected.status === 'suspended' ? '#111827' : '#FECACA',
+                    color: selected.status === 'suspended' ? '#FFFFFF' : '#DC2626',
                   }}
                 >
-                  <ShieldAlert size={18} style={inlineIconStyle} />
+                  <ShieldAlert size={18} />
                   {selected.status === 'suspended'
                     ? 'Unsuspend Platform Access'
                     : 'Suspend Platform Access'}
                 </button>
-              )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Suspension / Reactivation Confirmation Modal */}
       {confirmSuspend && (
         <div style={overlayStyle} onClick={closeStatusConfirmation}>
           <div
@@ -848,14 +823,8 @@ export default function UserManagement() {
           >
             <div
               style={{
-                width: 64,
-                height: 64,
-                borderRadius: '50%',
+                ...confirmIconWrapStyle,
                 background: isConfirmingReactivation ? '#DCFCE7' : '#FEF2F2',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 20px',
               }}
             >
               {isConfirmingReactivation ? (
@@ -865,38 +834,28 @@ export default function UserManagement() {
               )}
             </div>
 
-            <h3 style={{ marginBottom: 8, color: '#111' }}>
-              {isConfirmingReactivation ? 'Reactivate Account' : 'Suspend Account'}
+            <h3 style={confirmTitleStyle}>
+              {isConfirmingReactivation
+                ? 'Reactivate Account?'
+                : 'Suspend Account?'}
             </h3>
 
-            <p style={{ color: '#6B7280', lineHeight: 1.6 }}>
+            <p style={confirmTextStyle}>
               {isConfirmingReactivation
                 ? 'You are about to restore platform access for'
                 : 'You are about to suspend platform access for'}{' '}
-              <strong style={{ color: '#111' }}>
-                {confirmSuspend.role === 'caterer' &&
-                confirmSuspend.business_name
-                  ? confirmSuspend.business_name
-                  : confirmSuspend.full_name}
+              <strong style={{ color: '#111827' }}>
+                {displayName(confirmSuspend)}
               </strong>{' '}
               ({confirmSuspend.email}).
             </p>
 
             <div style={{ textAlign: 'left', marginTop: 22 }}>
-              <label
-                htmlFor="account-action-reason"
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: '#374151',
-                  marginBottom: 8,
-                }}
-              >
-                Reason for {isConfirmingReactivation ? 'reactivation' : 'suspension'}
+              <label htmlFor="account-action-reason" style={reasonLabelStyle}>
+                Reason for{' '}
+                {isConfirmingReactivation ? 'reactivation' : 'suspension'}
                 <span style={{ color: '#DC2626' }}> *</span>
               </label>
-
               <textarea
                 id="account-action-reason"
                 value={reason}
@@ -909,34 +868,9 @@ export default function UserManagement() {
                 rows={4}
                 maxLength={2000}
                 disabled={actionLoading}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  resize: 'vertical',
-                  minHeight: 110,
-                  padding: 14,
-                  borderRadius: 12,
-                  border: '1px solid #D1D5DB',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  color: '#111827',
-                  background: actionLoading ? '#F9FAFB' : '#FFFFFF',
-                }}
+                style={reasonInputStyle}
               />
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginTop: 7,
-                  fontSize: 12,
-                }}
-              >
+              <div style={reasonCounterRowStyle}>
                 <span style={{ color: reasonValid ? '#16A34A' : '#6B7280' }}>
                   {reasonLength < 10
                     ? `${10 - reasonLength} more characters required`
@@ -946,7 +880,7 @@ export default function UserManagement() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+            <div style={confirmButtonsStyle}>
               <button
                 disabled={actionLoading}
                 onClick={closeStatusConfirmation}
@@ -981,7 +915,7 @@ export default function UserManagement() {
                 {actionLoading ? (
                   <Loader2
                     size={16}
-                    style={{ animation: 'spin 1s linear infinite' }}
+                    style={{ animation: 'ccSpin 1s linear infinite' }}
                   />
                 ) : (
                   <ShieldAlert size={16} />
@@ -998,25 +932,42 @@ export default function UserManagement() {
       )}
 
       <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        .user-management,
+        .user-management * {
+          font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+          box-sizing: border-box;
         }
 
-        @keyframes scaleIn {
-          from {
-            opacity: 0;
-            transform: scale(0.95) translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
+        .user-management button,
+        .user-management input,
+        .user-management textarea {
+          font: inherit;
+        }
+
+        .user-management button {
+          transition: background-color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+        }
+
+        .user-management button:focus-visible,
+        .user-management input:focus-visible,
+        .user-management textarea:focus-visible {
+          outline: 3px solid rgba(249, 115, 22, 0.2);
+          outline-offset: 2px;
         }
 
         #account-action-reason:focus {
           border-color: #F97316;
           box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+        }
+
+        @keyframes ccSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.95) translateY(10px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
     </div>
@@ -1027,19 +978,23 @@ function DetailRow({
   icon,
   label,
   value,
+  last = false,
 }: {
   icon?: ReactNode;
   label: string;
   value: ReactNode;
+  last?: boolean;
 }) {
   return (
     <div
       style={{
         display: 'flex',
         justifyContent: 'space-between',
+        alignItems: 'flex-start',
         gap: 16,
         padding: '14px 16px',
-        borderBottom: '1px solid #E5E7EB',
+        borderBottom: last ? 'none' : '1px solid #E5E7EB',
+        fontSize: 13,
       }}
     >
       <span
@@ -1048,6 +1003,8 @@ function DetailRow({
           display: 'flex',
           gap: 8,
           alignItems: 'center',
+          fontWeight: 600,
+          flexShrink: 0,
         }}
       >
         {icon}
@@ -1055,9 +1012,10 @@ function DetailRow({
       </span>
       <span
         style={{
-          color: '#111',
+          color: '#111827',
           textAlign: 'right',
           overflowWrap: 'anywhere',
+          fontWeight: 700,
         }}
       >
         {value}
@@ -1065,6 +1023,157 @@ function DetailRow({
     </div>
   );
 }
+
+const pageStyle: CSSProperties = {
+  paddingBottom: 40,
+  color: '#111827',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
+};
+
+const headerStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-end',
+  marginBottom: 32,
+};
+
+const pageTitleStyle: CSSProperties = {
+  fontSize: 28,
+  fontWeight: 900,
+  color: '#111827',
+  margin: '0 0 6px',
+  letterSpacing: '-0.5px',
+};
+
+const subtitleStyle: CSSProperties = {
+  fontSize: 15,
+  color: '#6B7280',
+  margin: 0,
+  lineHeight: 1.5,
+};
+
+const controlsStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 24,
+  gap: 20,
+  flexWrap: 'wrap',
+};
+
+const tabsContainerStyle: CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  background: '#F3F4F6',
+  padding: 6,
+  borderRadius: 14,
+  border: '1px solid #E5E7EB',
+  flexWrap: 'wrap',
+};
+
+const tabButtonStyle: CSSProperties = {
+  padding: '8px 18px',
+  fontSize: 13,
+  fontWeight: 700,
+  border: 'none',
+  borderRadius: 10,
+  cursor: 'pointer',
+  textTransform: 'capitalize',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+};
+
+const searchWrapStyle: CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  maxWidth: 380,
+};
+
+const searchIconStyle: CSSProperties = {
+  position: 'absolute',
+  left: 16,
+  top: '50%',
+  transform: 'translateY(-50%)',
+};
+
+const searchInputStyle: CSSProperties = {
+  width: '100%',
+  padding: '12px 16px 12px 44px',
+  borderRadius: 14,
+  border: '1px solid #E5E7EB',
+  outline: 'none',
+  fontSize: 14,
+  color: '#111827',
+  background: '#FFFFFF',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+};
+
+const errorStyle: CSSProperties = {
+  padding: 14,
+  marginBottom: 16,
+  background: '#FEF2F2',
+  color: '#991B1B',
+  borderRadius: 12,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  fontSize: 14,
+};
+
+const retryButtonStyle: CSSProperties = {
+  border: '1px solid #FECACA',
+  borderRadius: 8,
+  padding: '6px 10px',
+  background: '#FFFFFF',
+  color: '#991B1B',
+  cursor: 'pointer',
+  fontWeight: 700,
+};
+
+const tableCardStyle: CSSProperties = {
+  background: '#FFFFFF',
+  borderRadius: 20,
+  border: '1px solid #E5E7EB',
+  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)',
+  overflow: 'hidden',
+};
+
+const emptyStateStyle: CSSProperties = {
+  padding: 80,
+  textAlign: 'center',
+  color: '#9CA3AF',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 16,
+};
+
+const emptyIconStyle: CSSProperties = {
+  width: 72,
+  height: 72,
+  borderRadius: '50%',
+  background: '#F9FAFB',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid #E5E7EB',
+};
+
+const emptyTitleStyle: CSSProperties = {
+  fontSize: 18,
+  fontWeight: 800,
+  color: '#111827',
+  marginBottom: 4,
+};
+
+const tableStyle: CSSProperties = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  textAlign: 'left',
+  fontSize: 14,
+};
 
 const thStyle: CSSProperties = {
   padding: '16px 24px',
@@ -1074,11 +1183,60 @@ const thStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: 0.5,
   textAlign: 'left',
+  whiteSpace: 'nowrap',
 };
 
 const tdStyle: CSSProperties = {
   padding: '20px 24px',
   verticalAlign: 'middle',
+};
+
+const profileCellStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 16,
+};
+
+const userNameStyle: CSSProperties = {
+  fontWeight: 800,
+  fontSize: 15,
+  color: '#111827',
+  marginBottom: 4,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexWrap: 'wrap',
+};
+
+const suspendedBadgeStyle: CSSProperties = {
+  background: '#FEE2E2',
+  color: '#DC2626',
+  fontSize: 10,
+  fontWeight: 800,
+  padding: '2px 8px',
+  borderRadius: 6,
+  border: '1px solid #FECACA',
+};
+
+const smallSecondaryStyle: CSSProperties = {
+  fontSize: 12,
+  color: '#6B7280',
+  marginTop: 4,
+};
+
+const userIdStyle: CSSProperties = {
+  fontSize: 12,
+  color: '#9CA3AF',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  marginTop: 4,
+};
+
+const accountDetailStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  color: '#4B5563',
+  fontSize: 14,
 };
 
 const inlineIconStyle: CSSProperties = {
@@ -1087,15 +1245,22 @@ const inlineIconStyle: CSSProperties = {
   marginRight: 6,
 };
 
-const avatarStyle = (square: boolean, size = 44): CSSProperties => ({
-  width: size,
-  height: size,
-  borderRadius: square ? Math.max(12, size * 0.22) : '50%',
-  objectFit: 'cover',
-  border: '1px solid #E5E7EB',
-  background: '#FFF',
-  flexShrink: 0,
-});
+const roleBadgeStyle: CSSProperties = {
+  padding: '6px 12px',
+  borderRadius: 20,
+  fontSize: 12,
+  fontWeight: 700,
+  display: 'inline-flex',
+  alignItems: 'center',
+  textTransform: 'capitalize',
+  whiteSpace: 'nowrap',
+};
+
+const actionsStyle: CSSProperties = {
+  display: 'flex',
+  gap: 10,
+  flexWrap: 'wrap',
+};
 
 const buttonStyle: CSSProperties = {
   background: '#FFFFFF',
@@ -1110,31 +1275,6 @@ const buttonStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: 6,
-};
-
-const closeButtonStyle: CSSProperties = {
-  position: 'absolute',
-  top: 14,
-  right: 14,
-  width: 36,
-  height: 36,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  border: '1px solid rgba(255,255,255,0.7)',
-  borderRadius: '50%',
-  background: 'rgba(255,255,255,0.95)',
-  color: '#111827',
-  cursor: 'pointer',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-};
-
-const detailCardStyle: CSSProperties = {
-  background: '#F9FAFB',
-  border: '1px solid #E5E7EB',
-  borderRadius: 14,
-  overflow: 'hidden',
-  marginBottom: 20,
 };
 
 const overlayStyle: CSSProperties = {
@@ -1158,6 +1298,101 @@ const detailModalStyle: CSSProperties = {
   borderRadius: 24,
   boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
   animation: 'scaleIn 0.2s ease-out',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
+};
+
+const coverImageStyle: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+  objectPosition: 'center',
+};
+
+const closeButtonStyle: CSSProperties = {
+  position: 'absolute',
+  top: 14,
+  right: 14,
+  width: 36,
+  height: 36,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid rgba(255,255,255,0.7)',
+  borderRadius: '50%',
+  background: 'rgba(255,255,255,0.95)',
+  color: '#111827',
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+};
+
+const detailContentStyle: CSSProperties = {
+  padding: '0 32px 32px',
+};
+
+const overlapAvatarRowStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-end',
+  gap: 12,
+  marginTop: -40,
+  marginBottom: 16,
+  position: 'relative',
+};
+
+const profileHeadingStyle: CSSProperties = {
+  fontSize: 26,
+  fontWeight: 900,
+  color: '#111827',
+  margin: '0 0 6px',
+  letterSpacing: '-0.5px',
+  lineHeight: 1.25,
+};
+
+const ownerLineStyle: CSSProperties = {
+  fontSize: 14,
+  color: '#4B5563',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  fontWeight: 600,
+};
+
+const sectionHeadingStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: '#9CA3AF',
+  textTransform: 'uppercase',
+  letterSpacing: 1,
+  margin: '0 0 12px',
+};
+
+const detailCardStyle: CSSProperties = {
+  background: '#F9FAFB',
+  border: '1px solid #E5E7EB',
+  borderRadius: 14,
+  overflow: 'hidden',
+  marginBottom: 20,
+};
+
+const modalActionFooterStyle: CSSProperties = {
+  marginTop: 12,
+  paddingTop: 24,
+  borderTop: '1px solid #F3F4F6',
+};
+
+const primaryStatusButtonStyle: CSSProperties = {
+  width: '100%',
+  padding: 14,
+  border: '1px solid #FECACA',
+  borderRadius: 14,
+  fontSize: 14,
+  fontWeight: 800,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 10,
+  cursor: 'pointer',
 };
 
 const confirmModalStyle: CSSProperties = {
@@ -1172,4 +1407,69 @@ const confirmModalStyle: CSSProperties = {
   boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
   textAlign: 'center',
   animation: 'scaleIn 0.2s ease-out',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
+};
+
+const confirmIconWrapStyle: CSSProperties = {
+  width: 64,
+  height: 64,
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  margin: '0 auto 20px',
+};
+
+const confirmTitleStyle: CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  margin: '0 0 8px',
+  color: '#111827',
+};
+
+const confirmTextStyle: CSSProperties = {
+  fontSize: 14,
+  color: '#6B7280',
+  lineHeight: 1.6,
+  margin: '0 0 24px',
+};
+
+const reasonLabelStyle: CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 800,
+  color: '#374151',
+  marginBottom: 8,
+};
+
+const reasonInputStyle: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+  resize: 'vertical',
+  minHeight: 110,
+  padding: 14,
+  borderRadius: 12,
+  border: '1px solid #D1D5DB',
+  outline: 'none',
+  fontFamily: 'inherit',
+  fontSize: 14,
+  lineHeight: 1.5,
+  color: '#111827',
+  background: '#FFFFFF',
+};
+
+const reasonCounterRowStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+  marginTop: 7,
+  fontSize: 12,
+};
+
+const confirmButtonsStyle: CSSProperties = {
+  display: 'flex',
+  gap: 12,
+  marginTop: 24,
 };
