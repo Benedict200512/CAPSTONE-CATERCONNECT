@@ -13,7 +13,8 @@ import { nextReactions, persistMessageReactions, reactionError } from '@/lib/mes
 import * as ImagePicker from 'expo-image-picker';
 import {
   ChevronLeft, Send, Image as ImageIcon, Smile,
-  X, MessageSquare, ChevronDown, ChevronUp, CalendarDays
+  X, MessageSquare, ChevronDown, ChevronUp, CalendarDays,
+  MoreVertical, Pin, Pencil, Trash2,
 } from 'lucide-react-native';
 
 type Message = {
@@ -25,6 +26,10 @@ type Message = {
   reactions?: Record<string, string>; // userId -> emoji
   is_read: boolean;
   created_at: string;
+  is_edited?: boolean;
+  edited_at?: string | null;
+  is_pinned?: boolean;
+  pinned_at?: string | null;
 };
 
 type Props = {
@@ -56,9 +61,6 @@ const QUICK_QUESTIONS = [
 ];
 
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🔥', '🎉', '👏'];
-// Keep emoji grapheme sequences in their own native text runs. On some Android
-// builds the styled message bubble's text font does not select an emoji glyph.
-// The Unicode code points are left unchanged; this is display-only.
 const EMOJI_PATTERN = /([\u00A9\u00AE\u203C-\u3299\u{1F000}-\u{1FAFF}\u2600-\u27BF](?:\uFE0F|\uFE0E)?(?:\u200D[\u00A9\u00AE\u203C-\u3299\u{1F000}-\u{1FAFF}\u2600-\u27BF](?:\uFE0F|\uFE0E)?)*)/gu;
 
 function renderMessageContent(content: string) {
@@ -70,7 +72,6 @@ function renderMessageContent(content: string) {
   });
 }
 
-// Full message-composer emoji selection; reactions remain unchanged.
 const MESSAGE_EMOJIS = [
   '😀', '😃', '😄', '😁', '😊', '😍', '🥰', '😘',
   '😂', '🤣', '🥹', '😅', '😉', '😎', '🤩', '🥳',
@@ -105,6 +106,16 @@ export default function ChatScreen({
   const reacting = useRef(new Set<string>());
   const pendingReactions = useRef(new Map<string, { actor: string; emoji: string | undefined }>());
 
+  // Actions state (Edit, Pin, Delete)
+  const [selectedMsgForActions, setSelectedMsgForActions] = useState<Message | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [savingMessageAction, setSavingMessageAction] = useState(false);
+
+  // Pinned Messages Banner Jump State
+  const pinnedMessages = messages.filter((m) => m.is_pinned);
+  const [currentPinnedIdx, setCurrentPinnedIdx] = useState(0);
+
   const flatListRef = useRef<FlatList>(null);
   const composerRef = useRef<TextInput>(null);
   const myId = session?.user?.id ?? '';
@@ -117,7 +128,6 @@ export default function ChatScreen({
   const canViewCustomer = !!details && details.customerId === receiverId && receiverId !== myId;
   useEffect(() => { setShowCustomerProfile(false); }, [thread, receiverId]);
 
-  // Read-only context query, separate from Stage 2 message/read-state logic.
   useFocusEffect(useCallback(() => {
     if (!myId || !bookingId) return;
     let active = true;
@@ -222,8 +232,6 @@ export default function ChatScreen({
         if (!isCurrent() || version !== requestVersion) return;
         if (error) throw error;
         const loaded = (data ?? []) as Message[];
-        // Merge persisted rows with live arrivals so a slower SELECT cannot
-        // discard a newer message or revert a database-confirmed read receipt.
         mergeMessages(loaded);
         setLoading(false);
         await markIncomingRead(loaded.filter(message => message.receiver_id === myId && message.sender_id !== myId && message.is_read !== true).map(message => message.id));
@@ -304,7 +312,7 @@ export default function ChatScreen({
     setSending(false);
   };
 
-  // ── Pick & Upload Image using Base64 Strategy ──────────────────────────
+  // ── Pick & Upload Image ───────────────────────────────────────────────
   const handlePickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -316,7 +324,7 @@ export default function ChatScreen({
       mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
-      base64: true, // Request base64 directly to avoid RN blob/fetch bugs
+      base64: true,
     });
 
     if (result.canceled || !result.assets[0]) return;
@@ -334,7 +342,6 @@ export default function ChatScreen({
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const path = `${myId}/${bookingId}-${Date.now()}.${ext}`;
 
-      // Decode base64 → Uint8Array
       const byteChars = atob(base64);
       const byteArray = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) {
@@ -383,7 +390,6 @@ export default function ChatScreen({
     } catch (error) {
       if (currentThread.current !== activeThread) return;
       pendingReactions.current.delete(key);
-      // Roll back only this actor, retaining any other live reactions received.
       setMessages(previous => previous.map(message => {
         if (message.id !== msgId) return message;
         const restored = { ...(message.reactions ?? {}) };
@@ -393,6 +399,158 @@ export default function ChatScreen({
       Alert.alert('Reaction not saved', reactionError(error));
       refreshMessages.current();
     } finally { reacting.current.delete(key); pendingReactions.current.delete(key); }
+  };
+
+  // ── Edit Message ──────────────────────────────────────────────────────
+  const startEditMessage = (message: Message) => {
+    if (message.sender_id !== myId) {
+      Alert.alert('Not allowed', 'You can only edit your own messages.');
+      return;
+    }
+
+    if (message.image_url && message.content === '📷 Photo') {
+      Alert.alert('Cannot edit', 'Photo-only messages cannot be edited.');
+      return;
+    }
+
+    setEditingMessageId(message.id);
+    setEditText(message.content);
+    setSelectedMsgForActions(null);
+    setSelectedMsgForReaction(null);
+  };
+
+  const saveEditedMessage = async () => {
+    const content = editText.trim();
+
+    if (!content) {
+      Alert.alert('Empty message', 'Please enter a message.');
+      return;
+    }
+
+    if (!editingMessageId || !myId || savingMessageAction) return;
+
+    setSavingMessageAction(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .update({
+          content,
+          is_edited: true,
+          edited_at: new Date().toISOString(),
+        })
+        .eq('id', editingMessageId)
+        .eq('sender_id', myId)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      setMessages(previous =>
+        previous.map(message =>
+          message.id === editingMessageId
+            ? { ...message, ...data }
+            : message
+        )
+      );
+
+      setEditingMessageId(null);
+      setEditText('');
+      Keyboard.dismiss();
+    } catch (error: any) {
+      Alert.alert('Edit failed', error.message || 'Could not edit this message.');
+    } finally {
+      setSavingMessageAction(false);
+    }
+  };
+
+  const cancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditText('');
+    Keyboard.dismiss();
+  };
+
+  // ── Pin / Unpin Message ──────────────────────────────────────────────
+  const togglePinMessage = async (message: Message) => {
+    if (!myId || savingMessageAction) return;
+
+    const nextPinnedState = !message.is_pinned;
+
+    setSelectedMsgForActions(null);
+    setSavingMessageAction(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .update({
+          is_pinned: nextPinnedState,
+          pinned_at: nextPinnedState ? new Date().toISOString() : null,
+        })
+        .eq('id', message.id)
+        .eq('booking_id', bookingId)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      setMessages(previous =>
+        previous.map(item =>
+          item.id === message.id ? { ...item, ...data } : item
+        )
+      );
+    } catch (error: any) {
+      Alert.alert('Pin failed', error.message || 'Could not update the pin.');
+    } finally {
+      setSavingMessageAction(false);
+    }
+  };
+
+  // ── Delete Message ───────────────────────────────────────────────────
+  const deleteMessage = (message: Message) => {
+    if (message.sender_id !== myId) {
+      Alert.alert('Not allowed', 'You can only delete your own messages.');
+      return;
+    }
+
+    setSelectedMsgForActions(null);
+
+    Alert.alert(
+      'Delete message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (savingMessageAction) return;
+
+            setSavingMessageAction(true);
+
+            try {
+              const { error } = await supabase
+                .from('messages')
+                .delete()
+                .eq('id', message.id)
+                .eq('sender_id', myId);
+
+              if (error) throw error;
+
+              setMessages(previous =>
+                previous.filter(item => item.id !== message.id)
+              );
+            } catch (error: any) {
+              Alert.alert(
+                'Delete failed',
+                error.message || 'Could not delete this message.'
+              );
+            } finally {
+              setSavingMessageAction(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatTime = (d: string) =>
@@ -422,6 +580,33 @@ export default function ChatScreen({
     groupedItems.push({ type: 'message', message: msg });
   });
 
+  // ── Scroll to Pinned Message Function ────────────────────────────────
+  const scrollToPinnedMessage = (msgId: string) => {
+    const index = groupedItems.findIndex(
+      (item) => item.type === 'message' && item.message.id === msgId
+    );
+
+    if (index !== -1) {
+      flatListRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+    }
+  };
+
+  const handlePinnedBannerPress = () => {
+    if (pinnedMessages.length === 0) return;
+
+    const nextIdx = (currentPinnedIdx + 1) % pinnedMessages.length;
+    setCurrentPinnedIdx(nextIdx);
+
+    const targetMsg = pinnedMessages[currentPinnedIdx];
+    if (targetMsg) {
+      scrollToPinnedMessage(targetMsg.id);
+    }
+  };
+
   const renderItem = ({ item }: { item: GroupedItem }) => {
     if (item.type === 'date') {
       return (
@@ -450,37 +635,61 @@ export default function ChatScreen({
         )}
 
         <View style={[s.bubbleContainer, isMine && s.bubbleContainerMine]}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onLongPress={() => setSelectedMsgForReaction(msg)}
-        >
-          <View style={[s.bubble, isMine ? s.bubbleMine : s.bubbleTheirs]}>
-            {msg.image_url && (
-              <TouchableOpacity onPress={() => setPreviewImage(msg.image_url ?? null)}>
-                <Image source={{ uri: msg.image_url }} style={s.bubbleImage} resizeMode="cover" />
-              </TouchableOpacity>
-            )}
-            {!!msg.content && msg.content !== '📷 Photo' && (
-              <Text style={[s.bubbleText, isMine && s.bubbleTextMine]}>{renderMessageContent(msg.content)}</Text>
-            )}
+          {/* Horizontal container placing ... button beside the bubble */}
+          <View style={[s.bubbleRow, isMine && s.bubbleRowMine]}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onLongPress={() => setSelectedMsgForReaction(msg)}
+            >
+              <View style={[s.bubble, isMine ? s.bubbleMine : s.bubbleTheirs]}>
+                {msg.is_pinned && (
+                  <View style={s.pinnedIndicator}>
+                    <Pin size={11} color={isMine ? Colors.white : Colors.orangeDark} />
+                    <Text style={[s.pinnedIndicatorText, isMine && { color: Colors.white }]}>Pinned</Text>
+                  </View>
+                )}
+                {msg.image_url && (
+                  <TouchableOpacity onPress={() => setPreviewImage(msg.image_url ?? null)}>
+                    <Image source={{ uri: msg.image_url }} style={s.bubbleImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                )}
+                {!!msg.content && msg.content !== '📷 Photo' && (
+                  <Text style={[s.bubbleText, isMine && s.bubbleTextMine]}>{renderMessageContent(msg.content)}</Text>
+                )}
+                {msg.is_edited && (
+                  <Text style={[s.editedLabel, isMine && { color: '#FFE0C2' }]}>Edited</Text>
+                )}
+              </View>
+
+              {/* Message Reactions Badge */}
+              {reactionsList.length > 0 && (
+                <View style={[s.reactionsBadge, isMine ? s.reactionsBadgeMine : s.reactionsBadgeTheirs]}>
+                  {Array.from(new Set(reactionsList)).map((emoji, idx) => (
+                    <Text key={idx} style={{ fontSize: 12 }}>{emoji}</Text>
+                  ))}
+                  {reactionsList.length > 1 && (
+                    <Text style={s.reactionCountText}>{reactionsList.length}</Text>
+                  )}
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Options button beside the message bubble */}
+            <TouchableOpacity
+              style={s.messageOptionsButton}
+              accessibilityRole="button"
+              accessibilityLabel="Message options"
+              onPress={() => setSelectedMsgForActions(msg)}
+            >
+              <MoreVertical size={16} color={Colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
-          {/* Message Reactions Badge */}
-          {reactionsList.length > 0 && (
-            <View style={[s.reactionsBadge, isMine ? s.reactionsBadgeMine : s.reactionsBadgeTheirs]}>
-              {Array.from(new Set(reactionsList)).map((emoji, idx) => (
-                <Text key={idx} style={{ fontSize: 12 }}>{emoji}</Text>
-              ))}
-              {reactionsList.length > 1 && (
-                <Text style={s.reactionCountText}>{reactionsList.length}</Text>
-              )}
-            </View>
-          )}
-        </TouchableOpacity>
-        <Text style={[s.messageMeta, isMine && s.messageMetaMine, reactionsList.length > 0 && { marginTop: 16 }]}>
-          {formatTime(msg.created_at)}
-          {isMine && msg.id === latestOutgoingId && !loading ? ` · ${msg.is_read === true ? 'Seen' : 'Sent'}` : ''}
-        </Text>
+          {/* Timestamp & Read Receipts below the bubble */}
+          <Text style={[s.messageMeta, isMine && s.messageMetaMine, reactionsList.length > 0 && { marginTop: 16 }]}>
+            {formatTime(msg.created_at)}
+            {isMine && msg.id === latestOutgoingId && !loading ? ` · ${msg.is_read === true ? 'Seen' : 'Sent'}` : ''}
+          </Text>
         </View>
       </View>
     );
@@ -515,7 +724,10 @@ export default function ChatScreen({
           </TouchableOpacity>
         </View>
       </View>
+
       <ConversationCustomerProfile visible={showCustomerProfile && canViewCustomer} bookingId={bookingId} customerId={receiverId} onClose={() => setShowCustomerProfile(false)} />
+
+      {/* Booking Details Accordion */}
       <View style={s.bookingContext}>
         <TouchableOpacity style={s.bookingContextToggle} accessibilityRole="button" accessibilityLabel="Booking details" accessibilityState={{ expanded: showBookingDetails }}
           onPress={() => {
@@ -540,6 +752,35 @@ export default function ChatScreen({
         )}
       </View>
 
+      {/* Sticky Pinned Messages Banner */}
+      {pinnedMessages.length > 0 && (
+        <TouchableOpacity
+          style={s.pinnedBannerContainer}
+          onPress={handlePinnedBannerPress}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Jump to pinned message"
+        >
+          <View style={s.pinnedBannerIcon}>
+            <Pin size={14} color={Colors.orangeDark} />
+          </View>
+
+          <View style={s.pinnedBannerContent}>
+            <Text style={s.pinnedBannerTitle}>
+              Pinned Message{' '}
+              {pinnedMessages.length > 1
+                ? `(${currentPinnedIdx + 1}/${pinnedMessages.length})`
+                : ''}
+            </Text>
+            <Text style={s.pinnedBannerText} numberOfLines={1}>
+              {pinnedMessages[currentPinnedIdx]?.content || '📷 Photo'}
+            </Text>
+          </View>
+
+          <Text style={s.pinnedBannerJumpBtn}>Jump</Text>
+        </TouchableOpacity>
+      )}
+
       {receiptError && (
         <View style={s.receiptNotice}>
           <Text accessibilityRole="alert" style={s.receiptNoticeText}>{receiptError}</Text>
@@ -549,7 +790,7 @@ export default function ChatScreen({
         </View>
       )}
 
-      {/* Messages */}
+      {/* Messages List */}
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color={Colors.orange} />
@@ -572,6 +813,12 @@ export default function ChatScreen({
           renderItem={renderItem}
           contentContainerStyle={s.messagesList}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onScrollToIndexFailed={(info) => {
+            flatListRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }}
         />
       )}
 
@@ -583,7 +830,7 @@ export default function ChatScreen({
         </View>
       )}
 
-      {/* Draft suggestions only: sending still requires the existing Send button. */}
+      {/* Draft suggestions only */}
       {profile?.id === myId && profile.role === 'customer' && (
         <View style={s.quickQuestions}>
           <TouchableOpacity
@@ -619,47 +866,71 @@ export default function ChatScreen({
         </View>
       )}
 
-       {/* Message emoji picker (separate from message reactions) */}
-       {showEmojiPicker && (
-         <View style={s.emojiPickerPanel}>
-           <View style={s.emojiPickerHeader}>
-             <View style={s.emojiPickerHeading}>
-               <Smile size={17} color={Colors.orangeDark} />
-               <Text style={s.emojiPickerTitle}>Choose an emoji</Text>
-             </View>
-             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close emoji picker" onPress={() => setShowEmojiPicker(false)} style={s.emojiCloseBtn}>
-               <X size={18} color={Colors.textSecondary} />
-             </TouchableOpacity>
-           </View>
-           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={s.emojiCategories}>
-             {([
-               ['all', 'All'], ['faces', 'Smileys'], ['gestures', 'Gestures'],
-               ['hearts', 'Hearts'], ['celebrate', 'Celebration'],
-             ] as const).map(([key, label]) => (
-               <TouchableOpacity key={key} onPress={() => setEmojiCategory(key)} accessibilityRole="button" accessibilityState={{ selected: emojiCategory === key }} style={[s.emojiCategory, emojiCategory === key && s.emojiCategoryActive]}>
-                 <Text style={[s.emojiCategoryText, emojiCategory === key && s.emojiCategoryTextActive]}>{label}</Text>
-               </TouchableOpacity>
-             ))}
-           </ScrollView>
-           <ScrollView style={s.emojiPickerScroll} contentContainerStyle={s.emojiPickerGrid} keyboardShouldPersistTaps="always" nestedScrollEnabled>
-             {(emojiCategory === 'all' ? MESSAGE_EMOJIS
-               : emojiCategory === 'faces' ? MESSAGE_EMOJIS.slice(0, 24)
-               : emojiCategory === 'gestures' ? MESSAGE_EMOJIS.slice(24, 32)
-               : emojiCategory === 'hearts' ? MESSAGE_EMOJIS.slice(32, 40)
-               : MESSAGE_EMOJIS.slice(40)).map(emoji => (
-               <TouchableOpacity
-                 key={emoji}
-                 accessibilityRole="button"
-                 accessibilityLabel={`Insert ${emoji} emoji`}
-                 onPress={() => setText(previous => previous + emoji)}
-                 style={s.emojiOptionBtn}
-               >
-                 <Text style={s.emojiOptionText}>{emoji}</Text>
-               </TouchableOpacity>
-             ))}
-           </ScrollView>
-         </View>
-       )}
+      {/* Message Emoji Picker */}
+      {showEmojiPicker && (
+        <View style={s.emojiPickerPanel}>
+          <View style={s.emojiPickerHeader}>
+            <View style={s.emojiPickerHeading}>
+              <Smile size={17} color={Colors.orangeDark} />
+              <Text style={s.emojiPickerTitle}>Choose an emoji</Text>
+            </View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close emoji picker" onPress={() => setShowEmojiPicker(false)} style={s.emojiCloseBtn}>
+              <X size={18} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={s.emojiCategories}>
+            {([
+              ['all', 'All'], ['faces', 'Smileys'], ['gestures', 'Gestures'],
+              ['hearts', 'Hearts'], ['celebrate', 'Celebration'],
+            ] as const).map(([key, label]) => (
+              <TouchableOpacity key={key} onPress={() => setEmojiCategory(key)} accessibilityRole="button" accessibilityState={{ selected: emojiCategory === key }} style={[s.emojiCategory, emojiCategory === key && s.emojiCategoryActive]}>
+                <Text style={[s.emojiCategoryText, emojiCategory === key && s.emojiCategoryTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <ScrollView style={s.emojiPickerScroll} contentContainerStyle={s.emojiPickerGrid} keyboardShouldPersistTaps="always" nestedScrollEnabled>
+            {(emojiCategory === 'all' ? MESSAGE_EMOJIS
+              : emojiCategory === 'faces' ? MESSAGE_EMOJIS.slice(0, 24)
+              : emojiCategory === 'gestures' ? MESSAGE_EMOJIS.slice(24, 32)
+              : emojiCategory === 'hearts' ? MESSAGE_EMOJIS.slice(32, 40)
+              : MESSAGE_EMOJIS.slice(40)).map(emoji => (
+              <TouchableOpacity
+                key={emoji}
+                accessibilityRole="button"
+                accessibilityLabel={`Insert ${emoji} emoji`}
+                onPress={() => {
+                  if (editingMessageId) {
+                    setEditText(previous => previous + emoji);
+                  } else {
+                    setText(previous => previous + emoji);
+                  }
+                }}
+                style={s.emojiOptionBtn}
+              >
+                <Text style={s.emojiOptionText}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Edit Banner */}
+      {editingMessageId && (
+        <View style={s.editingBanner}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.editingTitle}>Editing message</Text>
+            <Text style={s.editingSubtitle}>Update your message below.</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={cancelEditMessage}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel editing"
+          >
+            <X size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Input Bar */}
       <View style={s.inputBar}>
@@ -673,32 +944,109 @@ export default function ChatScreen({
 
         <TextInput
           ref={composerRef}
-          accessibilityLabel="Message"
+          accessibilityLabel={editingMessageId ? 'Edit message' : 'Message'}
           style={s.input}
-          placeholder="Type a message..."
+          placeholder={editingMessageId ? 'Edit your message...' : 'Type a message...'}
           placeholderTextColor={Colors.textMuted}
-          value={text}
-          onChangeText={setText}
+          value={editingMessageId ? editText : text}
+          onChangeText={editingMessageId ? setEditText : setText}
           multiline
           maxLength={1000}
           textAlignVertical="top"
         />
 
         <TouchableOpacity
-          style={[s.sendBtn, (!text.trim() || sending) && s.sendBtnDisabled]}
-          onPress={() => handleSend()}
-          disabled={!text.trim() || sending}
+          style={[
+            s.sendBtn,
+            editingMessageId
+              ? (!editText.trim() || savingMessageAction) && s.sendBtnDisabled
+              : (!text.trim() || sending) && s.sendBtnDisabled,
+          ]}
+          onPress={editingMessageId ? saveEditedMessage : () => handleSend()}
+          disabled={
+            editingMessageId
+              ? !editText.trim() || savingMessageAction
+              : !text.trim() || sending
+          }
           accessibilityRole="button"
-          accessibilityLabel="Send message"
+          accessibilityLabel={editingMessageId ? 'Save edited message' : 'Send message'}
           activeOpacity={0.85}
         >
-          {sending ? (
+          {savingMessageAction && editingMessageId ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : editingMessageId ? (
+            <Text style={{ color: Colors.white, fontWeight: '800', fontSize: 12 }}>
+              Save
+            </Text>
+          ) : sending ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
             <Send size={18} color={Colors.white} />
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Message Actions Modal */}
+      <Modal
+        visible={!!selectedMsgForActions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedMsgForActions(null)}
+      >
+        <TouchableOpacity
+          style={s.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedMsgForActions(null)}
+        >
+          <View style={s.messageActionsContainer}>
+            <Text style={s.messageActionsTitle}>Message options</Text>
+
+            {selectedMsgForActions?.sender_id === myId &&
+              !(selectedMsgForActions.image_url &&
+                selectedMsgForActions.content === '📷 Photo') && (
+                <TouchableOpacity
+                  style={s.messageActionItem}
+                  onPress={() => startEditMessage(selectedMsgForActions)}
+                >
+                  <Pencil size={18} color={Colors.textPrimary} />
+                  <Text style={s.messageActionText}>Edit message</Text>
+                </TouchableOpacity>
+              )}
+
+            {selectedMsgForActions && (
+              <TouchableOpacity
+                style={s.messageActionItem}
+                disabled={savingMessageAction}
+                onPress={() => togglePinMessage(selectedMsgForActions)}
+              >
+                <Pin size={18} color={Colors.textPrimary} />
+                <Text style={s.messageActionText}>
+                  {selectedMsgForActions.is_pinned ? 'Unpin message' : 'Pin message'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {selectedMsgForActions?.sender_id === myId && (
+              <TouchableOpacity
+                style={s.messageActionItem}
+                onPress={() => deleteMessage(selectedMsgForActions)}
+              >
+                <Trash2 size={18} color="#DC2626" />
+                <Text style={[s.messageActionText, { color: '#DC2626' }]}>
+                  Delete message
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={s.messageActionCancel}
+              onPress={() => setSelectedMsgForActions(null)}
+            >
+              <Text style={s.messageActionCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Reaction Modal Popup on Long Press */}
       <Modal
@@ -780,6 +1128,49 @@ const s = StyleSheet.create({
   detailLabel: { flex: 1, color: Colors.textSecondary, fontSize: 12, lineHeight: 18 },
   detailValue: { flex: 1.5, color: Colors.textPrimary, fontSize: 12, lineHeight: 18, fontWeight: '600', textAlign: 'right' },
   bookingContextText: { flex: 1, color: Colors.textPrimary, fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  pinnedBannerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  pinnedBannerIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: Colors.orangeLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pinnedBannerContent: {
+    flex: 1,
+  },
+  pinnedBannerTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.orangeDark,
+  },
+  pinnedBannerText: {
+    fontSize: 13,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  pinnedBannerJumpBtn: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.orange,
+  },
+
   quickQuestions: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
   quickQuestionsToggle: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 12 },
   quickQuestionsTitle: { flex: 1, color: Colors.orangeDark, fontSize: 12, fontWeight: '700' },
@@ -812,6 +1203,15 @@ const s = StyleSheet.create({
   bubbleContainer: { maxWidth: '75%', position: 'relative' },
   bubbleContainerMine: { alignItems: 'flex-end' },
 
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bubbleRowMine: {
+    flexDirection: 'row-reverse',
+  },
+
   bubble: {
     borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12,
     borderBottomLeftRadius: 6,
@@ -833,6 +1233,100 @@ const s = StyleSheet.create({
   messageMetaMine: { alignSelf: 'flex-end', textAlign: 'right' },
   receiptNotice: { paddingHorizontal: 16, paddingTop: 8, backgroundColor: Colors.orangeLight },
   receiptNoticeText: { fontSize: 12, lineHeight: 18, color: Colors.textSecondary },
+
+  pinnedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  pinnedIndicatorText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.orangeDark,
+  },
+
+  editedLabel: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 5,
+    fontStyle: 'italic',
+  },
+
+  messageOptionsButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  messageActionsContainer: {
+    width: '82%',
+    maxWidth: 340,
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    padding: 18,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+  },
+
+  messageActionsTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.textPrimary,
+    marginBottom: 12,
+  },
+
+  messageActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+
+  messageActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+
+  messageActionCancel: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+
+  messageActionCancelText: {
+    color: Colors.textSecondary,
+    fontWeight: '800',
+    fontSize: 14,
+  },
+
+  editingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.orangeLight,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#FED7AA',
+  },
+
+  editingTitle: {
+    color: Colors.orangeDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  editingSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+  },
 
   reactionsBadge: {
     position: 'absolute', bottom: -10,

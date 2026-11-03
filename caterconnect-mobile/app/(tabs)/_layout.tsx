@@ -1,24 +1,50 @@
-import { Tabs } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
-import { Home, CalendarDays, MessageSquare, User } from 'lucide-react-native';
+
+import { Tabs, Redirect } from 'expo-router';
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  Home,
+  CalendarDays,
+  MessageSquare,
+  User,
+} from 'lucide-react-native';
+
 import { PackageComparisonProvider } from '../../context/PackageComparisonContext';
-import { PackageComparisonBar, useComparisonBarVisible } from '../../components/PackageComparisonControls';
+import {
+  PackageComparisonBar,
+  useComparisonBarVisible,
+} from '../../components/PackageComparisonControls';
+import { useAuth } from '../../context/AuthContext';
 
 const ORANGE = '#F97316';
 const GRAY = '#9CA3AF';
 const ACTIVE_BG = '#FFF7ED';
 
 // Reusable Tab Item Component
-function TabItem({ label, icon: Icon, focused }: { label: string; icon: any; focused: boolean }) {
+function TabItem({
+  label,
+  icon: Icon,
+  focused,
+}: {
+  label: string;
+  icon: any;
+  focused: boolean;
+}) {
   return (
     <View style={styles.tabItem}>
       <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-        <Icon 
-          size={22} 
-          color={focused ? ORANGE : GRAY} 
-          strokeWidth={focused ? 2.5 : 2} 
+        <Icon
+          size={22}
+          color={focused ? ORANGE : GRAY}
+          strokeWidth={focused ? 2.5 : 2}
         />
       </View>
+
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
         {label}
       </Text>
@@ -27,72 +53,127 @@ function TabItem({ label, icon: Icon, focused }: { label: string; icon: any; foc
 }
 
 export default function TabLayout() {
-  return <PackageComparisonProvider><CustomerTabs /></PackageComparisonProvider>;
+  const { session, profile, loading } = useAuth();
+
+  // Wait for authentication and profile information.
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={ORANGE} />
+      </View>
+    );
+  }
+
+  // Not logged in: return to Login.
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
+  // Profile unavailable: return to Welcome.
+  if (!profile) {
+    return <Redirect href="/(auth)/welcome" />;
+  }
+
+  // Suspended customers cannot access customer dashboard screens.
+  if (profile.status?.trim().toLowerCase() === 'suspended') {
+    return <Redirect href="/(auth)/login" />;
+  }
+
+  // Only customer accounts can access this layout.
+  if (profile.role !== 'customer') {
+    return <Redirect href="/(auth)/welcome" />;
+  }
+
+  return (
+    <PackageComparisonProvider>
+      <CustomerTabs />
+    </PackageComparisonProvider>
+  );
 }
 
 function CustomerTabs() {
   const comparisonVisible = useComparisonBarVisible();
+
   return (
     <View style={{ flex: 1 }}>
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        sceneStyle: { paddingBottom: comparisonVisible ? 112 : 0 },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Home" icon={Home} focused={focused} />
-          ),
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarStyle: styles.tabBar,
+          sceneStyle: {
+            paddingBottom: comparisonVisible ? 112 : 0,
+          },
         }}
-      />
-      <Tabs.Screen
-        name="bookings"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Bookings" icon={CalendarDays} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Messages" icon={MessageSquare} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Profile" icon={User} focused={focused} />
-          ),
-        }}
-      />
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabItem label="Home" icon={Home} focused={focused} />
+            ),
+          }}
+        />
 
-      {/* Hidden screens */}
-      <Tabs.Screen name="package-comparison" options={{ href: null }} />
-      <Tabs.Screen name="my-reviews" options={{ href: null }} />
-      <Tabs.Screen name="saved-packages" options={{ href: null }} />
-      <Tabs.Screen name="faq"     options={{ href: null }} />
-      <Tabs.Screen name="notifications"    options={{ href: null }} />
-      <Tabs.Screen name="book/[catererId]" options={{ href: null }} />
-      <Tabs.Screen name="complaints"       options={{ href: null }} />
-      <Tabs.Screen name="edit-profile"     options={{ href: null }} />
-      <Tabs.Screen name="caterer/[catererId]" options={{ href: null }} />
-      
-    </Tabs>
-    <PackageComparisonBar />
+        <Tabs.Screen
+          name="bookings"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabItem
+                label="Bookings"
+                icon={CalendarDays}
+                focused={focused}
+              />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="messages"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabItem
+                label="Messages"
+                icon={MessageSquare}
+                focused={focused}
+              />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="profile"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabItem label="Profile" icon={User} focused={focused} />
+            ),
+          }}
+        />
+
+        {/* Hidden screens */}
+        <Tabs.Screen name="package-comparison" options={{ href: null }} />
+        <Tabs.Screen name="my-reviews" options={{ href: null }} />
+        <Tabs.Screen name="saved-packages" options={{ href: null }} />
+        <Tabs.Screen name="faq" options={{ href: null }} />
+        <Tabs.Screen name="notifications" options={{ href: null }} />
+        <Tabs.Screen name="book/[catererId]" options={{ href: null }} />
+        <Tabs.Screen name="complaints" options={{ href: null }} />
+        <Tabs.Screen name="edit-profile" options={{ href: null }} />
+        <Tabs.Screen name="caterer/[catererId]" options={{ href: null }} />
+      </Tabs>
+
+      <PackageComparisonBar />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
   tabBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,

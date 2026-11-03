@@ -1,20 +1,85 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { supabase } from '../../lib/supabase';
 import { assignStaffRole } from '../../lib/profileRoles';
 import { createStaffAccount } from '../../lib/staffProvisioning';
 import { useAuth } from '../../context/AuthContext';
-import { AlertTriangle, CreditCard, Package, Calendar, Loader2, Shield, Mail, UserPlus, X, User, Lock } from 'lucide-react';
+import {
+  AlertTriangle,
+  CreditCard,
+  Package,
+  Calendar,
+  Loader2,
+  Shield,
+  Mail,
+  UserPlus,
+  X,
+  User,
+  Lock,
+} from 'lucide-react';
 
-type StaffAccount = { id: string; role: 'staff' | 'admin'; full_name: string | null; email: string | null; created_at: string | null };
+type StaffAccount = {
+  id: string;
+  role: 'staff' | 'admin';
+  full_name: string | null;
+  email: string | null;
+  created_at: string | null;
+};
+
+const PLAN_DETAILS = [
+  {
+    plan: 'Free',
+    price: 0,
+    bookings: 5,
+    packages: 3,
+    color: '#6B7280',
+    bg: '#F3F4F6',
+    border: '#E5E7EB',
+    accent: 'linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)',
+  },
+  {
+    plan: 'Basic',
+    price: 299,
+    bookings: 20,
+    packages: null,
+    color: '#2563EB',
+    bg: '#DBEAFE',
+    border: '#BFDBFE',
+    accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)',
+  },
+  {
+    plan: 'Standard',
+    price: 499,
+    bookings: 50,
+    packages: null,
+    color: '#D97706',
+    bg: '#FEF3C7',
+    border: '#FDE68A',
+    accent: 'linear-gradient(135deg, #D97706 0%, #FBBF24 100%)',
+  },
+  {
+    plan: 'Premium',
+    price: 999,
+    bookings: null,
+    packages: null,
+    color: '#7C3AED',
+    bg: '#F5F3FF',
+    border: '#DDD6FE',
+    accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)',
+  },
+];
 
 export default function PlatformSettings() {
   const { profile } = useAuth();
+
   const [staffList, setStaffList] = useState<StaffAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [savingRole, setSavingRole] = useState<string | null>(null);
+
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
@@ -24,142 +89,961 @@ export default function PlatformSettings() {
 
   useEffect(() => {
     let active = true;
-    supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false })
+
+    supabase
+      .from('profiles')
+      .select('*')
+      .in('role', ['staff', 'admin'])
+      .order('created_at', { ascending: false })
       .then(({ data, error: loadError }) => {
         if (!active) return;
-        if (loadError) setError('Unable to load staff accounts. Please refresh and try again.');
-        else setStaffList(data ?? []);
+
+        if (loadError) {
+          setError('Unable to load staff accounts. Please refresh and try again.');
+        } else {
+          setStaffList(data ?? []);
+        }
+
         setLoading(false);
       });
-    return () => { active = false; };
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
-    if (savingRole || profile?.role !== 'admin' || userId === profile.id) return;
+    if (savingRole || profile?.role !== 'admin' || userId === profile.id) {
+      return;
+    }
+
     setSavingRole(userId);
     setMessage('');
     setError('');
+
     try {
       const result = await assignStaffRole(userId, newRole);
-      setStaffList(previous => previous.map(account => account.id === result.id ? { ...account, role: result.role as 'staff' | 'admin' } : account));
+
+      setStaffList((previous) =>
+        previous.map((account) =>
+          account.id === result.id
+            ? { ...account, role: result.role as 'staff' | 'admin' }
+            : account
+        )
+      );
+
       setMessage('Account role updated successfully.');
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message
-        : typeof cause === 'object' && cause !== null && 'message' in cause
-          ? String(cause.message) : 'Unable to update the role. Please try again.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : typeof cause === 'object' && cause !== null && 'message' in cause
+            ? String(cause.message)
+            : 'Unable to update the role. Please try again.'
+      );
     } finally {
       setSavingRole(null);
     }
   };
 
-  const handleCreateStaff = async (event: React.FormEvent) => {
+  const handleCreateStaff = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
     if (creatingStaff || profile?.role !== 'admin') return;
-    if (staffPassword !== confirmStaffPassword) { setStaffError('Passwords must match.'); return; }
-    if (staffPassword.length < 12 || new TextEncoder().encode(staffPassword).length > 72) { setStaffError('Use at least 12 characters and no more than 72 UTF-8 bytes.'); return; }
+
+    if (staffPassword !== confirmStaffPassword) {
+      setStaffError('Passwords must match.');
+      return;
+    }
+
+    if (
+      staffPassword.length < 12 ||
+      new TextEncoder().encode(staffPassword).length > 72
+    ) {
+      setStaffError(
+        'Use at least 12 characters and no more than 72 UTF-8 bytes.'
+      );
+      return;
+    }
+
     setCreatingStaff(true);
     setStaffError('');
     setMessage('');
+
     try {
       await createStaffAccount(fullName, email, staffPassword);
-      setFullName(''); setEmail(''); setShowAddStaff(false);
-      setMessage('Staff account created. They can sign in with their email and password.');
-      const { data, error: refreshError } = await supabase.from('profiles').select('*').in('role', ['staff', 'admin']).order('created_at', { ascending: false });
-      if (refreshError) setError('Staff account created, but the table could not refresh. Refresh this page; do not create it again.');
-      else { setStaffList(data ?? []); setError(''); }
+
+      setFullName('');
+      setEmail('');
+      setShowAddStaff(false);
+
+      setMessage(
+        'Staff account created. They can sign in with their email and password.'
+      );
+
+      const { data, error: refreshError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('role', ['staff', 'admin'])
+        .order('created_at', { ascending: false });
+
+      if (refreshError) {
+        setError(
+          'Staff account created, but the table could not refresh. Refresh this page; do not create it again.'
+        );
+      } else {
+        setStaffList(data ?? []);
+        setError('');
+      }
     } catch (cause: unknown) {
-      setStaffError(cause instanceof Error ? cause.message : 'Unable to create staff account. Check the account list before retrying.');
-    } finally { setStaffPassword(''); setConfirmStaffPassword(''); setCreatingStaff(false); }
+      setStaffError(
+        cause instanceof Error
+          ? cause.message
+          : 'Unable to create staff account. Check the account list before retrying.'
+      );
+    } finally {
+      setStaffPassword('');
+      setConfirmStaffPassword('');
+      setCreatingStaff(false);
+    }
   };
 
   const closeStaffForm = () => {
     if (creatingStaff) return;
-    setStaffPassword(''); setConfirmStaffPassword(''); setStaffError(''); setShowAddStaff(false);
+
+    setStaffPassword('');
+    setConfirmStaffPassword('');
+    setStaffError('');
+    setShowAddStaff(false);
   };
 
-  const planDetails = [
-    { plan: 'Free',    price: 0,   bookings: 5,  packages: 3,    color: '#6B7280', bg: '#F3F4F6', border: '#E5E7EB', accent: 'linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)' },
-    { plan: 'Basic',   price: 299, bookings: 20, packages: null, color: '#2563EB', bg: '#DBEAFE', border: '#BFDBFE', accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)' },
-    { plan: 'Standard',price: 499, bookings: 50, packages: null, color: '#D97706', bg: '#FEF3C7', border: '#FDE68A', accent: 'linear-gradient(135deg, #D97706 0%, #FBBF24 100%)' },
-    { plan: 'Premium', price: 999, bookings: null, packages: null, color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)' },
-  ];
-
   return (
-    <div style={{ paddingBottom: 40 }}>
-      {/* Header Section */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Platform Settings</h1>
-          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>View existing staff and administrator accounts and subscription tiers.</p>
-        </div>
+    <div className="platform-settings-page">
+      <style>{`
+        .platform-settings-page {
+          width: 100%;
+          min-width: 0;
+          padding-bottom: 40px;
+          color: #111827;
+        }
+
+        .platform-settings-page *,
+        .platform-settings-page *::before,
+        .platform-settings-page *::after {
+          box-sizing: border-box;
+        }
+
+        .platform-settings-header {
+          margin-bottom: 32px;
+        }
+
+        .platform-settings-header h1 {
+          margin: 0 0 6px;
+          font-size: 28px;
+          line-height: 1.25;
+          font-weight: 900;
+          color: #111;
+          letter-spacing: -0.5px;
+        }
+
+        .platform-settings-header p {
+          margin: 0;
+          color: #6B7280;
+          font-size: 15px;
+          line-height: 1.5;
+        }
+
+        .platform-settings-message {
+          padding: 12px 16px;
+          border-radius: 12px;
+          margin-bottom: 16px;
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        .platform-settings-error {
+          color: #B91C1C;
+          background: #FEF2F2;
+          border: 1px solid #FECACA;
+        }
+
+        .platform-settings-success {
+          color: #15803D;
+          background: #F0FDF4;
+          border: 1px solid #BBF7D0;
+        }
+
+        .platform-section-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+          margin-bottom: 20px;
+        }
+
+        .platform-section-title {
+          font-size: 20px;
+          font-weight: 900;
+          color: #111;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0;
+          letter-spacing: -0.5px;
+        }
+
+        .platform-section-title svg {
+          flex-shrink: 0;
+          color: #F97316;
+        }
+
+        .platform-add-staff-button {
+          min-height: 42px;
+          background: #F97316;
+          color: #FFF;
+          border: none;
+          border-radius: 12px;
+          padding: 10px 18px;
+          font-size: 13px;
+          font-weight: 800;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          cursor: pointer;
+          transition: background 0.2s;
+          white-space: nowrap;
+        }
+
+        .platform-add-staff-button:hover:not(:disabled) {
+          background: #EA580C;
+        }
+
+        .platform-add-staff-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .platform-staff-card {
+          background: #FFFFFF;
+          border-radius: 20px;
+          border: 1px solid #E5E7EB;
+          box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+          overflow: hidden;
+          margin-bottom: 40px;
+          min-width: 0;
+        }
+
+        .platform-loading-state,
+        .platform-empty-state {
+          padding: 60px 24px;
+          text-align: center;
+          color: #9CA3AF;
+        }
+
+        .platform-loading-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .platform-table-wrapper {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .platform-staff-table {
+          width: 100%;
+          min-width: 850px;
+          border-collapse: collapse;
+          text-align: left;
+        }
+
+        .platform-staff-table thead tr {
+          background: #F9FAFB;
+          border-bottom: 1px solid #E5E7EB;
+        }
+
+        .platform-staff-table th {
+          padding: 16px 20px;
+          font-size: 12px;
+          font-weight: 800;
+          color: #6B7280;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+        }
+
+        .platform-staff-table td {
+          padding: 18px 20px;
+          vertical-align: middle;
+          border-bottom: 1px solid #F3F4F6;
+        }
+
+        .platform-staff-table tbody tr:last-child td {
+          border-bottom: none;
+        }
+
+        .platform-staff-table tbody tr {
+          transition: background 0.2s;
+        }
+
+        .platform-staff-table tbody tr:hover {
+          background: #F9FAFB;
+        }
+
+        .platform-user-profile {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 180px;
+        }
+
+        .platform-user-avatar {
+          width: 40px;
+          height: 40px;
+          flex-shrink: 0;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 800;
+          font-size: 14px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .platform-user-name {
+          font-size: 14px;
+          font-weight: 800;
+          color: #111;
+          overflow-wrap: anywhere;
+        }
+
+        .platform-user-email {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #4B5563;
+          font-size: 14px;
+          white-space: nowrap;
+        }
+
+        .platform-user-email svg {
+          flex-shrink: 0;
+        }
+
+        .platform-role-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 700;
+          border: 1px solid;
+          text-transform: capitalize;
+          white-space: nowrap;
+        }
+
+        .platform-joined-date {
+          font-size: 13px;
+          color: #6B7280;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+
+        .platform-role-select {
+          max-width: 100%;
+          border: 1px solid #E5E7EB;
+          border-radius: 10px;
+          padding: 9px 12px;
+          font-size: 13px;
+          background: #F9FAFB;
+          color: #111;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .platform-role-select:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .platform-subscription-section {
+          margin-bottom: 24px;
+        }
+
+        .platform-subscription-heading {
+          margin-bottom: 16px;
+        }
+
+        .platform-plan-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+
+        .platform-plan-card {
+          position: relative;
+          min-width: 0;
+          background: #FFFFFF;
+          border-radius: 20px;
+          border: 1px solid #E5E7EB;
+          box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+          padding: 24px;
+          overflow: hidden;
+        }
+
+        .platform-plan-accent {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 4px;
+        }
+
+        .platform-plan-name {
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin: 4px 0 8px;
+        }
+
+        .platform-plan-price {
+          font-size: 32px;
+          line-height: 1.2;
+          font-weight: 900;
+          color: #111;
+          margin-bottom: 20px;
+          letter-spacing: -1px;
+          overflow-wrap: anywhere;
+        }
+
+        .platform-plan-period {
+          font-size: 13px;
+          font-weight: 600;
+          color: #9CA3AF;
+          letter-spacing: 0;
+        }
+
+        .platform-plan-features {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          border-top: 1px solid #F3F4F6;
+          padding-top: 16px;
+        }
+
+        .platform-plan-feature {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 13px;
+          color: #4B5563;
+        }
+
+        .platform-plan-feature svg {
+          flex-shrink: 0;
+          color: #9CA3AF;
+        }
+
+        .platform-plan-feature strong {
+          color: #111;
+          font-weight: 800;
+        }
+
+        .platform-architecture-notice {
+          background: #FFFBEB;
+          border: 1px solid #FDE68A;
+          border-radius: 16px;
+          padding: 18px 24px;
+          font-size: 14px;
+          color: #92400E;
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.01);
+        }
+
+        .platform-architecture-notice svg {
+          flex-shrink: 0;
+          margin-top: 2px;
+          color: #D97706;
+        }
+
+        .platform-architecture-notice span {
+          line-height: 1.6;
+          font-weight: 500;
+        }
+
+        /* Modal */
+        .platform-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(17,24,39,0.6);
+          backdrop-filter: blur(4px);
+          z-index: 1000;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          overflow-y: auto;
+        }
+
+        .platform-modal {
+          background: #FFF;
+          max-width: 480px;
+          width: 100%;
+          max-height: calc(100dvh - 40px);
+          overflow-y: auto;
+          border-radius: 24px;
+          padding: 28px;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+
+        .platform-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 20px;
+          border-bottom: 1px solid #E5E7EB;
+          padding-bottom: 16px;
+        }
+
+        .platform-modal-heading {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .platform-modal-icon {
+          width: 40px;
+          height: 40px;
+          flex-shrink: 0;
+          border-radius: 12px;
+          background: #FFF7ED;
+          color: #F97316;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .platform-modal-heading h2 {
+          font-size: 18px;
+          font-weight: 900;
+          color: #111;
+          margin: 0;
+        }
+
+        .platform-modal-heading p {
+          font-size: 12px;
+          color: #6B7280;
+          margin: 2px 0 0;
+          line-height: 1.4;
+        }
+
+        .platform-modal-close {
+          border: 1px solid #E5E7EB;
+          background: #FFF;
+          border-radius: 50%;
+          width: 38px;
+          height: 38px;
+          flex-shrink: 0;
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+          color: #4B5563;
+        }
+
+        .platform-modal-close:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .platform-modal-description {
+          font-size: 13.5px;
+          color: #4B5563;
+          line-height: 1.6;
+          margin: 0 0 20px;
+        }
+
+        .platform-staff-form {
+          display: grid;
+          gap: 16px;
+        }
+
+        .platform-form-field {
+          min-width: 0;
+        }
+
+        .platform-form-field label {
+          font-size: 13px;
+          font-weight: 800;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 7px;
+          color: #374151;
+        }
+
+        .platform-form-field label svg {
+          color: #6B7280;
+          flex-shrink: 0;
+        }
+
+        .platform-form-field input {
+          width: 100%;
+          min-width: 0;
+          padding: 12px 14px;
+          border: 1px solid #D1D5DB;
+          border-radius: 12px;
+          font-size: 14px;
+          outline: none;
+          background: #FFF;
+          color: #111;
+          font-family: inherit;
+        }
+
+        .platform-form-field input:focus {
+          border-color: #F97316;
+          box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
+        }
+
+        .platform-form-field input:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .platform-staff-form-error {
+          background: #FEF2F2;
+          border: 1px solid #FECACA;
+          color: #991B1B;
+          padding: 10px 14px;
+          border-radius: 10px;
+          font-size: 13px;
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          overflow-wrap: anywhere;
+        }
+
+        .platform-staff-form-error svg {
+          flex-shrink: 0;
+        }
+
+        .platform-modal-actions {
+          display: flex;
+          gap: 12px;
+          margin-top: 8px;
+          border-top: 1px solid #E5E7EB;
+          padding-top: 16px;
+        }
+
+        .platform-modal-action-button {
+          flex: 1;
+          min-height: 44px;
+          padding: 12px 16px;
+          border-radius: 12px;
+          font-size: 14px;
+          font-weight: 800;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .platform-modal-cancel {
+          background: #F3F4F6;
+          color: #374151;
+          border: 1px solid #E5E7EB;
+        }
+
+        .platform-modal-submit {
+          background: #F97316;
+          color: #FFF;
+          border: none;
+        }
+
+        .platform-modal-action-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        @media (max-width: 1200px) {
+          .platform-plan-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 768px) {
+          .platform-settings-page {
+            padding-bottom: 28px;
+          }
+
+          .platform-settings-header {
+            margin-bottom: 24px;
+          }
+
+          .platform-settings-header h1 {
+            font-size: 24px;
+          }
+
+          .platform-settings-header p {
+            font-size: 14px;
+          }
+
+          .platform-section-heading {
+            align-items: flex-start;
+          }
+
+          .platform-section-title {
+            font-size: 18px;
+          }
+
+          .platform-add-staff-button {
+            width: 100%;
+          }
+
+          .platform-staff-card {
+            border-radius: 16px;
+            margin-bottom: 32px;
+          }
+
+          .platform-staff-table th,
+          .platform-staff-table td {
+            padding: 14px 16px;
+          }
+
+          .platform-plan-grid {
+            gap: 14px;
+          }
+
+          .platform-plan-card {
+            padding: 20px;
+            border-radius: 16px;
+          }
+
+          .platform-plan-price {
+            font-size: 28px;
+          }
+
+          .platform-architecture-notice {
+            padding: 16px;
+            font-size: 13px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .platform-settings-header h1 {
+            font-size: 22px;
+          }
+
+          .platform-section-title {
+            font-size: 17px;
+          }
+
+          .platform-plan-grid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 12px;
+          }
+
+          .platform-plan-card {
+            padding: 20px;
+          }
+
+          .platform-plan-price {
+            margin-bottom: 16px;
+          }
+
+          .platform-architecture-notice {
+            gap: 10px;
+            padding: 14px;
+            font-size: 12px;
+          }
+
+          .platform-modal-overlay {
+            padding: 12px;
+            align-items: center;
+          }
+
+          .platform-modal {
+            padding: 20px;
+            border-radius: 18px;
+            max-height: calc(100dvh - 24px);
+          }
+
+          .platform-modal-heading h2 {
+            font-size: 16px;
+          }
+
+          .platform-modal-heading p {
+            font-size: 11px;
+          }
+
+          .platform-modal-description {
+            font-size: 13px;
+          }
+
+          .platform-modal-actions {
+            flex-direction: column-reverse;
+          }
+
+          .platform-modal-action-button {
+            width: 100%;
+          }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div className="platform-settings-header">
+        <h1>Platform Settings</h1>
+        <p>
+          View existing staff and administrator accounts and subscription tiers.
+        </p>
       </div>
 
-      {/* Staff & Admin Section Header */}
-      {error && <p role="alert" style={{ color: '#B91C1C', marginBottom: 20 }}>{error}</p>}
-      {message && <p role="status" style={{ color: '#15803D', marginBottom: 20 }}>{message}</p>}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#111', display: 'flex', alignItems: 'center', gap: 10, margin: 0, letterSpacing: '-0.5px' }}>
-          <Shield size={22} color="#F97316" /> Staff & Admin Accounts
+      {/* Messages */}
+      {error && (
+        <div className="platform-settings-message platform-settings-error" role="alert">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div className="platform-settings-message platform-settings-success" role="status">
+          {message}
+        </div>
+      )}
+
+      {/* Staff & Admin Section */}
+      <div className="platform-section-heading">
+        <h2 className="platform-section-title">
+          <Shield size={22} />
+          Staff & Admin Accounts
         </h2>
-        <button type="button" onClick={() => setShowAddStaff(true)} disabled={profile?.role !== 'admin'}
-          style={{ background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, padding: '10px 18px', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <UserPlus size={16} /> Add Staff Account
+
+        <button
+          type="button"
+          className="platform-add-staff-button"
+          onClick={() => setShowAddStaff(true)}
+          disabled={profile?.role !== 'admin'}
+        >
+          <UserPlus size={16} />
+          Add Staff Account
         </button>
       </div>
 
-      {/* Staff Table Card */}
-      <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', overflow: 'hidden', marginBottom: 40 }}>
+      {/* Staff Table */}
+      <div className="platform-staff-card">
         {loading ? (
-          <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <Loader2 size={32} color="#F97316" className="animate-spin" />
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Loading authorized profiles...</span>
+          <div className="platform-loading-state">
+            <Loader2
+              size={32}
+              color="#F97316"
+              className="animate-spin"
+            />
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              Loading authorized profiles...
+            </span>
           </div>
         ) : staffList.length === 0 ? (
-          <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF' }}>No administrative or staff accounts found.</div>
+          <div className="platform-empty-state">
+            No administrative or staff accounts found.
+          </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <div className="platform-table-wrapper">
+            <table className="platform-staff-table">
               <thead>
-                <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                  <th style={{ padding: '16px 24px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>User Profile</th>
-                  <th style={{ padding: '16px 24px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Contact Email</th>
-                  <th style={{ padding: '16px 24px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Current Role</th>
-                  <th style={{ padding: '16px 24px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Joined Date</th>
-                  <th style={{ padding: '16px 24px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Permissions</th>
+                <tr>
+                  <th>User Profile</th>
+                  <th>Contact Email</th>
+                  <th>Current Role</th>
+                  <th>Joined Date</th>
+                  <th>Permissions</th>
                 </tr>
               </thead>
+
               <tbody>
-                {staffList.map((u, i) => (
-                  <tr key={u.id} style={{ borderBottom: i === staffList.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.2s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <td style={{ padding: '18px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: u.role === 'admin' ? '#FFF7ED' : '#F0FDF4', border: `1px solid ${u.role === 'admin' ? '#FFEDD5' : '#BBF7D0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: u.role === 'admin' ? '#F97316' : '#16A34A', fontSize: 14, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                {staffList.map((u) => (
+                  <tr key={u.id}>
+                    <td>
+                      <div className="platform-user-profile">
+                        <div
+                          className="platform-user-avatar"
+                          style={{
+                            background:
+                              u.role === 'admin' ? '#FFF7ED' : '#F0FDF4',
+                            border: `1px solid ${
+                              u.role === 'admin' ? '#FFEDD5' : '#BBF7D0'
+                            }`,
+                            color: u.role === 'admin' ? '#F97316' : '#16A34A',
+                          }}
+                        >
                           {(u.full_name ?? 'U').charAt(0).toUpperCase()}
                         </div>
-                        <strong style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{u.full_name ?? '—'}</strong>
+
+                        <strong className="platform-user-name">
+                          {u.full_name ?? '—'}
+                        </strong>
                       </div>
                     </td>
-                    <td style={{ padding: '18px 24px', color: '#4B5563', fontSize: 14, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Mail size={14} color="#9CA3AF" style={{ flexShrink: 0 }} />
+
+                    <td>
+                      <div className="platform-user-email">
+                        <Mail size={14} color="#9CA3AF" />
                         <span>{u.email}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '18px 24px' }}>
-                      <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: u.role === 'admin' ? '#FFF7ED' : '#F0FDF4', color: u.role === 'admin' ? '#F97316' : '#16A34A', border: `1px solid ${u.role === 'admin' ? '#FFEDD5' : '#BBF7D0'}`, textTransform: 'capitalize' }}>
+
+                    <td>
+                      <span
+                        className="platform-role-badge"
+                        style={{
+                          background:
+                            u.role === 'admin' ? '#FFF7ED' : '#F0FDF4',
+                          color: u.role === 'admin' ? '#F97316' : '#16A34A',
+                          borderColor:
+                            u.role === 'admin' ? '#FFEDD5' : '#BBF7D0',
+                        }}
+                      >
                         {u.role}
                       </span>
                     </td>
-                    <td style={{ padding: '18px 24px', fontSize: 13, color: '#6B7280', fontWeight: 500 }}>
-                      {u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+
+                    <td className="platform-joined-date">
+                      {u.created_at
+                        ? new Date(u.created_at).toLocaleDateString('en-PH', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })
+                        : '—'}
                     </td>
-                    <td style={{ padding: '18px 24px', verticalAlign: 'middle' }}>
-                      <select aria-label={`Permissions for ${u.full_name ?? u.email ?? 'account'}`}
-                        disabled={savingRole !== null || profile?.role !== 'admin' || u.id === profile.id}
-                        value={u.role} onChange={event => void handleRoleChange(u.id, event.target.value)}
-                        style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 14px', fontSize: 13, background: '#F9FAFB', color: '#111', fontWeight: 700 }}>
+
+                    <td>
+                      <select
+                        className="platform-role-select"
+                        aria-label={`Permissions for ${
+                          u.full_name ?? u.email ?? 'account'
+                        }`}
+                        disabled={
+                          savingRole !== null ||
+                          profile?.role !== 'admin' ||
+                          u.id === profile.id
+                        }
+                        value={u.role}
+                        onChange={(event) =>
+                          void handleRoleChange(u.id, event.target.value)
+                        }
+                      >
                         <option value="admin">System Administrator</option>
                         <option value="staff">Platform Staff</option>
                       </select>
@@ -172,183 +1056,245 @@ export default function PlatformSettings() {
         )}
       </div>
 
-      {/* Subscription Tiers Section */}
-      <h2 style={{ fontSize: 20, fontWeight: 900, color: '#111', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, letterSpacing: '-0.5px' }}>
-        <CreditCard size={22} color="#F97316" /> Subscription Tiers Configuration
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 24 }}>
-        {planDetails.map((p) => (
-          <div key={p.plan} style={{ position: 'relative', background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', padding: 24, overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: p.accent }} />
+      {/* Subscription Tiers */}
+      <div className="platform-subscription-section">
+        <div className="platform-subscription-heading">
+          <h2 className="platform-section-title">
+            <CreditCard size={22} />
+            Subscription Tiers Configuration
+          </h2>
+        </div>
 
-            <div style={{ fontSize: 12, fontWeight: 800, color: p.color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 4 }}>
-              {p.plan} Tier
-            </div>
-            <div style={{ fontSize: 32, fontWeight: 900, color: '#111', marginBottom: 20, letterSpacing: '-1px' }}>
-              {p.price === 0 ? 'Free' : `₱${p.price}`}
-              {p.price !== 0 && <span style={{ fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}> / mo</span>}
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid #F3F4F6', paddingTop: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#4B5563' }}>
-                <Package size={16} color="#9CA3AF" />
-                <span>Packages: <strong style={{ color: '#111', fontWeight: 800 }}>{p.packages === null ? 'Unlimited' : p.packages}</strong></span>
+        <div className="platform-plan-grid">
+          {PLAN_DETAILS.map((p) => (
+            <div key={p.plan} className="platform-plan-card">
+              <div
+                className="platform-plan-accent"
+                style={{ background: p.accent }}
+              />
+
+              <div
+                className="platform-plan-name"
+                style={{ color: p.color }}
+              >
+                {p.plan} Tier
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#4B5563' }}>
-                <Calendar size={16} color="#9CA3AF" />
-                <span>Bookings: <strong style={{ color: '#111', fontWeight: 800 }}>{p.bookings === null ? 'Unlimited' : `${p.bookings}/mo`}</strong></span>
+
+              <div className="platform-plan-price">
+                {p.price === 0 ? 'Free' : `₱${p.price}`}
+
+                {p.price !== 0 && (
+                  <span className="platform-plan-period"> / mo</span>
+                )}
+              </div>
+
+              <div className="platform-plan-features">
+                <div className="platform-plan-feature">
+                  <Package size={16} />
+                  <span>
+                    Packages:{' '}
+                    <strong>
+                      {p.packages === null ? 'Unlimited' : p.packages}
+                    </strong>
+                  </span>
+                </div>
+
+                <div className="platform-plan-feature">
+                  <Calendar size={16} />
+                  <span>
+                    Bookings:{' '}
+                    <strong>
+                      {p.bookings === null ? 'Unlimited' : `${p.bookings}/mo`}
+                    </strong>
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Architecture Notice Banner */}
-      <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 16, padding: '18px 24px', fontSize: 14, color: '#92400E', display: 'flex', alignItems: 'flex-start', gap: 14, boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
-        <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0, marginTop: 2 }} /> 
-        <span style={{ lineHeight: 1.6, fontWeight: 500 }}>
-          Plan pricing rules and system limits are hardcoded at the backend level. Contact your core developer or database manager to adjust billing structures or tier restrictions.
+      {/* Architecture Notice */}
+      <div className="platform-architecture-notice">
+        <AlertTriangle size={20} />
+
+        <span>
+          Plan pricing rules and system limits are hardcoded at the backend
+          level. Contact your core developer or database manager to adjust
+          billing structures or tier restrictions.
         </span>
       </div>
 
       {/* Add Staff Account Modal */}
       {showAddStaff && (
-        <div 
-          role="presentation" 
-          style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 20 }} 
+        <div
+          className="platform-modal-overlay"
+          role="presentation"
           onClick={closeStaffForm}
         >
-          <div 
-            role="dialog" 
-            aria-modal="true" 
-            aria-labelledby="add-staff-title" 
-            style={{ background: '#FFF', maxWidth: 480, width: '100%', borderRadius: 24, padding: 32, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} 
-            onClick={event => event.stopPropagation()}
+          <div
+            className="platform-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-staff-title"
+            onClick={(event) => event.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #E5E7EB', paddingBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#FFF7ED', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* Modal Header */}
+            <div className="platform-modal-header">
+              <div className="platform-modal-heading">
+                <div className="platform-modal-icon">
                   <UserPlus size={20} />
                 </div>
+
                 <div>
-                  <h2 id="add-staff-title" style={{ fontSize: 18, fontWeight: 900, color: '#111', margin: 0 }}>Add Staff Account</h2>
-                  <p style={{ fontSize: 12.5, color: '#6B7280', margin: '2px 0 0' }}>Provision a new administrative or staff user</p>
+                  <h2 id="add-staff-title">Add Staff Account</h2>
+                  <p>Provision a new administrative or staff user</p>
                 </div>
               </div>
-              <button 
-                type="button" 
-                aria-label="Close staff account form" 
-                disabled={creatingStaff} 
-                onClick={closeStaffForm} 
-                style={{ border: '1px solid #E5E7EB', background: '#FFF', borderRadius: '50%', width: 36, height: 36, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#4B5563' }}
+
+              <button
+                type="button"
+                aria-label="Close staff account form"
+                disabled={creatingStaff}
+                onClick={closeStaffForm}
+                className="platform-modal-close"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ fontSize: 13.5, color: '#4B5563', lineHeight: 1.5, marginBottom: 20 }}>
-              Create a new staff account with an initial password. Existing user accounts cannot be converted. Staff will sign in through the standard portal login page.
+            <p className="platform-modal-description">
+              Create a new staff account with an initial password. Existing
+              user accounts cannot be converted. Staff will sign in through
+              the standard portal login page.
             </p>
 
-            <form onSubmit={handleCreateStaff} style={{ display: 'grid', gap: 16 }}>
-              <div>
-                <label htmlFor="staff-full-name" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
-                  <User size={14} color="#6B7280" /> Full Name
+            <form
+              onSubmit={handleCreateStaff}
+              className="platform-staff-form"
+            >
+              {/* Full Name */}
+              <div className="platform-form-field">
+                <label htmlFor="staff-full-name">
+                  <User size={14} />
+                  Full Name
                 </label>
-                <input 
-                  id="staff-full-name" 
-                  required 
-                  maxLength={150} 
-                  autoComplete="name" 
-                  value={fullName} 
-                  disabled={creatingStaff} 
-                  placeholder="e.g.  Benedict Alicante"
-                  onChange={event => setFullName(event.target.value)} 
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+
+                <input
+                  id="staff-full-name"
+                  required
+                  maxLength={150}
+                  autoComplete="name"
+                  value={fullName}
+                  disabled={creatingStaff}
+                  placeholder="e.g. Benedict Alicante"
+                  onChange={(event) => setFullName(event.target.value)}
                 />
               </div>
 
-              <div>
-                <label htmlFor="staff-email" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
-                  <Mail size={14} color="#6B7280" /> Email Address
+              {/* Email */}
+              <div className="platform-form-field">
+                <label htmlFor="staff-email">
+                  <Mail size={14} />
+                  Email Address
                 </label>
-                <input 
-                  id="staff-email" 
-                  type="email" 
-                  required 
-                  maxLength={254} 
-                  autoComplete="email" 
-                  value={email} 
-                  disabled={creatingStaff} 
+
+                <input
+                  id="staff-email"
+                  type="email"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  value={email}
+                  disabled={creatingStaff}
                   placeholder="staff@caterconnect.ph"
-                  onChange={event => setEmail(event.target.value)} 
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+                  onChange={(event) => setEmail(event.target.value)}
                 />
               </div>
 
-              <div>
-                <label htmlFor="staff-password" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
-                  <Lock size={14} color="#6B7280" /> Password (min 12 characters)
+              {/* Password */}
+              <div className="platform-form-field">
+                <label htmlFor="staff-password">
+                  <Lock size={14} />
+                  Password (min 12 characters)
                 </label>
-                <input 
-                  id="staff-password" 
-                  type="password" 
-                  required 
-                  minLength={12} 
-                  maxLength={72} 
-                  autoComplete="new-password" 
-                  value={staffPassword} 
-                  disabled={creatingStaff} 
-                  placeholder="••••••••••••"
-                  onChange={event => setStaffPassword(event.target.value)} 
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+
+                <input
+                  id="staff-password"
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  value={staffPassword}
+                  disabled={creatingStaff}
+                  placeholder="Enter initial password"
+                  onChange={(event) =>
+                    setStaffPassword(event.target.value)
+                  }
                 />
               </div>
 
-              <div>
-                <label htmlFor="staff-confirm-password" style={{ fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: '#374151' }}>
-                  <Lock size={14} color="#6B7280" /> Confirm Password
+              {/* Confirm Password */}
+              <div className="platform-form-field">
+                <label htmlFor="staff-confirm-password">
+                  <Lock size={14} />
+                  Confirm Password
                 </label>
-                <input 
-                  id="staff-confirm-password" 
-                  type="password" 
-                  required 
-                  minLength={12} 
-                  maxLength={72} 
-                  autoComplete="new-password" 
-                  value={confirmStaffPassword} 
-                  disabled={creatingStaff} 
-                  placeholder="••••••••••••"
-                  onChange={event => setConfirmStaffPassword(event.target.value)} 
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', border: '1px solid #D1D5DB', borderRadius: 12, fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }} 
+
+                <input
+                  id="staff-confirm-password"
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  value={confirmStaffPassword}
+                  disabled={creatingStaff}
+                  placeholder="Confirm initial password"
+                  onChange={(event) =>
+                    setConfirmStaffPassword(event.target.value)
+                  }
                 />
               </div>
 
+              {/* Form Error */}
               {staffError && (
-                <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', padding: '10px 14px', borderRadius: 10, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <AlertTriangle size={16} /> {staffError}
+                <div className="platform-staff-form-error" role="alert">
+                  <AlertTriangle size={16} />
+                  <span>{staffError}</span>
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 8, borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
-                <button 
-                  type="button" 
-                  disabled={creatingStaff} 
-                  onClick={closeStaffForm} 
-                  style={{ flex: 1, padding: '12px 16px', background: '#F3F4F6', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+              {/* Modal Actions */}
+              <div className="platform-modal-actions">
+                <button
+                  type="button"
+                  disabled={creatingStaff}
+                  onClick={closeStaffForm}
+                  className="platform-modal-action-button platform-modal-cancel"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
-                  disabled={creatingStaff || profile?.role !== 'admin' || !fullName.trim() || !email.trim() || !staffPassword || !confirmStaffPassword} 
-                  style={{ 
-                    flex: 1, padding: '12px 16px', background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    opacity: creatingStaff || profile?.role !== 'admin' || !fullName.trim() || !email.trim() || !staffPassword || !confirmStaffPassword ? 0.7 : 1 
-                  }}
+
+                <button
+                  type="submit"
+                  disabled={
+                    creatingStaff ||
+                    profile?.role !== 'admin' ||
+                    !fullName.trim() ||
+                    !email.trim() ||
+                    !staffPassword ||
+                    !confirmStaffPassword
+                  }
+                  className="platform-modal-action-button platform-modal-submit"
                 >
-                  {creatingStaff ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                  {creatingStaff ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <UserPlus size={16} />
+                  )}
+
                   {creatingStaff ? 'Creating...' : 'Create Account'}
                 </button>
               </div>

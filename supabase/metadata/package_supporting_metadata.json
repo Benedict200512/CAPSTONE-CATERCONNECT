@@ -1,0 +1,4841 @@
+{
+  "tables": [
+    {
+      "owner": "postgres",
+      "table": "account_monitoring_cases",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "flagged",
+          "type": "boolean",
+          "identity": "",
+          "nullable": false,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "bool",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "false"
+        },
+        {
+          "name": "suspended",
+          "type": "boolean",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "bool",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "false"
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "previous_profile_status",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "previous_caterer_standing",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 6,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "updated_by",
+          "type": "uuid",
+          "identity": "",
+          "nullable": true,
+          "position": 7,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": false,
+          "position": 8,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "account_monitoring_cases_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX account_monitoring_cases_pkey ON public.account_monitoring_cases USING btree (user_id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "account_monitoring_cases_staff_read",
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = ( SELECT auth.uid() AS uid)) AND (p.role = ANY (ARRAY['staff'::text, 'admin'::text])))))",
+          "command": "SELECT",
+          "definition": "CREATE POLICY account_monitoring_cases_staff_read ON public.account_monitoring_cases AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = ( SELECT auth.uid() AS uid)) AND (p.role = ANY (ARRAY['staff'::text, 'admin'::text]))))));",
+          "permissive": true,
+          "with_check": null
+        }
+      ],
+      "triggers": [],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "account_monitoring_cases_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (user_id)",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "f",
+          "name": "account_monitoring_cases_updated_by_fkey",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (updated_by) REFERENCES profiles(id)",
+          "parent_table": "profiles",
+          "initially_deferred": false
+        },
+        {
+          "kind": "f",
+          "name": "account_monitoring_cases_user_id_fkey",
+          "on_delete": "CASCADE",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE",
+          "parent_table": "profiles",
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "authenticated=r/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    },
+    {
+      "owner": "postgres",
+      "table": "notifications",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "gen_random_uuid()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "message",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "type",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "booking_id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": true,
+          "position": 6,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "is_read",
+          "type": "boolean",
+          "identity": "",
+          "nullable": false,
+          "position": 7,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "bool",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "false"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": true,
+          "position": 8,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "notifications_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX notifications_pkey ON public.notifications USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "Authenticated users can insert notifications",
+          "roles": [
+            "authenticated"
+          ],
+          "using": null,
+          "command": "INSERT",
+          "definition": "CREATE POLICY \"Authenticated users can insert notifications\" ON public.notifications AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);",
+          "permissive": true,
+          "with_check": "true"
+        },
+        {
+          "name": "Users update own notifications",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": "(auth.uid() = user_id)",
+          "command": "UPDATE",
+          "definition": "CREATE POLICY \"Users update own notifications\" ON public.notifications AS PERMISSIVE FOR UPDATE TO PUBLIC USING ((auth.uid() = user_id));",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Users view own notifications",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": "(auth.uid() = user_id)",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Users view own notifications\" ON public.notifications AS PERMISSIVE FOR SELECT TO PUBLIC USING ((auth.uid() = user_id));",
+          "permissive": true,
+          "with_check": null
+        }
+      ],
+      "triggers": [],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "notifications_booking_id_fkey",
+          "on_delete": "CASCADE",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE",
+          "parent_table": "bookings",
+          "initially_deferred": false
+        },
+        {
+          "kind": "p",
+          "name": "notifications_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "notifications_type_check",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((type = ANY (ARRAY['booking_submitted'::text, 'booking_approved'::text, 'booking_rejected'::text, 'booking_completed'::text, 'booking_cancelled'::text, 'new_booking_request'::text, 'package_customized'::text, 'payment_submitted'::text, 'payment_verified'::text, 'downpayment_paid'::text, 'downpayment_deadline'::text, 'new_message'::text, 'new_review'::text, 'subscription'::text, 'refund_transfer_submitted'::text, 'refund_dispute_opened'::text, 'refund_dispute_submitted'::text, 'refund_dispute_response'::text, 'refund_dispute_responded'::text, 'refund_confirmed'::text, 'refund_received'::text, 'refund_overdue'::text])))",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "f",
+          "name": "notifications_user_id_fkey",
+          "on_delete": "CASCADE",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE",
+          "parent_table": "profiles",
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=rwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    },
+    {
+      "owner": "postgres",
+      "table": "profiles",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=a/postgres",
+            "anon=a/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "'customer'::text"
+        },
+        {
+          "name": "full_name",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "avatar_url",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": true,
+          "position": 6,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        },
+        {
+          "name": "phone_number",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 7,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "address",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 8,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "business_name",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 9,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 10,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 11,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "anon",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "INSERT"
+            },
+            {
+              "grantee": "authenticated",
+              "grantor": "postgres",
+              "grantable": false,
+              "privilege": "UPDATE"
+            }
+          ],
+          "raw_column_acl": [
+            "authenticated=aw/postgres",
+            "anon=aw/postgres"
+          ],
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "'active'::text"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "profiles_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX profiles_pkey ON public.profiles USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "Admins can update profiles",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM profiles profiles_1\n  WHERE ((profiles_1.id = auth.uid()) AND (profiles_1.role = 'admin'::text))))",
+          "command": "UPDATE",
+          "definition": "CREATE POLICY \"Admins can update profiles\" ON public.profiles AS PERMISSIVE FOR UPDATE TO PUBLIC USING ((EXISTS ( SELECT 1\n   FROM profiles profiles_1\n  WHERE ((profiles_1.id = auth.uid()) AND (profiles_1.role = 'admin'::text)))));",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Allow authenticated users to view profiles",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": "(auth.role() = 'authenticated'::text)",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Allow authenticated users to view profiles\" ON public.profiles AS PERMISSIVE FOR SELECT TO PUBLIC USING ((auth.role() = 'authenticated'::text));",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Allow users to insert own profile",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": null,
+          "command": "INSERT",
+          "definition": "CREATE POLICY \"Allow users to insert own profile\" ON public.profiles AS PERMISSIVE FOR INSERT TO PUBLIC WITH CHECK ((auth.uid() = id));",
+          "permissive": true,
+          "with_check": "(auth.uid() = id)"
+        },
+        {
+          "name": "Allow users to update own profile",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": "(auth.uid() = id)",
+          "command": "UPDATE",
+          "definition": "CREATE POLICY \"Allow users to update own profile\" ON public.profiles AS PERMISSIVE FOR UPDATE TO PUBLIC USING ((auth.uid() = id));",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Refund staff view customer profiles",
+          "roles": [
+            "authenticated"
+          ],
+          "using": "is_refund_staff()",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Refund staff view customer profiles\" ON public.profiles AS PERMISSIVE FOR SELECT TO authenticated USING (is_refund_staff());",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Staff can update profiles",
+          "roles": [
+            "PUBLIC"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM profiles profiles_1\n  WHERE ((profiles_1.id = auth.uid()) AND (profiles_1.role = ANY (ARRAY['admin'::text, 'staff'::text])))))",
+          "command": "UPDATE",
+          "definition": "CREATE POLICY \"Staff can update profiles\" ON public.profiles AS PERMISSIVE FOR UPDATE TO PUBLIC USING ((EXISTS ( SELECT 1\n   FROM profiles profiles_1\n  WHERE ((profiles_1.id = auth.uid()) AND (profiles_1.role = ANY (ARRAY['admin'::text, 'staff'::text]))))));",
+          "permissive": true,
+          "with_check": null
+        }
+      ],
+      "triggers": [
+        {
+          "name": "account_monitoring_protect_profile",
+          "function": "public.account_monitoring_protect_suspension()",
+          "deferrable": false,
+          "definition": "CREATE TRIGGER account_monitoring_protect_profile BEFORE UPDATE OF status ON public.profiles FOR EACH ROW EXECUTE FUNCTION account_monitoring_protect_suspension()",
+          "enabled_code": "O",
+          "enabled_mode": "ORIGIN/LOCAL",
+          "configuration": [
+            "search_path=\"\""
+          ],
+          "security_mode": "INVOKER",
+          "function_owner": "postgres",
+          "constraint_trigger": false,
+          "initially_deferred": false,
+          "function_definition": "CREATE OR REPLACE FUNCTION public.account_monitoring_protect_suspension()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\r\nBEGIN\r\n  -- Profiles table uses \"status\"\r\n  IF TG_TABLE_NAME = 'profiles' THEN\r\n\r\n    IF OLD.status = 'suspended'\r\n       AND NEW.status IS DISTINCT FROM 'suspended'\r\n       AND CURRENT_USER NOT IN ('postgres', 'supabase_admin')\r\n    THEN\r\n      RAISE EXCEPTION\r\n        'Only authorized Staff actions may reactivate an account'\r\n        USING ERRCODE = '42501';\r\n    END IF;\r\n\r\n  -- Caterers table uses \"account_standing\"\r\n  ELSIF TG_TABLE_NAME = 'caterers' THEN\r\n\r\n    IF OLD.account_standing = 'suspended'\r\n       AND NEW.account_standing IS DISTINCT FROM 'suspended'\r\n       AND CURRENT_USER NOT IN ('postgres', 'supabase_admin')\r\n    THEN\r\n      RAISE EXCEPTION\r\n        'Only authorized Staff actions may restore caterer standing'\r\n        USING ERRCODE = '42501';\r\n    END IF;\r\n\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+        }
+      ],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "profiles_id_fkey",
+          "on_delete": "CASCADE",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE",
+          "parent_table": "auth.users",
+          "initially_deferred": false
+        },
+        {
+          "kind": "p",
+          "name": "profiles_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "profiles_role_check",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((role = ANY (ARRAY['customer'::text, 'caterer'::text, 'staff'::text, 'admin'::text])))",
+          "parent_table": null,
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=rdDxtm/postgres",
+        "authenticated=rdDxtm/postgres",
+        "service_role=arwdDxtm/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    },
+    {
+      "owner": "postgres",
+      "table": "refund_disputes",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "gen_random_uuid()"
+        },
+        {
+          "name": "booking_id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "'open'::text"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": false,
+          "position": 6,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": false,
+          "position": 7,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        },
+        {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": true,
+          "position": 8,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "caterer_response",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 9,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "caterer_responded_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": true,
+          "position": 10,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "staff_note",
+          "type": "text",
+          "identity": "",
+          "nullable": true,
+          "position": 11,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "staff_reviewed_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": true,
+          "position": 12,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "refund_disputes_booking_id_key",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": false,
+          "definition": "CREATE UNIQUE INDEX refund_disputes_booking_id_key ON public.refund_disputes USING btree (booking_id)"
+        },
+        {
+          "name": "refund_disputes_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX refund_disputes_pkey ON public.refund_disputes USING btree (id)"
+        },
+        {
+          "name": "refund_disputes_status_idx",
+          "ready": true,
+          "valid": true,
+          "unique": false,
+          "primary": false,
+          "definition": "CREATE INDEX refund_disputes_status_idx ON public.refund_disputes USING btree (status)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "Caterers read their booking refund disputes",
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM (bookings b\n     JOIN caterers c ON ((c.id = b.caterer_id)))\n  WHERE ((b.id = refund_disputes.booking_id) AND (c.user_id = auth.uid()))))",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Caterers read their booking refund disputes\" ON public.refund_disputes AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1\n   FROM (bookings b\n     JOIN caterers c ON ((c.id = b.caterer_id)))\n  WHERE ((b.id = refund_disputes.booking_id) AND (c.user_id = auth.uid())))));",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Customers read their refund disputes",
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(customer_id = auth.uid())",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Customers read their refund disputes\" ON public.refund_disputes AS PERMISSIVE FOR SELECT TO authenticated USING ((customer_id = auth.uid()));",
+          "permissive": true,
+          "with_check": null
+        },
+        {
+          "name": "Customers report missing pending refunds",
+          "roles": [
+            "authenticated"
+          ],
+          "using": null,
+          "command": "INSERT",
+          "definition": "CREATE POLICY \"Customers report missing pending refunds\" ON public.refund_disputes AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = 'customer'::text)))) AND (customer_id = auth.uid()) AND (status = 'open'::text) AND (resolved_at IS NULL) AND (EXISTS ( SELECT 1\n   FROM bookings b\n  WHERE ((b.id = refund_disputes.booking_id) AND (b.customer_id = auth.uid()) AND (b.status = 'cancelled'::text) AND (b.refund_status = ANY (ARRAY['pending'::text, 'overdue'::text, 'awaiting_customer_confirmation'::text])) AND (b.refund_amount > (0)::numeric) AND (EXISTS ( SELECT 1\n           FROM refund_transfer_submissions r\n          WHERE (r.booking_id = b.id))))))));",
+          "permissive": true,
+          "with_check": "((EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = 'customer'::text)))) AND (customer_id = auth.uid()) AND (status = 'open'::text) AND (resolved_at IS NULL) AND (EXISTS ( SELECT 1\n   FROM bookings b\n  WHERE ((b.id = refund_disputes.booking_id) AND (b.customer_id = auth.uid()) AND (b.status = 'cancelled'::text) AND (b.refund_status = ANY (ARRAY['pending'::text, 'overdue'::text, 'awaiting_customer_confirmation'::text])) AND (b.refund_amount > (0)::numeric) AND (EXISTS ( SELECT 1\n           FROM refund_transfer_submissions r\n          WHERE (r.booking_id = b.id)))))))"
+        },
+        {
+          "name": "Staff read refund disputes",
+          "roles": [
+            "authenticated"
+          ],
+          "using": "is_refund_staff()",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Staff read refund disputes\" ON public.refund_disputes AS PERMISSIVE FOR SELECT TO authenticated USING (is_refund_staff());",
+          "permissive": true,
+          "with_check": null
+        }
+      ],
+      "triggers": [
+        {
+          "name": "trg_notify_refund_dispute_caterer_response",
+          "function": "public.notify_refund_dispute_caterer_response()",
+          "deferrable": false,
+          "definition": "CREATE TRIGGER trg_notify_refund_dispute_caterer_response AFTER UPDATE OF caterer_response, caterer_responded_at ON public.refund_disputes FOR EACH ROW EXECUTE FUNCTION notify_refund_dispute_caterer_response()",
+          "enabled_code": "O",
+          "enabled_mode": "ORIGIN/LOCAL",
+          "configuration": [
+            "search_path=\"\""
+          ],
+          "security_mode": "DEFINER",
+          "function_owner": "postgres",
+          "constraint_trigger": false,
+          "initially_deferred": false,
+          "function_definition": "CREATE OR REPLACE FUNCTION public.notify_refund_dispute_caterer_response()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\nDECLARE\r\n  v_customer_id uuid;\r\nBEGIN\r\n  IF NULLIF(BTRIM(NEW.caterer_response), '') IS NOT NULL\r\n     AND NEW.caterer_response IS DISTINCT FROM OLD.caterer_response\r\n     AND NEW.caterer_responded_at IS NOT NULL THEN\r\n\r\n    SELECT b.customer_id INTO v_customer_id\r\n    FROM public.bookings b\r\n    WHERE b.id = NEW.booking_id\r\n      AND b.customer_id = NEW.customer_id;\r\n\r\n    IF v_customer_id IS NOT NULL THEN\r\n      INSERT INTO public.notifications\r\n        (user_id, title, message, type, booking_id, is_read)\r\n      VALUES\r\n        (v_customer_id,\r\n         'Refund Dispute Update',\r\n         'Your caterer has responded to your refund dispute. Open My Bookings to review the investigation update.',\r\n         'refund_dispute_response',\r\n         NEW.booking_id,\r\n         false);\r\n    END IF;\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+        },
+        {
+          "name": "trg_notify_refund_dispute_created",
+          "function": "public.notify_refund_dispute_created()",
+          "deferrable": false,
+          "definition": "CREATE TRIGGER trg_notify_refund_dispute_created AFTER INSERT ON public.refund_disputes FOR EACH ROW EXECUTE FUNCTION notify_refund_dispute_created()",
+          "enabled_code": "O",
+          "enabled_mode": "ORIGIN/LOCAL",
+          "configuration": [
+            "search_path=\"\""
+          ],
+          "security_mode": "DEFINER",
+          "function_owner": "postgres",
+          "constraint_trigger": false,
+          "initially_deferred": false,
+          "function_definition": "CREATE OR REPLACE FUNCTION public.notify_refund_dispute_created()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\nDECLARE\r\n  v_caterer_user_id uuid;\r\nBEGIN\r\n  SELECT c.user_id INTO v_caterer_user_id\r\n  FROM public.bookings b\r\n  JOIN public.caterers c ON c.id = b.caterer_id\r\n  WHERE b.id = NEW.booking_id\r\n    AND b.customer_id = NEW.customer_id\r\n    AND b.status = 'cancelled'\r\n    AND COALESCE(b.refund_amount, 0) > 0;\r\n\r\n  IF v_caterer_user_id IS NOT NULL THEN\r\n    INSERT INTO public.notifications\r\n      (user_id, title, message, type, booking_id, is_read)\r\n    VALUES\r\n      (v_caterer_user_id,\r\n       'New Refund Dispute',\r\n       'A customer reported an issue with a refund. Open Bookings to review the dispute.',\r\n       'refund_dispute_opened',\r\n       NEW.booking_id,\r\n       false);\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+        }
+      ],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "refund_disputes_booking_id_fkey",
+          "on_delete": "CASCADE",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE",
+          "parent_table": "bookings",
+          "initially_deferred": false
+        },
+        {
+          "kind": "u",
+          "name": "refund_disputes_booking_id_key",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (booking_id)",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "refund_disputes_caterer_response_length",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (((caterer_response IS NULL) OR ((char_length(btrim(caterer_response)) >= 10) AND (char_length(btrim(caterer_response)) <= 2000))))",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "f",
+          "name": "refund_disputes_customer_id_fkey",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (customer_id) REFERENCES auth.users(id)",
+          "parent_table": "auth.users",
+          "initially_deferred": false
+        },
+        {
+          "kind": "p",
+          "name": "refund_disputes_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "refund_disputes_reason_check",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (((char_length(btrim(reason)) >= 10) AND (char_length(btrim(reason)) <= 2000)))",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "refund_disputes_staff_note_length",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (((staff_note IS NULL) OR ((char_length(btrim(staff_note)) >= 10) AND (char_length(btrim(staff_note)) <= 2000))))",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "refund_disputes_status_check",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((status = ANY (ARRAY['open'::text, 'investigating'::text, 'resolved'::text])))",
+          "parent_table": null,
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arDxtm/postgres",
+        "authenticated=arDxtm/postgres",
+        "service_role=arwdDxtm/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    },
+    {
+      "owner": "postgres",
+      "table": "subscription_plans",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "price",
+          "type": "numeric",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "numeric",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "max_packages",
+          "type": "integer",
+          "identity": "",
+          "nullable": true,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "int4",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "max_bookings_per_month",
+          "type": "integer",
+          "identity": "",
+          "nullable": true,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "int4",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "features",
+          "type": "jsonb",
+          "identity": "",
+          "nullable": true,
+          "position": 6,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "jsonb",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "identity": "",
+          "nullable": false,
+          "position": 7,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "int4",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "subscription_plans_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX subscription_plans_pkey ON public.subscription_plans USING btree (id)"
+        }
+      ],
+      "policies": [],
+      "triggers": [],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "subscription_plans_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)",
+          "parent_table": null,
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=rDxtm/postgres",
+        "authenticated=rDxtm/postgres",
+        "service_role=arwdDxtm/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    },
+    {
+      "owner": "postgres",
+      "table": "system_audit_logs",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "gen_random_uuid()"
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "identity": "",
+          "nullable": true,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "details",
+          "type": "jsonb",
+          "identity": "",
+          "nullable": false,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "jsonb",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "'{}'::jsonb"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": false,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": false,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "system_audit_logs_created_idx",
+          "ready": true,
+          "valid": true,
+          "unique": false,
+          "primary": false,
+          "definition": "CREATE INDEX system_audit_logs_created_idx ON public.system_audit_logs USING btree (created_at DESC)"
+        },
+        {
+          "name": "system_audit_logs_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX system_audit_logs_pkey ON public.system_audit_logs USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "Administrators read system audit logs",
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = ( SELECT auth.uid() AS uid)) AND (p.role = 'admin'::text))))",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Administrators read system audit logs\" ON public.system_audit_logs AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = ( SELECT auth.uid() AS uid)) AND (p.role = 'admin'::text)))));",
+          "permissive": true,
+          "with_check": null
+        }
+      ],
+      "triggers": [],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "system_audit_logs_actor_id_fkey",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_id) REFERENCES auth.users(id)",
+          "parent_table": "auth.users",
+          "initially_deferred": false
+        },
+        {
+          "kind": "p",
+          "name": "system_audit_logs_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)",
+          "parent_table": null,
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "authenticated=r/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    },
+    {
+      "owner": "postgres",
+      "table": "system_settings",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 1,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "'main'::text"
+        },
+        {
+          "name": "maintenance_enabled",
+          "type": "boolean",
+          "identity": "",
+          "nullable": false,
+          "position": 2,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "bool",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "false"
+        },
+        {
+          "name": "maintenance_message",
+          "type": "text",
+          "identity": "",
+          "nullable": false,
+          "position": 3,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "text",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "'CaterConnect is temporarily undergoing maintenance.'::text"
+        },
+        {
+          "name": "estimated_end_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": true,
+          "position": 4,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "identity": "",
+          "nullable": false,
+          "position": 5,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "timestamptz",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": "now()"
+        },
+        {
+          "name": "updated_by",
+          "type": "uuid",
+          "identity": "",
+          "nullable": true,
+          "position": 6,
+          "generated": "",
+          "type_kind": "b",
+          "type_name": "uuid",
+          "enum_labels": null,
+          "type_schema": "pg_catalog",
+          "column_grants": [],
+          "raw_column_acl": null,
+          "effective_privileges": [
+            {
+              "role": "anon",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "authenticated",
+              "privileges": {
+                "INSERT": false,
+                "SELECT": true,
+                "UPDATE": false,
+                "REFERENCES": false
+              },
+              "role_exists": true
+            },
+            {
+              "role": "service_role",
+              "privileges": {
+                "INSERT": true,
+                "SELECT": true,
+                "UPDATE": true,
+                "REFERENCES": true
+              },
+              "role_exists": true
+            }
+          ],
+          "default_or_generated_expression": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "system_settings_pkey",
+          "ready": true,
+          "valid": true,
+          "unique": true,
+          "primary": true,
+          "definition": "CREATE UNIQUE INDEX system_settings_pkey ON public.system_settings USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "Read maintenance configuration",
+          "roles": [
+            "anon",
+            "authenticated"
+          ],
+          "using": "true",
+          "command": "SELECT",
+          "definition": "CREATE POLICY \"Read maintenance configuration\" ON public.system_settings AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);",
+          "permissive": true,
+          "with_check": null
+        }
+      ],
+      "triggers": [],
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "system_settings_pkey",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "c",
+          "name": "system_settings_singleton",
+          "on_delete": null,
+          "on_update": null,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((id = 'main'::text))",
+          "parent_table": null,
+          "initially_deferred": false
+        },
+        {
+          "kind": "f",
+          "name": "system_settings_updated_by_fkey",
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION",
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (updated_by) REFERENCES auth.users(id)",
+          "parent_table": "auth.users",
+          "initially_deferred": false
+        }
+      ],
+      "rls_enabled": true,
+      "is_partition": false,
+      "table_grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "raw_table_acl": [
+        "postgres=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "anon=r/postgres",
+        "authenticated=r/postgres"
+      ],
+      "relation_kind": "r",
+      "effective_table_privileges": [
+        {
+          "role": "anon",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "role_exists": true
+        },
+        {
+          "role": "authenticated",
+          "superuser": false,
+          "bypass_rls": false,
+          "privileges": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "role_exists": true
+        },
+        {
+          "role": "service_role",
+          "superuser": false,
+          "bypass_rls": true,
+          "privileges": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "role_exists": true
+        }
+      ]
+    }
+  ],
+  "missing_tables": [],
+  "function_definitions": [
+    {
+      "acl": [
+        "=X/postgres",
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "owner": "postgres",
+      "language": "plpgsql",
+      "signature": "public.account_monitoring_protect_suspension()",
+      "definition": "CREATE OR REPLACE FUNCTION public.account_monitoring_protect_suspension()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\r\nBEGIN\r\n  -- Profiles table uses \"status\"\r\n  IF TG_TABLE_NAME = 'profiles' THEN\r\n\r\n    IF OLD.status = 'suspended'\r\n       AND NEW.status IS DISTINCT FROM 'suspended'\r\n       AND CURRENT_USER NOT IN ('postgres', 'supabase_admin')\r\n    THEN\r\n      RAISE EXCEPTION\r\n        'Only authorized Staff actions may reactivate an account'\r\n        USING ERRCODE = '42501';\r\n    END IF;\r\n\r\n  -- Caterers table uses \"account_standing\"\r\n  ELSIF TG_TABLE_NAME = 'caterers' THEN\r\n\r\n    IF OLD.account_standing = 'suspended'\r\n       AND NEW.account_standing IS DISTINCT FROM 'suspended'\r\n       AND CURRENT_USER NOT IN ('postgres', 'supabase_admin')\r\n    THEN\r\n      RAISE EXCEPTION\r\n        'Only authorized Staff actions may restore caterer standing'\r\n        USING ERRCODE = '42501';\r\n    END IF;\r\n\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n",
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "security_mode": "INVOKER",
+      "owner_superuser": false,
+      "owner_bypass_rls": true,
+      "effective_execute": [
+        {
+          "role": "anon",
+          "allowed": true
+        },
+        {
+          "role": "authenticated",
+          "allowed": true
+        },
+        {
+          "role": "service_role",
+          "allowed": true
+        }
+      ],
+      "configured_search_path": "\"\""
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "owner": "postgres",
+      "language": "sql",
+      "signature": "public.is_refund_staff()",
+      "definition": "CREATE OR REPLACE FUNCTION public.is_refund_staff()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\n  SELECT\r\n    auth.uid() IS NOT NULL\r\n    AND EXISTS (\r\n      SELECT 1\r\n      FROM public.profiles p\r\n      WHERE p.id = auth.uid()\r\n        AND p.role IN ('staff', 'admin')\r\n    );\r\n$function$\n",
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "security_mode": "DEFINER",
+      "owner_superuser": false,
+      "owner_bypass_rls": true,
+      "effective_execute": [
+        {
+          "role": "anon",
+          "allowed": true
+        },
+        {
+          "role": "authenticated",
+          "allowed": true
+        },
+        {
+          "role": "service_role",
+          "allowed": true
+        }
+      ],
+      "configured_search_path": "\"\""
+    },
+    {
+      "acl": [
+        "=X/postgres",
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "owner": "postgres",
+      "language": "plpgsql",
+      "signature": "public.notify_refund_dispute_caterer_response()",
+      "definition": "CREATE OR REPLACE FUNCTION public.notify_refund_dispute_caterer_response()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\nDECLARE\r\n  v_customer_id uuid;\r\nBEGIN\r\n  IF NULLIF(BTRIM(NEW.caterer_response), '') IS NOT NULL\r\n     AND NEW.caterer_response IS DISTINCT FROM OLD.caterer_response\r\n     AND NEW.caterer_responded_at IS NOT NULL THEN\r\n\r\n    SELECT b.customer_id INTO v_customer_id\r\n    FROM public.bookings b\r\n    WHERE b.id = NEW.booking_id\r\n      AND b.customer_id = NEW.customer_id;\r\n\r\n    IF v_customer_id IS NOT NULL THEN\r\n      INSERT INTO public.notifications\r\n        (user_id, title, message, type, booking_id, is_read)\r\n      VALUES\r\n        (v_customer_id,\r\n         'Refund Dispute Update',\r\n         'Your caterer has responded to your refund dispute. Open My Bookings to review the investigation update.',\r\n         'refund_dispute_response',\r\n         NEW.booking_id,\r\n         false);\r\n    END IF;\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n",
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "security_mode": "DEFINER",
+      "owner_superuser": false,
+      "owner_bypass_rls": true,
+      "effective_execute": [
+        {
+          "role": "anon",
+          "allowed": true
+        },
+        {
+          "role": "authenticated",
+          "allowed": true
+        },
+        {
+          "role": "service_role",
+          "allowed": true
+        }
+      ],
+      "configured_search_path": "\"\""
+    },
+    {
+      "acl": [
+        "=X/postgres",
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "owner": "postgres",
+      "language": "plpgsql",
+      "signature": "public.notify_refund_dispute_created()",
+      "definition": "CREATE OR REPLACE FUNCTION public.notify_refund_dispute_created()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\nDECLARE\r\n  v_caterer_user_id uuid;\r\nBEGIN\r\n  SELECT c.user_id INTO v_caterer_user_id\r\n  FROM public.bookings b\r\n  JOIN public.caterers c ON c.id = b.caterer_id\r\n  WHERE b.id = NEW.booking_id\r\n    AND b.customer_id = NEW.customer_id\r\n    AND b.status = 'cancelled'\r\n    AND COALESCE(b.refund_amount, 0) > 0;\r\n\r\n  IF v_caterer_user_id IS NOT NULL THEN\r\n    INSERT INTO public.notifications\r\n      (user_id, title, message, type, booking_id, is_read)\r\n    VALUES\r\n      (v_caterer_user_id,\r\n       'New Refund Dispute',\r\n       'A customer reported an issue with a refund. Open Bookings to review the dispute.',\r\n       'refund_dispute_opened',\r\n       NEW.booking_id,\r\n       false);\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n",
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "security_mode": "DEFINER",
+      "owner_superuser": false,
+      "owner_bypass_rls": true,
+      "effective_execute": [
+        {
+          "role": "anon",
+          "allowed": true
+        },
+        {
+          "role": "authenticated",
+          "allowed": true
+        },
+        {
+          "role": "service_role",
+          "allowed": true
+        }
+      ],
+      "configured_search_path": "\"\""
+    }
+  ],
+  "is_refund_staff_found": true,
+  "subscription_plan_configuration": [
+    {
+      "id": "basic",
+      "max_packages": null
+    },
+    {
+      "id": "free",
+      "max_packages": 3
+    },
+    {
+      "id": "premium",
+      "max_packages": null
+    },
+    {
+      "id": "standard",
+      "max_packages": null
+    }
+  ]
+}

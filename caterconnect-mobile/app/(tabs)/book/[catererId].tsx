@@ -13,7 +13,8 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import AvailabilityMonthCalendar from '../../../components/AvailabilityMonthCalendar';
 import { fetchUnavailableDates, manilaToday } from '../../../lib/availability';
 import { requirePublishedPackage, type PackagePublicationStatus } from '../../../lib/packagePublication';
-import MapView, { Marker, MapPressEvent } from 'react-native-maps';
+import BookingLocationMap from '../../../components/BookingLocationMap';
+import type { BookingLocationMapHandle } from '../../../components/BookingLocationMap.types';
 import * as Location from 'expo-location';
 
 // ── Lucide React Native Icons ──
@@ -184,7 +185,7 @@ export default function BookingWizard() {
   const [isMapModalVisible, setMapModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchingLocation, setSearchingLocation] = useState(false);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<BookingLocationMapHandle>(null);
   
   const [selectedCoordinates, setSelectedCoordinates] = useState({
     latitude: 10.2081,
@@ -321,13 +322,19 @@ export default function BookingWizard() {
     setTimePickerVisible(false);
   };
 
-  const handleMapPress = (e: MapPressEvent) => {
-    const coords = e.nativeEvent.coordinate;
+  const handleMapPress = (coords: { latitude: number; longitude: number }) => {
     setSelectedCoordinates(coords);
   };
 
   const handleSearchLocation = async () => {
     if (!searchQuery.trim()) return;
+    if (Platform.OS === 'web') {
+      Alert.alert(
+        'Map preview unavailable',
+        'Enter the venue or address in the Venue / Location field. Use the CaterConnect Mobile App to search and pin a map location.'
+      );
+      return;
+    }
     try {
       setSearchingLocation(true);
       Keyboard.dismiss();
@@ -345,11 +352,9 @@ export default function BookingWizard() {
         
         setSelectedCoordinates(newCoords);
         
-        mapRef.current?.animateToRegion({
+        mapRef.current?.animateToCoordinates({
           latitude,
           longitude,
-          latitudeDelta: 0.015,
-          longitudeDelta: 0.0121,
         }, 1000);
       } else {
         Alert.alert('Location Not Found', 'Could not find coordinates for that place. Try typing a more specific landmark or barangay.');
@@ -1089,23 +1094,12 @@ export default function BookingWizard() {
         </View>
 
           <View style={{ flex: 1, position: 'relative' }}>
-            <MapView
-                ref={mapRef}
-                style={{ width: '100%', height: '100%' }}
-                initialRegion={{
-                  latitude: selectedCoordinates.latitude,
-                  longitude: selectedCoordinates.longitude,
-                  latitudeDelta: 0.015,
-                  longitudeDelta: 0.0121,
-              }}
-                onPress={handleMapPress}
-            >
-              <Marker 
-                coordinate={selectedCoordinates} 
-                title={searchQuery || "Event Venue Location"} 
-                description="Tap anywhere on map or use search bar" 
-              />
-            </MapView>
+            <BookingLocationMap
+              ref={mapRef}
+              coordinates={selectedCoordinates}
+              title={searchQuery || 'Event Venue Location'}
+              onCoordinatesChange={handleMapPress}
+            />
 
             <View style={styles.mapInstructionOverlay}>
               <Text style={styles.mapInstructionText}>📍 Search or tap map to position pin.</Text>

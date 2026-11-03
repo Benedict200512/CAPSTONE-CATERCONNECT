@@ -13,7 +13,6 @@ import { supabase } from '../../lib/supabase';
 import { useBookingRefresh } from '../../hooks/useBookingRefresh';
 import ChatScreen from '../../screens/auth/ChatScreen';
 import MonthlyBookingQuotaSummary from '../../components/MonthlyBookingQuotaSummary';
-import BookingInternalNotes from '../../components/BookingInternalNotes';
 import { isMonthlyQuotaRejection } from '../../lib/monthlyBookingQuota';
 import {
   Clock, CheckCircle, RefreshCw, PartyPopper,
@@ -65,6 +64,7 @@ type Booking = {
   profiles: { full_name: string; email: string; avatar_url: string | null; phone_number: string | null } | null;
   packages: { name: string; tier: string } | null;
   reviews: Review[] | null;
+  caterer_notes: string | null;
 };
 
 type RefundDispute = {
@@ -180,6 +180,8 @@ export default function CatererBookings() {
   const [loading, setLoading]           = useState(true);
   const [filter, setFilter]             = useState('all');
   const [selected, setSelected]         = useState<Booking | null>(null);
+  const [catererNotes, setCatererNotes] = useState('');
+  const [savingCatererNotes, setSavingCatererNotes] = useState(false);
   const [updating, setUpdating]         = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -311,6 +313,42 @@ export default function CatererBookings() {
     const timer = setInterval(() => setClockNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
+
+  // Keep the notes editor in sync when a different booking is opened.
+  useEffect(() => {
+    setCatererNotes(selected?.caterer_notes ?? '');
+  }, [selected?.id]);
+
+  const saveCatererNotes = async () => {
+    if (!selected || !catererData?.id || savingCatererNotes) return;
+    setSavingCatererNotes(true);
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .update({ caterer_notes: catererNotes })
+        .eq('id', selected.id)
+        .eq('caterer_id', catererData.id)
+        .select('id, caterer_notes')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) throw new Error('The notes were not saved. Please refresh the booking and try again.');
+
+      const savedNote = data.caterer_notes ?? '';
+      setCatererNotes(savedNote);
+      setSelected(previous => previous?.id === selected.id
+        ? { ...previous, caterer_notes: savedNote }
+        : previous);
+      setBookings(previous => previous.map(booking => booking.id === selected.id
+        ? { ...booking, caterer_notes: savedNote }
+        : booking));
+      Alert.alert('Saved', 'Caterer notes have been saved.');
+    } catch (error) {
+      Alert.alert('Unable to save notes', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSavingCatererNotes(false);
+    }
+  };
 
   const getRefundAlert = (booking: Booking) => {
     if (booking.status !== 'cancelled' ||
@@ -1383,7 +1421,35 @@ export default function CatererBookings() {
                 </View>
               </View>
 
-              <BookingInternalNotes key={selected.id} bookingId={selected.id} />
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionHeaderLabel}>CATERER NOTES</Text>
+                <View style={styles.modalCard}>
+                  <Text style={styles.catererNotesHint}>Notes for managing this booking, such as setup reminders, staffing, event timing, or other operational details.</Text>
+                  <TextInput
+                    accessibilityLabel="Caterer booking notes"
+                    value={catererNotes}
+                    onChangeText={setCatererNotes}
+                    placeholder="Write notes about this booking..."
+                    placeholderTextColor={Colors.textMuted}
+                    multiline
+                    textAlignVertical="top"
+                    maxLength={5000}
+                    editable={!savingCatererNotes}
+                    style={styles.catererNotesInput}
+                  />
+                  <Text style={styles.catererNotesCounter}>{catererNotes.length.toLocaleString()} / 5,000</Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() => void saveCatererNotes()}
+                    disabled={savingCatererNotes || catererNotes === (selected.caterer_notes ?? '')}
+                    style={[styles.catererNotesSave, (savingCatererNotes || catererNotes === (selected.caterer_notes ?? '')) && styles.catererNotesSaveDisabled]}
+                  >
+                    {savingCatererNotes
+                      ? <ActivityIndicator color={Colors.white} />
+                      : <Text style={styles.catererNotesSaveText}>Save Notes</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>FINANCIAL BREAKDOWN</Text>
@@ -1795,6 +1861,12 @@ const styles = StyleSheet.create({
   modalSection: { gap: 8 },
   sectionHeaderLabel: { fontSize: 11, fontWeight: '900', color: Colors.textMuted, letterSpacing: 1, marginLeft: 4 },
   modalCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#F1F5F9' },
+  catererNotesHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18, marginBottom: 10 },
+  catererNotesInput: { minHeight: 130, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, color: Colors.black, fontSize: 14, lineHeight: 21 },
+  catererNotesCounter: { fontSize: 11, color: Colors.textMuted, textAlign: 'right', marginTop: 6 },
+  catererNotesSave: { minHeight: 46, backgroundColor: Colors.orange, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 12 },
+  catererNotesSaveDisabled: { opacity: 0.45 },
+  catererNotesSaveText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
   modalCustomerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   modalAvatar: { width: 48, height: 48, borderRadius: 24 },
   modalAvatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.orange, justifyContent: 'center', alignItems: 'center' },

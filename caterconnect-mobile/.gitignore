@@ -51,3 +51,8 @@ caterconnect-mobile/supabase/.temp/
 **/.env
 **/.env.*
 !**/.env.example
+
+# Supabase local temporary files
+supabase/.temp/
+caterconnect-mobile/supabase/.temp/
+caterconnect-web/supabase/.temp/

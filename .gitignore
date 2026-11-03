@@ -1,0 +1,12 @@
+
+# Supabase local temporary files
+supabase/.temp/
+caterconnect-mobile/supabase/.temp/
+
+# Expo archive/build artifacts
+caterconnect-mobile/Expo-Go-54.0.7.tar.app/
+
+# Environment secrets
+.env
+.env.*
+!.env.example

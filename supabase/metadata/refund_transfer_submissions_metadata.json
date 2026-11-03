@@ -1,0 +1,612 @@
+{
+  "table": {
+    "name": "public.refund_transfer_submissions",
+    "owner": "postgres",
+    "grants": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "UPDATE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "anon",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "anon",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "anon",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "anon",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "anon",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "authenticated",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "authenticated",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "authenticated",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "authenticated",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "authenticated",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "UPDATE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      }
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "booking_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "caterer_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "transfer_reference",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "proof_path",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "status",
+        "type": "text",
+        "default": "'submitted'::text",
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "review_note",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "nullable": false,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "reviewed_at",
+        "type": "timestamp with time zone",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "reviewed_by",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": "",
+        "column_acl": null
+      },
+      {
+        "name": "submitted_late",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "nullable": true,
+        "generated": "",
+        "column_acl": null
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX refund_transfer_submissions_pkey ON public.refund_transfer_submissions USING btree (id)",
+      "CREATE UNIQUE INDEX refund_transfer_submissions_booking_id_key ON public.refund_transfer_submissions USING btree (booking_id)",
+      "CREATE INDEX refund_transfer_submissions_caterer_idx ON public.refund_transfer_submissions USING btree (caterer_id)"
+    ],
+    "policies": [
+      {
+        "name": "Caterer reads own refund submissions",
+        "roles": [
+          "16485"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM caterers c\n  WHERE ((c.id = refund_transfer_submissions.caterer_id) AND (((c.id)::text = (auth.uid())::text) OR ((to_jsonb(c.*) ->> 'user_id'::text) = (auth.uid())::text)))))",
+        "command": "r",
+        "permissive": true,
+        "with_check": null
+      },
+      {
+        "name": "Customer sees own refund submission status",
+        "roles": [
+          "16485"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM bookings b\n  WHERE ((b.id = refund_transfer_submissions.booking_id) AND (b.customer_id = ( SELECT auth.uid() AS uid)))))",
+        "command": "r",
+        "permissive": true,
+        "with_check": null
+      },
+      {
+        "name": "Refund staff view transfer submissions",
+        "roles": [
+          "16485"
+        ],
+        "using": "is_refund_staff()",
+        "command": "r",
+        "permissive": true,
+        "with_check": null
+      }
+    ],
+    "triggers": [
+      {
+        "name": "set_refund_submission_lateness_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER set_refund_submission_lateness_trigger BEFORE INSERT ON public.refund_transfer_submissions FOR EACH ROW EXECUTE FUNCTION set_refund_submission_lateness()",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "function_owner": "postgres",
+        "security_definer": true,
+        "function_definition": "CREATE OR REPLACE FUNCTION public.set_refund_submission_lateness()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\nDECLARE\r\n  v_refund_due_at timestamptz;\r\n  v_refund_status text;\r\n  v_booking_caterer_id uuid;\r\nBEGIN\r\n  SELECT\r\n    b.refund_due_at,\r\n    b.refund_status,\r\n    b.caterer_id\r\n  INTO\r\n    v_refund_due_at,\r\n    v_refund_status,\r\n    v_booking_caterer_id\r\n  FROM public.bookings b\r\n  WHERE b.id = NEW.booking_id\r\n  FOR UPDATE;\r\n\r\n  IF NOT FOUND THEN\r\n    RAISE EXCEPTION 'Booking not found'\r\n      USING ERRCODE = '23503';\r\n  END IF;\r\n\r\n  IF NEW.caterer_id IS DISTINCT FROM v_booking_caterer_id THEN\r\n    RAISE EXCEPTION 'Refund submission caterer does not match booking'\r\n      USING ERRCODE = '42501';\r\n  END IF;\r\n\r\n  IF v_refund_status NOT IN ('pending', 'overdue') THEN\r\n    RAISE EXCEPTION 'Booking is not awaiting refund transfer proof'\r\n      USING ERRCODE = '23514';\r\n  END IF;\r\n\r\n  IF v_refund_due_at IS NULL THEN\r\n    RAISE EXCEPTION 'Refund deadline is missing'\r\n      USING ERRCODE = '23514';\r\n  END IF;\r\n\r\n  -- Always use the database clock, never a client-supplied timestamp.\r\n  NEW.submitted_at := clock_timestamp();\r\n\r\n  NEW.submitted_late :=\r\n    NEW.submitted_at > v_refund_due_at;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+      },
+      {
+        "name": "trg_notify_refund_transfer_evidence_created",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_notify_refund_transfer_evidence_created AFTER INSERT ON public.refund_transfer_submissions FOR EACH ROW EXECUTE FUNCTION notify_refund_transfer_evidence_created()",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "function_owner": "postgres",
+        "security_definer": true,
+        "function_definition": "CREATE OR REPLACE FUNCTION public.notify_refund_transfer_evidence_created()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\nDECLARE\r\n  v_customer_id uuid;\r\nBEGIN\r\n  SELECT b.customer_id INTO v_customer_id\r\n  FROM public.bookings b\r\n  WHERE b.id = NEW.booking_id\r\n    AND b.status = 'cancelled'\r\n    AND COALESCE(b.refund_amount, 0) > 0;\r\n\r\n  IF v_customer_id IS NOT NULL THEN\r\n    INSERT INTO public.notifications\r\n      (user_id, title, message, type, booking_id, is_read)\r\n    VALUES\r\n      (v_customer_id,\r\n       'Refund Transfer Submitted',\r\n       'The caterer submitted refund transfer evidence. Check your wallet or bank account and confirm receipt only after the funds arrive.',\r\n       'refund_transfer_submitted',\r\n       NEW.booking_id,\r\n       false);\r\n  END IF;\r\n\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+      }
+    ],
+    "rls_forced": false,
+    "constraints": [
+      {
+        "name": "refund_transfer_submissions_booking_id_fkey",
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "refund_transfer_submissions_booking_id_key",
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (booking_id)"
+      },
+      {
+        "name": "refund_transfer_submissions_caterer_id_fkey",
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (caterer_id) REFERENCES caterers(id)"
+      },
+      {
+        "name": "refund_transfer_submissions_pkey",
+        "validated": true,
+        "deferrable": false,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "refund_transfer_submissions_proof_path_check",
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((length(proof_path) > 0))"
+      },
+      {
+        "name": "refund_transfer_submissions_status_check",
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((status = ANY (ARRAY['submitted'::text, 'verified'::text, 'rejected'::text])))"
+      },
+      {
+        "name": "refund_transfer_submissions_transfer_reference_check",
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((length(btrim(transfer_reference)) >= 5))"
+      }
+    ],
+    "rls_enabled": true,
+    "raw_table_acl": [
+      "postgres=arwdDxtm/postgres",
+      "anon=rDxtm/postgres",
+      "authenticated=rDxtm/postgres",
+      "service_role=arwdDxtm/postgres"
+    ],
+    "effective_table_privileges": [
+      {
+        "role": "authenticated",
+        "delete": false,
+        "insert": false,
+        "select": true,
+        "update": false,
+        "truncate": true
+      },
+      {
+        "role": "anon",
+        "delete": false,
+        "insert": false,
+        "select": true,
+        "update": false,
+        "truncate": true
+      },
+      {
+        "role": "service_role",
+        "delete": true,
+        "insert": true,
+        "select": true,
+        "update": true,
+        "truncate": true
+      }
+    ],
+    "effective_column_privileges": [
+      {
+        "role": "anon",
+        "column": "id",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "id",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "id",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "booking_id",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "booking_id",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "booking_id",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "caterer_id",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "caterer_id",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "caterer_id",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "transfer_reference",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "transfer_reference",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "transfer_reference",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "proof_path",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "proof_path",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "proof_path",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "status",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "status",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "status",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "review_note",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "review_note",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "review_note",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "submitted_at",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "submitted_at",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "submitted_at",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "reviewed_at",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "reviewed_at",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "reviewed_at",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "reviewed_by",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "reviewed_by",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "reviewed_by",
+        "insert": true,
+        "select": true,
+        "update": true
+      },
+      {
+        "role": "anon",
+        "column": "submitted_late",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "column": "submitted_late",
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "column": "submitted_late",
+        "insert": true,
+        "select": true,
+        "update": true
+      }
+    ]
+  },
+  "table_exists": true
+}

@@ -176,6 +176,24 @@ const CATERER_FAQS: FAQ[] = [
     answer: 'Use Complaints to submit details of the issue so Platform Staff can review it.',
   },
   {
+    id: 'account-appeal',
+    category: 'Account & Security',
+    question: 'How can I appeal a suspended account?',
+    answer: 'If your account has been suspended, log in to CaterConnect and follow the appeal instructions displayed on the suspension notice. Explain why you believe the suspension should be reviewed and submit your appeal to Platform Staff. If your appeal is rejected, you can review the explanation, edit your appeal, and resubmit it. If Platform Staff approves your appeal, it will be forwarded to the System Administrator for the final account reinstatement process.',
+  },
+  {
+    id: 'forgot-password',
+    category: 'Account & Security',
+    question: 'What should I do if I forget my password?',
+    answer: 'On the login screen, select Forgot Password and enter the email address registered to your CaterConnect account. Follow the password reset instructions sent to your email.',
+  },
+  {
+    id: 'reset-password',
+    category: 'Account & Security',
+    question: 'How can I reset my password?',
+    answer: 'If you cannot log in, select Forgot Password on the login screen and enter your registered email address. Follow the instructions sent to your email to create a new password. If you can still access your account, use the password-changing option in your account settings if available.',
+  },
+  {
     id: 'account',
     category: 'Account',
     question: 'How do I update my business information?',

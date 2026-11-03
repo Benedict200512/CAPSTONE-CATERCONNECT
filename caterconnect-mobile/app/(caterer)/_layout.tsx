@@ -1,5 +1,12 @@
-import { Tabs } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Tabs, Redirect } from 'expo-router';
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+} from 'react-native';
+
 import {
   LayoutDashboard,
   Package,
@@ -9,23 +16,42 @@ import {
   Store,
 } from 'lucide-react-native';
 
+import { useAuth } from '../../context/AuthContext';
+
 const ORANGE = '#F97316';
 const GRAY = '#9CA3AF';
 const ACTIVE_BG = '#FFF7ED';
 
 // Reusable Tab Item Component
-function TabItem({ label, icon: Icon, focused }: { label: string; icon: any; focused: boolean }) {
+function TabItem({
+  label,
+  icon: Icon,
+  focused,
+}: {
+  label: string;
+  icon: any;
+  focused: boolean;
+}) {
   return (
     <View style={styles.tabItem}>
-      <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-        <Icon 
-          size={20} 
-          color={focused ? ORANGE : GRAY} 
-          strokeWidth={focused ? 2.5 : 2} 
+      <View
+        style={[
+          styles.iconWrap,
+          focused && styles.iconWrapActive,
+        ]}
+      >
+        <Icon
+          size={20}
+          color={focused ? ORANGE : GRAY}
+          strokeWidth={focused ? 2.5 : 2}
         />
       </View>
+
       <Text
-        style={[styles.tabLabel, focused && styles.tabLabelActive]}
+        style={[
+          styles.tabLabel,
+          focused && styles.tabLabelActive,
+        ]}
         numberOfLines={1}
         adjustsFontSizeToFit
       >
@@ -36,6 +62,37 @@ function TabItem({ label, icon: Icon, focused }: { label: string; icon: any; foc
 }
 
 export default function CatererLayout() {
+  const { session, profile, loading } = useAuth();
+
+  // Wait until authentication and profile information are loaded.
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={ORANGE} />
+      </View>
+    );
+  }
+
+  // Not logged in: return to Login.
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
+  // Profile unavailable: return to Welcome.
+  if (!profile) {
+    return <Redirect href="/(auth)/welcome" />;
+  }
+
+  // Suspended caterers cannot access any caterer dashboard screen.
+  if (profile.status?.trim().toLowerCase() === 'suspended') {
+    return <Redirect href="/(auth)/login" />;
+  }
+
+  // Only caterer accounts can access this layout.
+  if (profile.role !== 'caterer') {
+    return <Redirect href="/(auth)/welcome" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -44,67 +101,134 @@ export default function CatererLayout() {
         tabBarStyle: styles.tabBar,
       }}
     >
+      {/* MAIN TAB SCREENS */}
+
       <Tabs.Screen
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabItem label="Dashboard" icon={LayoutDashboard} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="packages"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Packages" icon={Package} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="menu"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Menu" icon={Utensils} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="bookings"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Bookings" icon={CalendarDays} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Messages" icon={MessageSquare} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabItem label="Business" icon={Store} focused={focused} />
+            <TabItem
+              label="Dashboard"
+              icon={LayoutDashboard}
+              focused={focused}
+            />
           ),
         }}
       />
 
-      {/* Hidden screens */}
-      <Tabs.Screen name="reports" options={{ href: null }} />
-      <Tabs.Screen name="availability" options={{ href: null }} />
-      <Tabs.Screen name="edit-profile"  options={{ href: null }} />
-      <Tabs.Screen name="faq"  options={{ href: null }} />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
-      <Tabs.Screen name="complaints"    options={{ href: null }} />
+      <Tabs.Screen
+        name="packages"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabItem
+              label="Packages"
+              icon={Package}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="menu"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabItem
+              label="Menu"
+              icon={Utensils}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="bookings"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabItem
+              label="Bookings"
+              icon={CalendarDays}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="messages"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabItem
+              label="Messages"
+              icon={MessageSquare}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabItem
+              label="Business"
+              icon={Store}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+
+      {/* HIDDEN ROUTES */}
+
+      <Tabs.Screen
+        name="subscription"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
+        name="reports"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
+        name="availability"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
+        name="edit-profile"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
+        name="faq"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
+        name="complaints"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+
   tabBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
@@ -118,13 +242,15 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
+
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minWidth: 50, // Adjusted for 6 tabs to fit properly
+    minWidth: 50,
   },
+
   iconWrap: {
     width: 44,
     height: 28,
@@ -132,9 +258,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   iconWrapActive: {
     backgroundColor: ACTIVE_BG,
   },
+
   tabLabel: {
     fontSize: 10,
     fontWeight: '600',
@@ -143,6 +271,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
+
   tabLabelActive: {
     color: ORANGE,
     fontWeight: '800',

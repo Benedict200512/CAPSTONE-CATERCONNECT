@@ -1,12 +1,23 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Mail, Lock, Eye, EyeOff, ShieldCheck,
-  MessageCircle, BarChart3, ArrowRight, AlertTriangle, KeyRound, Calendar,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  Search,
+  Utensils,
+  CalendarCheck,
+  ArrowRight,
+  AlertTriangle,
+  Sparkles,
+  ChefHat,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { signIn } from '../lib/auth';
 import { useAuth } from '../context/AuthContext';
+
 const caterLogo = '/images/caterlogo.png';
 
 export default function Login() {
@@ -15,29 +26,38 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
   const { profile, loading: authLoading } = useAuth();
 
-  // Prevent auto-redirect if the profile is suspended
   useEffect(() => {
     if (!authLoading && profile) {
       if ((profile as any).status === 'suspended') {
         supabase.auth.signOut();
         return;
       }
-      if (profile.role === 'admin') navigate('/admin', { replace: true });
-      else if (profile.role === 'staff') navigate('/staff', { replace: true });
+
+      if (profile.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (profile.role === 'staff') {
+        navigate('/staff', { replace: true });
+      } else if (profile.role === 'caterer') {
+        navigate('/caterer', { replace: true });
+      }
     }
   }, [profile, authLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
     if (!email || !password) {
       setError('Please enter your email and password.');
       return;
     }
+
     setLoading(true);
+
     const { data, error: signInError } = await signIn(email, password);
 
     if (signInError) {
@@ -46,7 +66,6 @@ export default function Login() {
       return;
     }
 
-    // Fetch both role and status from the profiles table
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('role, status')
@@ -59,7 +78,6 @@ export default function Login() {
       return;
     }
 
-    // Block login and force sign out if the account is suspended
     if (profileData.status === 'suspended') {
       await supabase.auth.signOut();
       setLoading(false);
@@ -69,314 +87,674 @@ export default function Login() {
 
     setLoading(false);
 
-    // Strict Role Check: Only allow admin and staff internally, but fail safely without giving clues to attackers
     const role = profileData.role;
+
     if (role === 'admin') {
-      navigate('/admin');
+      navigate('/admin', { replace: true });
     } else if (role === 'staff') {
-      navigate('/staff');
+      navigate('/staff', { replace: true });
+    } else if (role === 'caterer') {
+      navigate('/caterer', { replace: true });
     } else {
       await supabase.auth.signOut();
       setError('Access denied. Invalid portal credentials.');
     }
   };
 
-  const features = [
-    { Icon: ShieldCheck, title: 'Verify Partners', desc: 'Review provider applications and compliance documents' },
-    { Icon: Calendar, title: 'Manage Bookings', desc: 'Track and update reservation lifecycle statuses' },
-    { Icon: MessageCircle, title: 'Handle Support', desc: 'Resolve queries and manage dispute channels' },
-    { Icon: BarChart3, title: 'Platform Analytics', desc: 'Monitor system activity, growth, and metrics' },
+  const benefits = [
+    {
+      Icon: Search,
+      title: 'Discover Catering Services',
+      description:
+        'Explore catering providers, menus, and packages for your next event.',
+    },
+    {
+      Icon: CalendarCheck,
+      title: 'Simplify Event Planning',
+      description:
+        'Find packages that fit your event needs, guest count, and budget.',
+    },
+    {
+      Icon: Utensils,
+      title: 'Connect With Caterers',
+      description:
+        'Bring customers and catering professionals together in one place.',
+    },
   ];
 
   return (
-    <div style={styles.page}>
-      {/* Left Banner Panel */}
-      <div style={styles.leftPanel}>
-        <div style={styles.imageOverlay} />
-        <div style={styles.leftContent}>
-          <div style={styles.brandRow}>
-            <div style={styles.brandMark}>
-              <img src={caterLogo} alt="CaterConnect Logo" style={styles.logoImg} />
+    <div className="login-page">
+      <section className="login-intro">
+        <div className="login-intro-overlay" />
+
+        <div className="login-intro-content">
+          <div className="login-brand">
+            <div className="login-brand-logo">
+              <img src={caterLogo} alt="CaterConnect" />
             </div>
-            <div style={styles.brandTextContainer}>
-              <div style={styles.brand}>
-                <span style={{ color: '#111' }}>CATER</span>
-                <span style={{ color: '#F97316' }}>CONNECT</span>
+
+            <div>
+              <div className="login-brand-name">
+                <span>CATER</span>
+                <span>CONNECT</span>
               </div>
-              <span style={styles.brandSubText}>Secure Management Gateway</span>
+              <p>Your Event. Your Food. Connected.</p>
             </div>
           </div>
 
-          <h1 style={styles.leftTitle}>
-            Manage. Verify. Keep<br />
-            <span style={{ color: '#F97316' }}>CaterConnect Running.</span>
-          </h1>
-          <p style={styles.leftSub}>
-            Access the system dashboard to coordinate marketplace operations, verify partners, manage reservations, and ensure seamless experiences.
-          </p>
+          <div className="login-hero">
+            <div className="login-eyebrow">
+              <Sparkles size={15} />
+              <span>YOUR CATERING MARKETPLACE</span>
+            </div>
 
-          <div style={styles.featureList}>
-            {features.map((f, idx) => (
-              <div key={idx} style={styles.featureItem}>
-                <div style={styles.featureIconWrap}>
-                  <f.Icon size={18} color="#EA580C" />
+            <h1>
+              Find the right
+              <br />
+              caterer for every
+              <br />
+              <span>special occasion.</span>
+            </h1>
+
+            <p className="login-hero-description">
+              CaterConnect brings customers and catering professionals
+              together. Discover catering services, explore food packages,
+              and make planning your next event easier.
+            </p>
+
+            <div className="login-benefits">
+              {benefits.map(({ Icon, title, description }) => (
+                <div className="login-benefit" key={title}>
+                  <div className="login-benefit-icon">
+                    <Icon size={20} />
+                  </div>
+
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{description}</p>
+                  </div>
                 </div>
-                <div>
-                  <div style={styles.featureTitle}>{f.title}</div>
-                  <div style={styles.featureDesc}>{f.desc}</div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+
+          <div className="login-intro-footer">
+            <ChefHat size={17} />
+            <span>Making every celebration more memorable.</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Right Form Panel */}
-      <div style={styles.rightPanel}>
-        <div style={styles.formCard}>
-          <div style={styles.formHeader}>
-            <div style={styles.formLogo}>
-              <img src={caterLogo} alt="CaterConnect Logo" style={styles.logoImgSm} />
-            </div>
-            <h2 style={styles.formTitle}>Login</h2>
-            <p style={styles.formSub}>Authenticate to access your workspace dashboard.</p>
+      <section className="login-form-section">
+        <div className="login-form-card">
+          <div className="login-mobile-brand">
+            <img src={caterLogo} alt="CaterConnect" />
+            <span>
+              CATER<span>CONNECT</span>
+            </span>
           </div>
 
-          <form onSubmit={handleLogin} style={styles.form}>
-            <label style={styles.label} htmlFor="email">Email Address</label>
-            <div style={styles.inputWrap}>
-              <Mail size={17} color="#9CA3AF" style={{ flexShrink: 0 }} />
-              <input
-                id="email"
-                style={styles.input}
-                type="email"
-                placeholder="name@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
+          <div className="login-form-heading">
+            <div className="login-form-icon">
+              <Lock size={23} />
             </div>
 
-            <div style={styles.passwordHeaderRow}>
-              <label style={styles.label} htmlFor="password">Password</label>
-              <a href="#forgot" onClick={(e) => e.preventDefault()} style={styles.forgotLink}>Forgot password?</a>
+            <h2>Welcome Back!</h2>
+            <p>
+              Sign in to your CaterConnect account and continue where you left
+              off.
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="login-form">
+            <div className="login-field">
+              <label htmlFor="email">Email Address</label>
+
+              <div className="login-input-wrap">
+                <Mail size={18} />
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
             </div>
-            <div style={styles.inputWrap}>
-              <Lock size={17} color="#9CA3AF" style={{ flexShrink: 0 }} />
-              <input
-                id="password"
-                style={styles.input}
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={styles.eyeBtn}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={18} color="#6B7280" /> : <Eye size={18} color="#6B7280" />}
-              </button>
+
+            <div className="login-field">
+              <div className="login-password-heading">
+                <label htmlFor="password">Password</label>
+              </div>
+
+              <div className="login-input-wrap">
+                <Lock size={18} />
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+
+                <button
+                  type="button"
+                  className="login-eye-button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {error && (
-              <div style={styles.errorBox}>
-                <AlertTriangle size={16} color="#991B1B" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div className="login-error">
+                <AlertTriangle size={17} />
                 <span>{error}</span>
               </div>
             )}
 
-            <button type="submit" style={styles.submitBtn} disabled={loading}>
+            <button
+              type="submit"
+              className="login-submit"
+              disabled={loading}
+            >
               {loading ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>Signing in</span>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', paddingTop: 2 }}>
-                    <span className="bounce-dot" style={{ animationDelay: '0s' }} />
-                    <span className="bounce-dot" style={{ animationDelay: '0.15s' }} />
-                    <span className="bounce-dot" style={{ animationDelay: '0.3s' }} />
-                  </div>
-                </div>
+                <>
+                  <span>Signing in...</span>
+                  <span className="login-spinner" />
+                </>
               ) : (
                 <>
-                  <span>Sign In</span>
-                  <ArrowRight size={16} />
+                  <span>Sign In to CaterConnect</span>
+                  <ArrowRight size={18} />
                 </>
               )}
             </button>
           </form>
 
-          <div style={styles.roleInfo}>
-            <KeyRound size={16} color="#C2410C" style={{ flexShrink: 0, marginTop: 1 }} />
-            <div>
-              <div style={styles.roleTitle}>Restricted Environment</div>
-              <div style={styles.roleInfoText}>Secure Enterprise Gateway Session</div>
-            </div>
+          <div className="login-security-note">
+            <Lock size={15} />
+            <span>Your account information is protected and secure.</span>
+          </div>
+
+          <div className="login-form-footer">
+            <p>
+              Connecting people through great food and memorable events.
+            </p>
+            <span>© {new Date().getFullYear()} CaterConnect</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Scoped CSS Keyframes for the Bouncing Dots */}
       <style>{`
-        @keyframes bounceDot {
-          0%, 80%, 100% { transform: scale(0); }
-          40% { transform: scale(1.0); }
+        .login-page {
+          min-height: 100vh;
+          display: flex;
+          font-family: 'Inter', system-ui, sans-serif;
+          background: #FAF8F5;
+          color: #171717;
         }
-        .bounce-dot {
-          width: 5px;
-          height: 5px;
-          background-color: white;
+
+        .login-intro {
+          flex: 1;
+          min-height: 100vh;
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          padding: 48px clamp(32px, 6vw, 90px);
+          background:
+            linear-gradient(135deg, rgba(255,247,237,.96), rgba(255,228,204,.91)),
+            url('/images/background-cater.png') center/cover;
+        }
+
+        .login-intro-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background:
+            radial-gradient(circle at 85% 15%, rgba(249,115,22,.13), transparent 35%),
+            radial-gradient(circle at 10% 90%, rgba(255,255,255,.8), transparent 40%);
+        }
+
+        .login-intro-content {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          max-width: 610px;
+          margin: auto;
+        }
+
+        .login-brand {
+          display: flex;
+          align-items: center;
+          gap: 13px;
+          margin-bottom: 75px;
+        }
+
+        .login-brand-logo {
+          width: 54px;
+          height: 54px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 7px;
+          background: white;
+          border-radius: 15px;
+          box-shadow: 0 5px 18px rgba(249,115,22,.12);
+        }
+
+        .login-brand-logo img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+        }
+
+        .login-brand-name {
+          display: flex;
+          gap: 4px;
+          font-size: 21px;
+          font-weight: 900;
+          letter-spacing: 1px;
+        }
+
+        .login-brand-name span:last-child {
+          color: #F97316;
+        }
+
+        .login-brand p {
+          margin: 3px 0 0;
+          font-size: 11px;
+          color: #78716C;
+          font-weight: 600;
+        }
+
+        .login-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 13px;
+          background: rgba(249,115,22,.09);
+          border: 1px solid rgba(249,115,22,.18);
+          color: #C2410C;
+          border-radius: 30px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 1px;
+          margin-bottom: 22px;
+        }
+
+        .login-hero h1 {
+          font-size: clamp(38px, 4.3vw, 59px);
+          font-weight: 900;
+          line-height: 1.12;
+          letter-spacing: -2px;
+          color: #171717;
+          margin: 0 0 20px;
+        }
+
+        .login-hero h1 span {
+          color: #F97316;
+        }
+
+        .login-hero-description {
+          max-width: 500px;
+          font-size: 15px;
+          line-height: 1.8;
+          color: #57534E;
+          margin: 0 0 38px;
+        }
+
+        .login-benefits {
+          display: flex;
+          flex-direction: column;
+          gap: 23px;
+        }
+
+        .login-benefit {
+          display: flex;
+          align-items: flex-start;
+          gap: 15px;
+        }
+
+        .login-benefit-icon {
+          width: 43px;
+          height: 43px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          color: #EA580C;
+          background: white;
+          border: 1px solid #FED7AA;
+          border-radius: 13px;
+          box-shadow: 0 3px 9px rgba(0,0,0,.035);
+        }
+
+        .login-benefit h3 {
+          margin: 1px 0 4px;
+          color: #292524;
+          font-size: 14px;
+          font-weight: 800;
+        }
+
+        .login-benefit p {
+          margin: 0;
+          color: #78716C;
+          font-size: 12.5px;
+          line-height: 1.6;
+          max-width: 400px;
+        }
+
+        .login-intro-footer {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          color: #A16207;
+          font-size: 12px;
+          font-weight: 600;
+          margin-top: 55px;
+        }
+
+        .login-form-section {
+          width: 490px;
+          flex-shrink: 0;
+          min-height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 45px;
+          background: #FAF8F5;
+        }
+
+        .login-form-card {
+          width: 100%;
+          max-width: 390px;
+        }
+
+        .login-mobile-brand {
+          display: none;
+        }
+
+        .login-form-heading {
+          margin-bottom: 35px;
+        }
+
+        .login-form-icon {
+          width: 53px;
+          height: 53px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #FFF1E6;
+          color: #EA580C;
+          border: 1px solid #FED7AA;
+          border-radius: 15px;
+          margin-bottom: 22px;
+        }
+
+        .login-form-heading h2 {
+          font-size: 30px;
+          font-weight: 900;
+          letter-spacing: -1px;
+          margin: 0 0 9px;
+          color: #171717;
+        }
+
+        .login-form-heading p {
+          margin: 0;
+          font-size: 13.5px;
+          line-height: 1.7;
+          color: #78716C;
+        }
+
+        .login-form {
+          display: flex;
+          flex-direction: column;
+          gap: 21px;
+        }
+
+        .login-field label {
+          display: block;
+          margin-bottom: 9px;
+          color: #292524;
+          font-size: 13px;
+          font-weight: 750;
+        }
+
+        .login-input-wrap {
+          min-height: 51px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 0 15px;
+          border: 1px solid #E7E5E4;
+          border-radius: 12px;
+          background: white;
+          color: #A8A29E;
+          transition: border-color .2s, box-shadow .2s;
+        }
+
+        .login-input-wrap:focus-within {
+          border-color: #F97316;
+          box-shadow: 0 0 0 3px rgba(249,115,22,.10);
+        }
+
+        .login-input-wrap input {
+          min-width: 0;
+          flex: 1;
+          border: none;
+          outline: none;
+          background: transparent;
+          color: #171717;
+          font-family: inherit;
+          font-size: 13.5px;
+          padding: 15px 0;
+        }
+
+        .login-input-wrap input::placeholder {
+          color: #A8A29E;
+        }
+
+        .login-eye-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 5px;
+          border: none;
+          background: transparent;
+          color: #78716C;
+          cursor: pointer;
+        }
+
+        .login-eye-button:hover {
+          color: #EA580C;
+        }
+
+        .login-error {
+          display: flex;
+          align-items: flex-start;
+          gap: 9px;
+          padding: 12px 14px;
+          border: 1px solid #FECACA;
+          border-radius: 11px;
+          background: #FEF2F2;
+          color: #991B1B;
+          font-size: 12.5px;
+          line-height: 1.5;
+        }
+
+        .login-error svg {
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+
+        .login-submit {
+          width: 100%;
+          min-height: 53px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          margin-top: 3px;
+          padding: 14px 20px;
+          border: none;
+          border-radius: 12px;
+          background: linear-gradient(135deg, #F97316, #EA580C);
+          color: white;
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 800;
+          cursor: pointer;
+          box-shadow: 0 5px 14px rgba(249,115,22,.22);
+          transition: transform .2s, box-shadow .2s, opacity .2s;
+        }
+
+        .login-submit:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 18px rgba(249,115,22,.28);
+        }
+
+        .login-submit:disabled {
+          opacity: .7;
+          cursor: not-allowed;
+        }
+
+        .login-spinner {
+          width: 15px;
+          height: 15px;
+          border: 2px solid rgba(255,255,255,.4);
+          border-top-color: white;
           border-radius: 50%;
-          display: inline-block;
-          animation: bounceDot 1.4s infinite ease-in-out both;
+          animation: loginSpin .7s linear infinite;
+        }
+
+        @keyframes loginSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        .login-security-note {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-top: 25px;
+          color: #78716C;
+          font-size: 11.5px;
+        }
+
+        .login-security-note svg {
+          color: #16A34A;
+        }
+
+        .login-form-footer {
+          border-top: 1px solid #E7E5E4;
+          margin-top: 40px;
+          padding-top: 20px;
+          text-align: center;
+        }
+
+        .login-form-footer p {
+          color: #78716C;
+          font-size: 11.5px;
+          margin: 0 0 9px;
+        }
+
+        .login-form-footer span {
+          color: #A8A29E;
+          font-size: 11px;
+        }
+
+        @media (max-width: 1000px) {
+          .login-form-section {
+            width: 420px;
+            padding: 35px;
+          }
+
+          .login-intro {
+            padding: 40px;
+          }
+
+          .login-brand {
+            margin-bottom: 55px;
+          }
+
+          .login-hero h1 {
+            font-size: 43px;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .login-page {
+            flex-direction: column;
+          }
+
+          .login-intro {
+            min-height: auto;
+            padding: 35px 25px;
+          }
+
+          .login-brand {
+            margin-bottom: 42px;
+          }
+
+          .login-hero h1 {
+            font-size: 39px;
+          }
+
+          .login-hero-description {
+            margin-bottom: 28px;
+          }
+
+          .login-benefits {
+            gap: 17px;
+          }
+
+          .login-intro-footer {
+            margin-top: 32px;
+          }
+
+          .login-form-section {
+            width: 100%;
+            min-height: auto;
+            padding: 45px 25px;
+          }
+
+          .login-form-card {
+            max-width: 450px;
+          }
+
+          .login-form-heading h2 {
+            font-size: 27px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .login-intro {
+            padding: 28px 20px;
+          }
+
+          .login-hero h1 {
+            font-size: 34px;
+          }
+
+          .login-hero-description {
+            font-size: 13.5px;
+          }
+
+          .login-form-section {
+            padding: 38px 20px;
+          }
+
+          .login-form-heading h2 {
+            font-size: 25px;
+          }
         }
       `}</style>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: { display: 'flex', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif", background: '#FAF8F5' },
-
-  leftPanel: {
-    flex: 1,
-    position: 'relative',
-    background: 'linear-gradient(135deg, #FFF5EC 0%, #FFE4CC 100%), url("/images/background-cater.png")',
-    backgroundBlendMode: 'overlay',
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    padding: '56px 64px',
-    overflow: 'hidden',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    inset: 0,
-    background: 'radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 245, 236, 0.95) 70%)',
-    pointerEvents: 'none',
-  },
-  leftContent: { maxWidth: 500, position: 'relative', zIndex: 1 },
-
-  brandRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 },
-  brandMark: {
-    width: 48, height: 48, borderRadius: 14,
-    background: 'white',
-    boxShadow: '0 4px 12px rgba(249,115,22,0.15)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 6,
-  },
-  logoImg: { width: '100%', height: '100%', objectFit: 'contain' },
-  brandTextContainer: { display: 'flex', flexDirection: 'column' },
-  brand: { fontSize: 20, fontWeight: 900, letterSpacing: 1.5, lineHeight: 1.1 },
-  brandSubText: { fontSize: 11.5, color: '#78716C', fontWeight: 600, letterSpacing: 0.2, marginTop: 2 },
-
-  leftTitle: {
-    fontSize: 42, fontWeight: 900, color: '#111827',
-    lineHeight: 1.15, marginBottom: 16, letterSpacing: '-0.02em',
-  },
-  leftSub: {
-    fontSize: 15, color: '#4B5563',
-    lineHeight: 1.65, marginBottom: 36, maxWidth: 460,
-  },
-
-  featureList: { display: 'flex', flexDirection: 'column', gap: 16 },
-  featureItem: { display: 'flex', alignItems: 'flex-start', gap: 14 },
-  featureIconWrap: {
-    width: 38, height: 38,
-    background: 'white',
-    border: '1px solid #FED7AA',
-    borderRadius: 12,
-    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0, marginTop: 2,
-  },
-  featureTitle: { fontSize: 14.5, fontWeight: 700, color: '#1F2937', marginBottom: 2 },
-  featureDesc: { fontSize: 13, color: '#6B7280', lineHeight: 1.4 },
-
-  rightPanel: {
-    width: 520,
-    background: '#FAF8F5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '48px 40px',
-  },
-  formCard: {
-    width: '100%',
-    background: 'white',
-    borderRadius: 24,
-    padding: '44px 38px',
-    border: '1px solid #E8E4DE',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-  },
-  formHeader: { marginBottom: 28 },
-  formLogo: {
-    width: 52, height: 52, borderRadius: 14,
-    background: '#FFF7ED', border: '1px solid #FED7AA',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    marginBottom: 20, padding: 8,
-  },
-  logoImgSm: { width: '100%', height: '100%', objectFit: 'contain' },
-  formTitle: { fontSize: 26, fontWeight: 800, color: '#111', marginBottom: 6, letterSpacing: '-0.01em' },
-  formSub: { fontSize: 14, color: '#6B7280', lineHeight: 1.4 },
-
-  form: { display: 'flex', flexDirection: 'column', gap: 0 },
-  label: {
-    fontSize: 13, fontWeight: 700, color: '#374151',
-    marginBottom: 8, display: 'block',
-  },
-  passwordHeaderRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    marginTop: 4,
-  },
-  forgotLink: {
-    fontSize: 12.5, fontWeight: 600, color: '#F97316',
-    textDecoration: 'none', marginBottom: 8,
-  },
-  inputWrap: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    background: '#F9FAFB', borderRadius: 12,
-    border: '1px solid #E5E7EB', padding: '0 16px',
-    marginBottom: 18,
-    transition: 'all 0.2s',
-  },
-  input: {
-    flex: 1, border: 'none', background: 'transparent',
-    padding: '14px 0', fontSize: 14.5, color: '#1A1A1A', outline: 'none',
-  },
-  eyeBtn: {
-    background: 'none', border: 'none',
-    cursor: 'pointer', padding: '4px', display: 'flex',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  errorBox: {
-    display: 'flex', alignItems: 'flex-start', gap: 8,
-    background: '#FEF2F2', borderRadius: 12,
-    border: '1px solid #FECACA',
-    padding: '12px 16px', marginBottom: 18,
-    fontSize: 13, color: '#991B1B', lineHeight: 1.4,
-  },
-  submitBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-    background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)', color: 'white',
-    border: 'none', borderRadius: 14,
-    padding: '15px 24px', fontSize: 15, fontWeight: 700,
-    cursor: 'pointer', marginTop: 4, marginBottom: 20,
-    width: '100%', boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
-    transition: 'transform 0.1s, opacity 0.15s',
-  },
-  roleInfo: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    background: '#FFF7ED', borderRadius: 14,
-    padding: '14px 16px', border: '1px solid #FED7AA',
-  },
-  roleTitle: { fontSize: 12, fontWeight: 800, color: '#C2410C', textTransform: 'uppercase', letterSpacing: 0.5 },
-  roleInfoText: {
-    fontSize: 12.5, color: '#7C2D12',
-    fontWeight: 600, marginTop: 1,
-  },
-};

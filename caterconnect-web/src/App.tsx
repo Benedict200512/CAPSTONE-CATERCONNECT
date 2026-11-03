@@ -1,7 +1,11 @@
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { LoaderCircle } from 'lucide-react';
+
 import Login from './pages/Login';
 
+// Staff
 import StaffLayout from './pages/staff/StaffLayout';
 import StaffDashboard from './pages/staff/Dashboard';
 import CatererVerification from './pages/staff/CatererVerification';
@@ -11,6 +15,7 @@ import BookingMonitor from './pages/staff/BookingMonitor';
 import AccountMonitoring from './pages/staff/AccountMonitoring';
 import RefundManagement from './pages/staff/RefundManagement';
 
+// Admin
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/Dashboard';
 import UserManagement from './pages/admin/UserManagement';
@@ -20,25 +25,105 @@ import ActivityLogs from './pages/admin/ActivityLogs';
 import PlatformSettings from './pages/admin/PlatformSettings';
 import MaintenanceSecurity from './pages/admin/MaintenanceSecurity';
 
-function ProtectedRoute({ children, allow }: { children: React.ReactNode; allow: string[] }) {
-  const { session, profile, loading } = useAuth();
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>
-      ⏳
+// Caterer
+import CatererLayout from './pages/caterer/CatererLayout';
+import CatererDashboard from './pages/caterer/Dashboard';
+import CatererPackages from './pages/caterer/Packages';
+import CatererMenu from './pages/caterer/Menu';
+import CatererFAQ from './pages/caterer/CatererFAQ';
+import CatererComplaints from './pages/caterer/CatererComplaints';
+import CatererBookings from './pages/caterer/Bookings';
+import CatererAvailability from './pages/caterer/Availability';
+import CatererMessages from './pages/caterer/Messages';
+import CatererBusinessProfile from './pages/caterer/CatererBusinessProfile';
+import CatererReports from './pages/caterer/CatererReports';
+import CatererNotifications from './pages/caterer/Notifications';
+import CatererSubscription from './pages/caterer/CatererSubscription';
+
+// Public
+
+function getRoleHome(role: string) {
+  switch (role) {
+    case 'admin':
+      return '/admin';
+    case 'staff':
+      return '/staff';
+    case 'caterer':
+      return '/caterer';
+    default:
+      return '/login';
+  }
+}
+
+function LoadingScreen() {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <LoaderCircle size={32} className="animate-spin" />
     </div>
   );
-  if (!session || !profile) return <Navigate to="/login" replace />;
-  if (!allow.includes(profile.role)) return <Navigate to="/login" replace />;
+}
+
+function ProtectedRoute({
+  children,
+  allow,
+}: {
+  children: React.ReactNode;
+  allow: string[];
+}) {
+  const { session, profile, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!session || !profile) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!allow.includes(profile.role)) {
+    return <Navigate to={getRoleHome(profile.role)} replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function ApprovedCatererRoute({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { catererData, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (catererData?.verification_status !== 'approved') {
+    return <Navigate to="/caterer" replace />;
+  }
+
   return <>{children}</>;
 }
 
 function RootRedirect() {
   const { session, profile, loading } = useAuth();
-  if (loading) return null;
-  if (!session || !profile) return <Navigate to="/login" replace />;
-  if (profile.role === 'admin') return <Navigate to="/admin" replace />;
-  if (profile.role === 'staff') return <Navigate to="/staff" replace />;
-  return <Navigate to="/login" replace />;
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!session || !profile) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={getRoleHome(profile.role)} replace />;
 }
 
 export default function App() {
@@ -46,30 +131,87 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* LOGIN */}
           <Route path="/login" element={<Login />} />
+
+          {/* ROOT REDIRECT */}
           <Route path="/" element={<RootRedirect />} />
 
-          {/* Staff */}
-          <Route path="/staff" element={<ProtectedRoute allow={['staff', 'admin']}><StaffLayout /></ProtectedRoute>}>
+
+          {/* STAFF PORTAL */}
+          <Route
+            path="/staff"
+            element={
+              <ProtectedRoute allow={['staff', 'admin']}>
+                <StaffLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<StaffDashboard />} />
-            <Route path="verification" element={<CatererVerification />} />
-            <Route path="subscriptions" element={<SubscriptionManager />} />
+            <Route
+              path="verification"
+              element={<CatererVerification />}
+            />
+            <Route
+              path="subscriptions"
+              element={<SubscriptionManager />}
+            />
             <Route path="complaints" element={<Complaints />} />
             <Route path="bookings" element={<BookingMonitor />} />
-            <Route path="account-monitoring" element={<AccountMonitoring />}/>
+            <Route
+              path="account-monitoring"
+              element={<AccountMonitoring />}
+            />
             <Route path="refunds" element={<RefundManagement />} />
           </Route>
 
-          {/* Admin */}
-          <Route path="/admin" element={<ProtectedRoute allow={['admin']}><AdminLayout /></ProtectedRoute>}>
+          {/* ADMIN PORTAL */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allow={['admin']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="revenue" element={<Revenue />} />
             <Route path="reports" element={<Reports />} />
             <Route path="activity" element={<ActivityLogs />} />
             <Route path="settings" element={<PlatformSettings />} />
-            <Route path="maintenance-security" element={<MaintenanceSecurity />} />
+            <Route
+              path="maintenance-security"
+              element={<MaintenanceSecurity />}
+            />
           </Route>
+
+          {/* CATERER PORTAL */}
+          <Route
+            path="/caterer"
+            element={
+              <ProtectedRoute allow={['caterer']}>
+                <CatererLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<CatererDashboard />} />
+            <Route path="subscription" element={<CatererSubscription />} />
+            <Route path="packages" element={<ApprovedCatererRoute><CatererPackages /></ApprovedCatererRoute>} />
+            <Route path="menu" element={<ApprovedCatererRoute><CatererMenu /></ApprovedCatererRoute>} />
+            <Route path="bookings" element={<ApprovedCatererRoute><CatererBookings /></ApprovedCatererRoute>} />
+            <Route path="reports" element={<CatererReports />} />
+            <Route path="notifications" element={<CatererNotifications />} />
+            <Route path="availability" element={<ApprovedCatererRoute><CatererAvailability /></ApprovedCatererRoute>} />
+            <Route path="messages" element={<ApprovedCatererRoute><CatererMessages /></ApprovedCatererRoute>} />
+            <Route path="faq" element={<CatererFAQ />} />
+            <Route path="complaints" element={<CatererComplaints />} />
+            <Route path="profile" element={<CatererBusinessProfile />}
+            />
+          </Route>
+
+          {/* UNKNOWN ROUTES */}
+          <Route path="*" element={<RootRedirect />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

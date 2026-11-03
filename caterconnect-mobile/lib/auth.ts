@@ -1,8 +1,18 @@
 
 import { supabase } from './supabase';
 import { POLICY_VERSION } from '../constants/registrationPolicies';
+import * as Linking from 'expo-linking';
 
 export type AppRole = 'customer' | 'caterer';
+
+export type SignInResult = {
+  data: any | null;
+  error: Error | null;
+  suspended?: boolean;
+  suspensionReason?: string | null;
+  userId?: string;
+  role?: string;
+};
 
 // ==========================================
 // CUSTOMER & CATERER REGISTRATION
@@ -19,7 +29,6 @@ export async function signUp(
   city?: string,
   acceptedTerms: boolean = false
 ) {
-  // Require agreement to CaterConnect registration policies
   if (!acceptedTerms) {
     return {
       data: null,
@@ -29,12 +38,7 @@ export async function signUp(
     };
   }
 
-  // Validate required registration information
-  if (
-    !email.trim() ||
-    !password ||
-    !fullName.trim()
-  ) {
+  if (!email.trim() || !password || !fullName.trim()) {
     return {
       data: null,
       error: new Error(
@@ -43,7 +47,6 @@ export async function signUp(
     };
   }
 
-  // Register customer or caterer using Supabase Auth
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
@@ -55,8 +58,6 @@ export async function signUp(
         address: address?.trim() || null,
         business_name: businessName?.trim() || null,
         city: city?.trim() || null,
-
-        // Registration policy acceptance
         accepted_terms: true,
         policy_version: POLICY_VERSION,
       },
@@ -74,14 +75,11 @@ async function getSuspensionReason(
   userId: string
 ): Promise<string | null> {
   try {
-    // Look for the latest recorded suspension action
     const { data, error } = await supabase
-      .from('account_monitoring_events')
+      .from('account_monitoring_cases')
       .select('reason')
       .eq('user_id', userId)
-      .eq('action', 'suspend')
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .eq('suspended', true)
       .maybeSingle();
 
     if (error) {
@@ -94,10 +92,7 @@ async function getSuspensionReason(
 
     return data?.reason?.trim() || null;
   } catch (error) {
-    console.error(
-      'Error retrieving suspension reason:',
-      error
-    );
+    console.error('Error retrieving suspension reason:', error);
     return null;
   }
 }
@@ -109,15 +104,14 @@ async function getSuspensionReason(
 export async function signIn(
   email: string,
   password: string
-) {
+): Promise<SignInResult> {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
     password,
   });
 
-  // Return Supabase authentication errors
   if (error) {
-    return { data, error };
+    return { data: null, error };
   }
 
   if (!data.user) {
@@ -129,7 +123,6 @@ export async function signIn(
     };
   }
 
-  // Retrieve the user's account status
   const { data: profileData, error: profileError } =
     await supabase
       .from('profiles')
@@ -137,7 +130,6 @@ export async function signIn(
       .eq('id', data.user.id)
       .maybeSingle();
 
-  // Prevent access if account status cannot be verified
   if (profileError || !profileData) {
     await supabase.auth.signOut();
 
@@ -149,44 +141,95 @@ export async function signIn(
     };
   }
 
-  // ========================================
-  // SUSPENDED ACCOUNT
-  // ========================================
+  // Suspended account
+  if (
+    String(profileData.status || '').toLowerCase().trim() ===
+    'suspended'
+  ) {
+    const suspensionReason = await getSuspensionReason(data.user.id);
 
-  if (profileData.status === 'suspended') {
-    // Retrieve the latest suspension reason
-    const suspensionReason = await getSuspensionReason(
-      data.user.id
-    );
-
-    // Sign out to prevent access to the platform
-    await supabase.auth.signOut();
-
-    const accountType =
+    if (
+      profileData.role === 'customer' ||
       profileData.role === 'caterer'
-        ? 'caterer'
-        : profileData.role === 'customer'
-        ? 'customer'
-        : 'user';
+    ) {
+      return {
+        data,
+        error: null,
+        suspended: true,
+        suspensionReason,
+        userId: data.user.id,
+        role: profileData.role,
+      };
+    }
 
-    const reasonText = suspensionReason
-      ? `Reason: ${suspensionReason}`
-      : 'Reason: Please contact CaterConnect support for details about your account suspension.';
-
-    const errorMessage =
-      `Your CaterConnect ${accountType} account has been suspended.\n\n` +
-      `${reasonText}\n\n` +
-      'You cannot access the platform while your account is suspended. ' +
-      'Please contact CaterConnect support if you need assistance or wish to request a review.';
+    await supabase.auth.signOut();
 
     return {
       data: null,
-      error: new Error(errorMessage),
+      error: new Error('Your account has been suspended.'),
+      suspended: true,
+      suspensionReason,
+      userId: data.user.id,
+      role: profileData.role,
     };
   }
 
-  // Login successful
-  return { data, error };
+  return {
+    data,
+    error: null,
+    suspended: false,
+    userId: data.user.id,
+    role: profileData.role,
+  };
+}
+
+// ==========================================
+// SUBMIT ACCOUNT APPEAL
+// ==========================================
+
+export async function submitAccountAppeal(
+  appealMessage: string,
+  evidenceUrl?: string | null
+): Promise<{ data: string | null; error: Error | null }> {
+  const message = appealMessage.trim();
+
+  if (message.length < 10) {
+    return {
+      data: null,
+      error: new Error(
+        'Your appeal must contain at least 10 characters.'
+      ),
+    };
+  }
+
+  if (message.length > 5000) {
+    return {
+      data: null,
+      error: new Error(
+        'Your appeal cannot exceed 5000 characters.'
+      ),
+    };
+  }
+
+  const { data, error } = await supabase.rpc(
+    'submit_account_appeal',
+    {
+      p_appeal_message: message,
+      p_evidence_url: evidenceUrl?.trim() || null,
+    }
+  );
+
+  if (error) {
+    return {
+      data: null,
+      error: new Error(error.message),
+    };
+  }
+
+  return {
+    data: data as string,
+    error: null,
+  };
 }
 
 // ==========================================
@@ -195,7 +238,6 @@ export async function signIn(
 
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
-
   return { error };
 }
 
@@ -215,9 +257,7 @@ export async function logoutUser() {
 // RESEND EMAIL VERIFICATION
 // ==========================================
 
-export async function resendVerificationEmail(
-  email: string
-) {
+export async function resendVerificationEmail(email: string) {
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email: email.trim().toLowerCase(),
@@ -226,4 +266,64 @@ export async function resendVerificationEmail(
   if (error) {
     throw error;
   }
+}
+
+// ==========================================
+// SEND PASSWORD RESET EMAIL
+// EXPO GO
+// ==========================================
+
+export async function sendPasswordResetEmail(email: string) {
+  const cleanEmail = email.trim().toLowerCase();
+
+  if (!cleanEmail) {
+    throw new Error('Please enter your email address.');
+  }
+
+  // Temporary diagnostic test for Expo Go
+  const redirectTo =
+    'exp://192.168.254.102:8081/--/reset-password';
+
+  console.log('RESET EMAIL:', cleanEmail);
+  console.log('RESET REDIRECT:', redirectTo);
+
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    cleanEmail,
+    { redirectTo }
+  );
+
+  if (error) {
+    console.error('PASSWORD RESET ERROR:', error.message);
+    throw error;
+  }
+}
+
+// ==========================================
+// UPDATE USER PASSWORD
+// ==========================================
+
+export async function updateUserPassword(password: string) {
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    password,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+// ==========================================
+// CHECK EMAIL VERIFICATION
+// ==========================================
+
+export function isEmailVerified(
+  emailConfirmedAt?: string | null
+): boolean {
+  return Boolean(emailConfirmedAt);
 }

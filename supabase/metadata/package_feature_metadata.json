@@ -1,0 +1,664 @@
+{
+  "columns": [
+    {
+      "name": "id",
+      "type": "uuid",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "nullable": false,
+      "position": 1,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "caterer_id",
+      "type": "uuid",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": false,
+      "position": 2,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "tier",
+      "type": "text",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": false,
+      "position": 3,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": false,
+      "position": 4,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "description",
+      "type": "text",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": true,
+      "position": 5,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "price",
+      "type": "numeric",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": false,
+      "position": 6,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "guest_capacity",
+      "type": "integer",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": false,
+      "position": 7,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "nullable": true,
+      "position": 8,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "min_guests",
+      "type": "integer",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": true,
+      "position": 9,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "image_url",
+      "type": "text",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": true,
+      "position": 10,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "includes",
+      "type": "text[]",
+      "comment": null,
+      "default": "'{}'::text[]",
+      "identity": "",
+      "nullable": true,
+      "position": 11,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "event_types",
+      "type": "text[]",
+      "comment": null,
+      "default": "'{}'::text[]",
+      "identity": "",
+      "nullable": true,
+      "position": 12,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    },
+    {
+      "name": "food_inclusions",
+      "type": "text[]",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "nullable": true,
+      "position": 13,
+      "generated": "",
+      "type_kind": "b",
+      "enum_values": null,
+      "domain_base_type": null,
+      "domain_constraints": [],
+      "status_or_availability_candidate": false
+    }
+  ],
+  "indexes": [
+    {
+      "name": "packages_pkey",
+      "valid": true,
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX packages_pkey ON public.packages USING btree (id)"
+    }
+  ],
+  "security": {
+    "owner": "postgres",
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "true",
+        "roles": [
+          "public"
+        ],
+        "tablename": "packages",
+        "permissive": "PERMISSIVE",
+        "policyname": "Anyone can view packages",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "ALL",
+        "qual": "(caterer_id IN ( SELECT caterers.id\\n   FROM caterers\\n  WHERE (caterers.user_id = auth.uid())))",
+        "roles": [
+          "public"
+        ],
+        "tablename": "packages",
+        "permissive": "PERMISSIVE",
+        "policyname": "Caterer manages own packages",
+        "schemaname": "public",
+        "with_check": "(caterer_id IN ( SELECT caterers.id\\n   FROM caterers\\n  WHERE (caterers.user_id = auth.uid())))"
+      }
+    ],
+    "table_acl": [
+      "postgres=arwdDxtm/postgres",
+      "anon=arwdDxtm/postgres",
+      "authenticated=arwdDxtm/postgres",
+      "service_role=arwdDxtm/postgres"
+    ],
+    "rls_forced": false,
+    "rls_enabled": true,
+    "is_partition": false,
+    "relation_kind": "r"
+  },
+  "triggers": [
+    {
+      "name": "enforce_package_limit",
+      "table": "packages",
+      "enabled": "O",
+      "function": "check_package_limit()",
+      "definition": "CREATE TRIGGER enforce_package_limit BEFORE INSERT ON packages FOR EACH ROW EXECUTE FUNCTION check_package_limit()"
+    }
+  ],
+  "constraints": [
+    {
+      "kind": "f",
+      "name": "packages_caterer_id_fkey",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (caterer_id) REFERENCES caterers(id) ON DELETE CASCADE",
+      "initially_deferred": false
+    },
+    {
+      "kind": "p",
+      "name": "packages_pkey",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)",
+      "initially_deferred": false
+    },
+    {
+      "kind": "c",
+      "name": "packages_tier_check",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (tier = ANY (ARRAY['bronze'::text, 'silver'::text, 'gold'::text, 'premium'::text]))",
+      "initially_deferred": false
+    }
+  ],
+  "packages_exists": true,
+  "inspection_limits": [
+    "Privileges include effective inherited grants; RLS further restricts row access.",
+    "Booking function discovery uses attached trigger bodies and public function source references.",
+    "Dynamic SQL, indirectly called helpers and external endpoints may require targeted follow-up.",
+    "Owner relationships are FK candidates, not proof of authorization; inspect policy and function bodies.",
+    "Definitions are verbatim catalog source; review privately for hardcoded sensitive literals before sharing.",
+    "No package, customer, booking or payment records are read."
+  ],
+  "effective_privileges": [
+    {
+      "role": "anon",
+      "bypass_rls": false,
+      "role_exists": true,
+      "table_delete": true,
+      "table_insert": true,
+      "table_select": true,
+      "table_update": true,
+      "column_privileges": [
+        {
+          "column": "id",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "caterer_id",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "tier",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "name",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "description",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "price",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "guest_capacity",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "created_at",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "min_guests",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "image_url",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "includes",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "event_types",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "food_inclusions",
+          "insert": true,
+          "select": true,
+          "update": true
+        }
+      ]
+    },
+    {
+      "role": "authenticated",
+      "bypass_rls": false,
+      "role_exists": true,
+      "table_delete": true,
+      "table_insert": true,
+      "table_select": true,
+      "table_update": true,
+      "column_privileges": [
+        {
+          "column": "id",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "caterer_id",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "tier",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "name",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "description",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "price",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "guest_capacity",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "created_at",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "min_guests",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "image_url",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "includes",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "event_types",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "food_inclusions",
+          "insert": true,
+          "select": true,
+          "update": true
+        }
+      ]
+    },
+    {
+      "role": "service_role",
+      "bypass_rls": true,
+      "role_exists": true,
+      "table_delete": true,
+      "table_insert": true,
+      "table_select": true,
+      "table_update": true,
+      "column_privileges": [
+        {
+          "column": "id",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "caterer_id",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "tier",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "name",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "description",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "price",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "guest_capacity",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "created_at",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "min_guests",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "image_url",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "includes",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "event_types",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "column": "food_inclusions",
+          "insert": true,
+          "select": true,
+          "update": true
+        }
+      ]
+    }
+  ],
+  "function_definitions": [
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "owner": "postgres",
+      "signature": "check_package_limit()",
+      "definition": "CREATE OR REPLACE FUNCTION public.check_package_limit()\\n RETURNS trigger\\n LANGUAGE plpgsql\\n SECURITY DEFINER\\nAS $function$\\r\\ndeclare\\r\\n  pkg_count int;\\r\\n  plan_limit int;\\r\\n  caterer_plan text;\\r\\nbegin\\r\\n  select subscription_plan into caterer_plan from caterers where id = new.caterer_id;\\r\\n  select max_packages into plan_limit from subscription_plans where id = caterer_plan;\\r\\n  \\r\\n  -- null means unlimited\\r\\n  if plan_limit is null then\\r\\n    return new;\\r\\n  end if;\\r\\n\\r\\n  select count(*) into pkg_count from packages where caterer_id = new.caterer_id;\\r\\n  \\r\\n  if pkg_count >= plan_limit then\\r\\n    raise exception 'Package limit reached for your current plan. Upgrade to add more packages.';\\r\\n  end if;\\r\\n  \\r\\n  return new;\\r\\nend;\\r\\n$function$\\n",
+      "configuration": null,
+      "security_definer": true
+    }
+  ],
+  "foreign_keys_and_owner_relationships": [
+    {
+      "on_delete": "NO ACTION",
+      "constraint": "bookings_package_id_fkey",
+      "definition": "FOREIGN KEY (package_id) REFERENCES packages(id)",
+      "child_table": "bookings",
+      "parent_table": "packages",
+      "column_mapping": [
+        {
+          "child_column": "package_id",
+          "parent_column": "id"
+        }
+      ],
+      "references_packages": true,
+      "owner_path_candidate": false
+    },
+    {
+      "on_delete": "NO ACTION",
+      "constraint": "caterers_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES profiles(id)",
+      "child_table": "caterers",
+      "parent_table": "profiles",
+      "column_mapping": [
+        {
+          "child_column": "reviewed_by",
+          "parent_column": "id"
+        }
+      ],
+      "references_packages": false,
+      "owner_path_candidate": true
+    },
+    {
+      "on_delete": "CASCADE",
+      "constraint": "caterers_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE",
+      "child_table": "caterers",
+      "parent_table": "profiles",
+      "column_mapping": [
+        {
+          "child_column": "user_id",
+          "parent_column": "id"
+        }
+      ],
+      "references_packages": false,
+      "owner_path_candidate": true
+    },
+    {
+      "on_delete": "CASCADE",
+      "constraint": "package_bookmarks_package_id_fkey",
+      "definition": "FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE CASCADE",
+      "child_table": "package_bookmarks",
+      "parent_table": "packages",
+      "column_mapping": [
+        {
+          "child_column": "package_id",
+          "parent_column": "id"
+        }
+      ],
+      "references_packages": true,
+      "owner_path_candidate": false
+    },
+    {
+      "on_delete": "CASCADE",
+      "constraint": "packages_caterer_id_fkey",
+      "definition": "FOREIGN KEY (caterer_id) REFERENCES caterers(id) ON DELETE CASCADE",
+      "child_table": "packages",
+      "parent_table": "caterers",
+      "column_mapping": [
+        {
+          "child_column": "caterer_id",
+          "parent_column": "id"
+        }
+      ],
+      "references_packages": false,
+      "owner_path_candidate": true
+    },
+    {
+      "on_delete": "CASCADE",
+      "constraint": "profiles_id_fkey",
+      "definition": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "child_table": "profiles",
+      "parent_table": "auth.users",
+      "column_mapping": [
+        {
+          "child_column": "id",
+          "parent_column": "id"
+        }
+      ],
+      "references_packages": false,
+      "owner_path_candidate": true
+    }
+  ]
+}
