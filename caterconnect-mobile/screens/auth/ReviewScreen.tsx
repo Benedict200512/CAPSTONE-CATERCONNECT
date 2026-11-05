@@ -112,7 +112,7 @@ export default function ReviewScreen({ bookingId, catererId, catererName, onClos
         <View style={{ width: 56 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 48 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 900, alignSelf: 'center', paddingBottom: 48 }}>
         {/* Caterer info */}
         <View style={s.catererBanner}>
           <View style={s.catererInitial}>

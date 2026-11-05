@@ -3384,10 +3384,20 @@ tbody tr:hover {
 .caterer-dashboard .dashboard-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  grid-template-rows: auto minmax(320px, auto) auto;
+  grid-template-rows: auto auto;
+  /* Stretch both columns to the same grid-row boundary. */
   align-items: stretch;
   gap: 20px;
   margin-bottom: 22px;
+}
+
+.caterer-dashboard .dashboard-left-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .caterer-dashboard .dashboard-combined-subscription {
@@ -3407,56 +3417,103 @@ tbody tr:hover {
 
 .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 1;
   min-width: 0;
-  height: 100%;
+  height: auto;
+  padding-block: 16px;
   margin: 0;
 }
 
-.caterer-dashboard .dashboard-main-grid > .dashboard-trends-panel {
-  grid-column: 1;
-  grid-row: 2;
+@media (min-width: 901px) {
+  .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card > .dashboard-calendar-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-auto-rows: minmax(60px, 1fr);
+  }
+
+  /* Tighten the calendar without hiding dates or status badges. */
+  .caterer-dashboard .dashboard-main-grid .dashboard-calendar-day,
+  .caterer-dashboard .dashboard-main-grid .dashboard-calendar-blank {
+    min-height: 60px;
+  }
+
+  /* Give extra row height to real chart content, not an empty gap below the card. */
+  .caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel {
+    flex: 1 1 auto;
+  }
+
+  .caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-trends-chart {
+    flex: 1 1 auto;
+    min-height: 165px;
+  }
+
+  .caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-trend-track {
+    flex: 1 1 80px;
+    height: auto;
+    min-height: 80px;
+  }
+}
+
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel {
   display: flex;
   min-width: 0;
-  height: 100%;
+  height: auto;
+  padding: 16px 20px;
   flex-direction: column;
 }
 
-.caterer-dashboard .dashboard-main-grid > .dashboard-trends-panel .dashboard-trends-chart {
-  flex: 1 1 auto;
-  min-height: 190px;
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .caterer-panel-header {
+  margin-bottom: 8px;
+}
+
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-trends-chart {
+  flex: 0 0 auto;
+  min-height: 0;
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-trend-track {
+  height: 80px;
+}
+
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-trends-legend {
+  margin-top: 8px;
+}
+
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-trends-empty {
+  margin-top: 4px;
+}
+
+.caterer-dashboard .dashboard-left-stack > .dashboard-trends-panel .dashboard-view-report-button {
+  margin-top: 8px;
 }
 
 .caterer-dashboard .dashboard-main-grid > .dashboard-recent-bookings {
   grid-column: 1 / -1;
-  grid-row: 3;
+  grid-row: 2;
   min-width: 0;
   margin: 0;
+}
+
+.caterer-dashboard .dashboard-recent-bookings .caterer-empty-state {
+  padding-block: 24px;
 }
 
 @media (max-width: 900px) {
   .caterer-dashboard .dashboard-main-grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;
-    gap: 16px;
   }
-
-  .caterer-dashboard .dashboard-main-grid > .dashboard-combined-subscription,
-  .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card,
-  .caterer-dashboard .dashboard-main-grid > .dashboard-trends-panel,
-  .caterer-dashboard .dashboard-main-grid > .dashboard-recent-bookings {
-    grid-column: 1;
-  }
-
-  .caterer-dashboard .dashboard-main-grid > .dashboard-combined-subscription { grid-row: 1; }
-  .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card { grid-row: 2; }
-  .caterer-dashboard .dashboard-main-grid > .dashboard-trends-panel { grid-row: 3; }
-  .caterer-dashboard .dashboard-main-grid > .dashboard-recent-bookings { grid-row: 4; }
-
-  .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card,
-  .caterer-dashboard .dashboard-main-grid > .dashboard-trends-panel {
-    height: auto;
-  }
+  .caterer-dashboard .dashboard-main-grid > .dashboard-left-stack { grid-column: 1; grid-row: 1; height: auto; }
+  .caterer-dashboard .dashboard-main-grid > .dashboard-availability-card { grid-column: 1; grid-row: 2; }
+  .caterer-dashboard .dashboard-main-grid > .dashboard-recent-bookings { grid-column: 1; grid-row: 3; }
 }
 
 @media (max-width: 600px) {
@@ -4079,56 +4136,71 @@ tbody tr:hover {
   transform: translateY(-1px);
 }
 
-/* Dashboard loading layout follows the live dashboard card grid. */
+/* Dashboard-only loading layout mirrors the live left stack and calendar. */
+.caterer-skeleton-dashboard { gap: 22px; }
 .caterer-skeleton-dashboard .dashboard-main-grid {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  grid-template-rows: auto minmax(320px, auto) auto;
-  gap: 20px;
+  grid-template-rows: auto;
+  margin-bottom: 0;
 }
-
-.caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-combined-subscription {
-  gap: 20px;
+.caterer-skeleton-dashboard .dashboard-left-stack { height: auto; }
+.caterer-skeleton-dashboard .is-stat {
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
+  gap: 0;
+  min-height: 0;
+  padding: 18px;
 }
-
+.caterer-skeleton-dashboard .is-stat .is-icon { grid-row: auto; margin-bottom: 14px; }
+.caterer-skeleton-dashboard .is-stat .is-line { grid-column: 1; }
+.caterer-skeleton-dashboard .is-stat .is-medium { height: 16px; margin-bottom: 6px; }
+.caterer-skeleton-dashboard .is-stat .is-value { height: 32px; margin-bottom: 4px; }
+.caterer-skeleton-dashboard .is-stat .is-short { height: 13px; }
+.caterer-skeleton-dashboard .dashboard-left-stack > .dashboard-combined-subscription {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px;
+  border-width: 2px;
+}
 .caterer-skeleton-dashboard .caterer-skeleton-plan,
-.caterer-skeleton-dashboard .caterer-skeleton-quota {
+.caterer-skeleton-dashboard .caterer-skeleton-quota,
+.caterer-skeleton-dashboard .caterer-skeleton-quota-heading {
   display: grid;
-  gap: 11px;
+  gap: 9px;
   min-width: 0;
 }
-
+.caterer-skeleton-dashboard .caterer-skeleton-quota { border-top: 1px solid #edf0f3; padding-top: 18px; }
 .caterer-skeleton-dashboard .caterer-skeleton-plan > div,
-.caterer-skeleton-dashboard .caterer-skeleton-quota > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 11px;
+.caterer-skeleton-dashboard .caterer-skeleton-quota > div:first-child,
+.caterer-skeleton-dashboard .caterer-skeleton-usage-counts { display: flex; align-items: center; gap: 10px; }
+.caterer-skeleton-dashboard .caterer-skeleton-quota > div:first-child,
+.caterer-skeleton-dashboard .caterer-skeleton-usage-counts { justify-content: space-between; }
+.caterer-skeleton-dashboard .caterer-skeleton-quota-heading { flex: 1; }
+.caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-availability-card { grid-row: 1; gap: 0; padding: 16px 22px; }
+.caterer-skeleton-dashboard .caterer-skeleton-calendar-heading { margin-bottom: 17px; }
+.caterer-skeleton-dashboard .caterer-skeleton-month { margin-bottom: 14px; }
+.caterer-skeleton-dashboard .caterer-skeleton-weekdays { margin-bottom: 7px; padding-block: 7px; }
+.caterer-skeleton-dashboard .caterer-skeleton-calendar { gap: 7px; }
+.caterer-skeleton-dashboard .caterer-skeleton-calendar-footer { margin-top: 14px; }
+.caterer-skeleton-dashboard .dashboard-left-stack > .dashboard-trends-panel { gap: 8px; margin: 0; }
+.caterer-skeleton-dashboard .dashboard-trends-panel .caterer-skeleton-calendar-heading { margin-bottom: 0; }
+.caterer-skeleton-dashboard .dashboard-trends-panel .caterer-skeleton-trend { min-height: 0; padding-top: 4px; }
+.caterer-skeleton-dashboard .dashboard-trends-panel .is-trend-bar { height: 80px; }
+.caterer-skeleton-dashboard .dashboard-trends-panel > .is-control { width: 100%; height: 40px; }
+.caterer-skeleton-dashboard > .dashboard-recent-bookings { gap: 0; padding: 20px; width: 100%; }
+.caterer-skeleton-dashboard > .dashboard-recent-bookings > .caterer-skeleton-panel-heading { margin-bottom: 19px; }
+@media (max-width: 1100px) {
+  .caterer-skeleton-dashboard .caterer-skeleton-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-.caterer-skeleton-dashboard .caterer-skeleton-quota > div:first-child {
-  justify-content: space-between;
+@media (max-width: 600px) {
+  .caterer-skeleton-dashboard .is-stat { padding: 18px; }
+  .caterer-skeleton-dashboard .is-stat .is-value { height: 28px; }
+  .caterer-skeleton-dashboard .dashboard-left-stack > .dashboard-combined-subscription { padding: 16px; gap: 16px; }
+  .caterer-skeleton-dashboard .caterer-skeleton-quota { padding-top: 16px; }
 }
-
-.caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-availability-card {
-  grid-row: 1 / span 2;
-  gap: 11px;
-  padding: 22px;
-}
-
-.caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-trends-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-}
-
-.caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-trends-panel .caterer-skeleton-trend {
-  flex: 1 1 auto;
-  min-height: 190px;
-}
-
-.caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-recent-bookings {
-  gap: 0;
-  padding: 18px;
+@media (min-width: 901px) {
+  .caterer-skeleton-dashboard .dashboard-trends-panel { flex: 1 1 auto; }
+  .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-availability-card { display: flex; flex-direction: column; }
+  .caterer-skeleton-dashboard .dashboard-availability-card > .caterer-skeleton-calendar { flex: 1 0 auto; grid-auto-rows: minmax(60px, 1fr); }
 }
 
 .caterer-skeleton-recent-header,
@@ -4162,18 +4234,8 @@ tbody tr:hover {
 }
 
 @media (max-width: 900px) {
-  .caterer-skeleton-dashboard .dashboard-main-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-    gap: 16px;
-  }
-
-  .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-combined-subscription { grid-row: 1; }
+  .caterer-skeleton-dashboard .dashboard-main-grid { grid-template-rows: auto auto; }
   .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-availability-card { grid-row: 2; }
-  .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-trends-panel { grid-row: 3; }
-  .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-recent-bookings { grid-row: 4; }
-  .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-availability-card,
-  .caterer-skeleton-dashboard .dashboard-main-grid > .dashboard-trends-panel { height: auto; }
 }
 
 @media (max-width: 600px) {

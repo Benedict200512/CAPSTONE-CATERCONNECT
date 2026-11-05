@@ -1095,7 +1095,7 @@ export default function ChatScreen({
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg },
+  root: { flex: 1, width: '100%', maxWidth: 1100, alignSelf: 'center', backgroundColor: Colors.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10, paddingHorizontal: 40 },
 
   header: {

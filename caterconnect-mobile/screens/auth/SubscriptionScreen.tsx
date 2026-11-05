@@ -212,7 +212,7 @@ export default function SubscriptionScreen({ onClose }: SubscriptionScreenProps)
   const expiresAt = (catererData as any)?.subscription_expires_at;
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={{ width: '100%', maxWidth: 1100, alignSelf: 'center' }} showsVerticalScrollIndicator={false}>
       {/* Checkout Modal for Payment Method Selection */}
       <Modal
         visible={!!selectedPlanForUpgrade}

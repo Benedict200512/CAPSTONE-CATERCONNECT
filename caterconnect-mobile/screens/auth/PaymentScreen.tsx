@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
 
@@ -14,7 +14,7 @@ import { Colors } from '@/constants/colors';
 
 import { useAuth } from '@/context/AuthContext';
 
-import { initiateGCashPayment, openGCashCheckout } from '@/lib/xendit';
+import { bookingPaymentUnavailable, payBookingDownpayment } from '@/lib/bookingPayment';
 
 import { supabase } from '@/lib/supabase';
 import { useBookingRefresh } from '@/hooks/useBookingRefresh';
@@ -50,114 +50,44 @@ export default function PaymentScreen({ bookingId, onClose }: Props) {
   const [loading, setLoading] = useState(true);
 
   const [paying, setPaying] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const loadScope = useRef('');
+  loadScope.current = `${session?.user.id ?? ''}:${bookingId}`;
 
   const loadPayment = async () => {
-
-      const { data } = await supabase
-
-        .from('bookings')
-
+    const scope = loadScope.current;
+    try {
+      const { data, error } = await supabase.from('bookings')
         .select('*, caterers(business_name, contact_phone, user_id, downpayment_percent), packages(name, tier)')
-
-        .eq('id', bookingId)
-        .eq('customer_id', session?.user.id ?? '')
-
-        .single();
-
+        .eq('id', bookingId).eq('customer_id', session?.user.id ?? '').maybeSingle();
+      if (scope !== loadScope.current) return;
+      if (error) throw error;
       setBooking(data);
-
-      setLoading(false);
-
+      setLoadError('');
+    } catch (error: any) {
+      if (scope === loadScope.current) setLoadError(error?.message || 'Payment details could not be loaded.');
+    } finally { if (scope === loadScope.current) setLoading(false); }
   };
   useBookingRefresh(session?.user.id ? `${session.user.id}:${bookingId}:payment` : null, loadPayment);
 
   const handlePayGCash = async () => {
-
-    if (!booking || !session?.user || !profile || booking.payment_verified_at || !['confirmed','awaiting_payment'].includes(booking.status)) return;
-
-    Alert.alert(
-
-      'Pay Downpayment via GCash',
-
-      `You will pay ₱${Number(booking.downpayment_amount).toLocaleString()} to ${(booking.caterers as any)?.business_name}. Proceed?`,
-
-      [
-
-        { text: 'Cancel', style: 'cancel' },
-
-        {
-
-          text: 'Pay Now',
-
-          onPress: async () => {
-
-            setPaying(true);
-
-            const referenceId = `booking\_${booking.id}\_${Date.now()}`;
-
-            const result = await initiateGCashPayment({
-
-              type: 'booking',
-
-              amount: booking.downpayment_amount,
-
-              referenceId,
-
-              customerName: profile.full_name,
-
-              customerEmail: session.user.email ?? '',
-
-              description: `Booking downpayment — ${(booking.caterers as any)?.business_name ?? 'Caterer'} — ${booking.event_date}`,
-
-            });
-
-            if (!result.success || !result.checkoutUrl) {
-
-              Alert.alert('Error', result.error ?? 'Failed to initiate payment.');
-
-              setPaying(false);
-
-              return;
-
-            }
-
-            const outcome = await openGCashCheckout(result.checkoutUrl!, result.chargeId!, result.webUrl);
-
-            setPaying(false);
-
-            if (outcome === 'success') {
-
-              Alert.alert(
-
-                'Payment Confirmed',
-
-                'Your downpayment has been verified and saved to your booking.',
-
-                [{ text: 'OK', onPress: onClose }]
-
-              );
-
-            } else if (outcome === 'failed') {
-
-              Alert.alert('Payment Failed', 'Your GCash payment did not go through. Please try again.');
-
-            } else if (outcome === 'pending') {
-              await loadPayment();
-              Alert.alert('Payment Processing', 'Confirmation is still pending. Your booking will refresh automatically. Do not pay again while confirmation is pending.');
-            } else {
-
-              Alert.alert('Cancelled', 'Payment was cancelled.');
-
-            }
-
-          },
-
-        },
-
-      ]
-
-    );
-
+    if (!booking || !session?.user || !profile || paying) return;
+    const unavailable = bookingPaymentUnavailable(booking);
+    if (unavailable) { Alert.alert('Payment unavailable', unavailable); return; }
+    Alert.alert('Pay Downpayment', 'Continue to the existing Xendit test checkout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Continue', onPress: async () => {
+        setPaying(true);
+        try {
+          const outcome = await payBookingDownpayment(booking.id, profile.full_name);
+          await loadPayment();
+          if (outcome === 'success') Alert.alert('Payment Confirmed', 'Your downpayment was verified and saved by the server.', [{ text: 'OK', onPress: onClose }]);
+          else if (outcome === 'failed') Alert.alert('Payment Failed', 'The provider reports this payment failed.');
+          else Alert.alert('Payment confirmation pending', 'Refresh to check the booking. Reopening checkout in this app session reuses the existing attempt. Do not pay again elsewhere.');
+        } catch (error: any) { Alert.alert('Payment unavailable', error?.message || 'Refresh before trying again.'); }
+        finally { setPaying(false); }
+      } },
+    ]);
   };
 
   if (loading) {
@@ -184,7 +114,8 @@ export default function PaymentScreen({ bookingId, onClose }: Props) {
 
         <AlertCircle size={32} color={Colors.textMuted} style={{ marginBottom: 12 }} />
 
-        <Text style={styles.errorText}>Booking not found.</Text>
+        <Text style={styles.errorText}>{loadError || 'Booking not found.'}</Text>
+        <TouchableOpacity style={styles.backBtnPill} onPress={() => void loadPayment()}><Text style={styles.backBtnPillText}>Retry</Text></TouchableOpacity>
 
         <TouchableOpacity style={styles.backBtnPill} onPress={onClose}>
 
@@ -210,7 +141,7 @@ export default function PaymentScreen({ bookingId, onClose }: Props) {
 
   return (
 
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingBottom: 40 }}>
 
       {/* ── HEADER ── */}
 
@@ -398,7 +329,7 @@ export default function PaymentScreen({ bookingId, onClose }: Props) {
 
           onPress={handlePayGCash}
 
-          disabled={paying || !!booking.payment_verified_at || !['confirmed','awaiting_payment'].includes(booking.status)}
+          disabled={paying || !!bookingPaymentUnavailable(booking)}
 
           activeOpacity={0.85}
 
@@ -423,6 +354,7 @@ export default function PaymentScreen({ bookingId, onClose }: Props) {
           )}
 
         </TouchableOpacity>
+        {!!bookingPaymentUnavailable(booking) && <Text style={{ color: Colors.textSecondary, fontSize: 13, padding: 12 }}>{bookingPaymentUnavailable(booking)}</Text>}
 
         <View style={styles.secureNote}>
 

@@ -226,6 +226,13 @@ export default function Login() {
             <div className="login-field">
               <div className="login-password-heading">
                 <label htmlFor="password">Password</label>
+                <button
+                  type="button"
+                  className="login-forgot-link"
+                  onClick={() => navigate('/forgot-password')}
+                >
+                  Forgot password?
+                </button>
               </div>
 
               <div className="login-input-wrap">
@@ -524,6 +531,34 @@ export default function Login() {
           color: #292524;
           font-size: 13px;
           font-weight: 750;
+        }
+
+        .login-password-heading {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .login-password-heading label {
+          margin-bottom: 9px;
+        }
+
+        .login-forgot-link {
+          margin: 0 0 9px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: #C2410C;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .login-forgot-link:hover {
+          color: #EA580C;
+          text-decoration: underline;
         }
 
         .login-input-wrap {

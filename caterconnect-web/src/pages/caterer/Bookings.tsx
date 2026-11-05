@@ -35,14 +35,16 @@ import { useAuth } from '../../context/AuthContext';
 import CatererSkeleton from '../../components/CatererSkeleton';
 import CatererPageHeader from '../../components/CatererPageHeader';
 import { supabase } from '../../lib/supabase';
+import { useBookingInternalNotes } from '../../hooks/useBookingInternalNotes';
 import { isMonthlyQuotaRejection, loadMonthlyBookingQuota, type MonthlyQuota } from '../../lib/monthBookingQouta';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import './Bookings.css';
 
 type BookingStatus =
   | 'pending'
   | 'confirmed'
+  | 'awaiting_payment'
   | 'paid'
   | 'ongoing'
   | 'completed'
@@ -140,7 +142,6 @@ type Booking = {
   downpayment_deadline: string | null;
   venue: string | null;
   special_requests: string | null;
-  caterer_notes: string | null;
   customized_items: unknown;
   payment_method: string | null;
   payment_receipt_url: string | null;
@@ -164,10 +165,11 @@ type Booking = {
 
 const FILTERS: { label: string; value: BookingFilter }[] = [
   { label: 'All Bookings', value: 'all' },
-  { label: 'Pending', value: 'pending' },
+  { label: 'Pending Review', value: 'pending' },
   { label: 'Confirmed', value: 'confirmed' },
-  { label: 'Paid', value: 'paid' },
-  { label: 'Ongoing', value: 'ongoing' },
+  { label: 'Awaiting Payment', value: 'awaiting_payment' },
+  { label: 'Downpayment Verified', value: 'paid' },
+  { label: 'Event Ongoing', value: 'ongoing' },
   { label: 'Completed', value: 'completed' },
   { label: 'Cancelled', value: 'cancelled' },
   { label: 'Rejected', value: 'rejected' },
@@ -176,6 +178,7 @@ const FILTERS: { label: string; value: BookingFilter }[] = [
 const STATUS_COLORS: Record<BookingStatus, string> = {
   pending: 'pending',
   confirmed: 'confirmed',
+  awaiting_payment: 'awaiting_payment',
   paid: 'paid',
   ongoing: 'ongoing',
   completed: 'completed',
@@ -247,6 +250,7 @@ function formatDateTime(value: string | null | undefined) {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message;
   return 'Something went wrong. Please try again.';
 }
 
@@ -306,7 +310,7 @@ function getPaymentStatus(booking: Booking) {
 }
 
 function getStatusLabel(status: BookingStatus) {
-  return status.replace('_', ' ');
+  return FILTERS.find((item) => item.value === status)?.label ?? status.replace(/_/g, ' ');
 }
 
 function getDisputeStatusLabel(status: RefundDisputeStatus) {
@@ -352,6 +356,12 @@ function getRefundAccountDetails(
 function maskAccountNumber(value: string | undefined) {
   if (!value?.trim()) return 'Not provided';
   return value.trim();
+}
+
+function refundStatusLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = { none: 'No refund due', pending: 'Pending transfer', overdue: 'Transfer overdue',
+    awaiting_customer_confirmation: 'Awaiting Customer confirmation', processed: 'Processed', failed: 'Refund failed' };
+  return labels[status ?? 'none'] ?? String(status).replace(/_/g, ' ');
 }
 
 function getFileExtension(file: File) {
@@ -404,15 +414,80 @@ async function getFunctionErrorMessage(error: unknown): Promise<string> {
   return error.message || 'Unable to submit refund proof. Please try again.';
 }
 
+const BOOKING_DETAIL_SELECT = `
+          id,
+          customer_id,
+          caterer_id,
+          package_id,
+          status,
+          event_date,
+          event_time,
+          event_type,
+          guest_count,
+          total_cost,
+          downpayment_amount,
+          downpayment_deadline,
+          venue,
+          special_requests,
+          customized_items,
+          payment_method,
+          payment_receipt_url,
+          payment_reference,
+          payment_submitted_at,
+          payment_verified_at,
+          rejection_reason,
+          cancelled_by,
+          cancellation_reason,
+          cancelled_at,
+          refund_status,
+          refund_amount,
+          refund_due_at,
+          refunded_at,
+          refund_account_details,
+          created_at,
+          customer:profiles!bookings_customer_id_fkey (
+            full_name,
+            email,
+            avatar_url,
+            phone_number
+          ),
+          packages (
+            name,
+            tier
+          ),
+          reviews!reviews_booking_id_fkey (
+            id,
+            food_quality,
+            service_quality,
+            timeliness,
+            overall,
+            comment,
+            caterer_reply,
+            caterer_replied_at,
+            created_at
+          )
+        `;
+
 export default function CatererBookings() {
   const { catererData, session } = useAuth();
   const catererId = catererData?.id;
   const userId = session?.user.id;
+  const [searchParams] = useSearchParams();
+  const requestedBookingId = searchParams.get('bookingId');
+  const requestedSection = searchParams.get('section');
+  const requestedNotificationId = searchParams.get('notificationId');
+  const lastReviewNotification = useRef('');
+  const reviewSectionRef = useRef<HTMLElement>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyEditorId, setReplyEditorId] = useState<string | null>(null);
+  const [replySavingId, setReplySavingId] = useState<string | null>(null);
+  const [replyFeedback, setReplyFeedback] = useState<{ id: string; message: string; error: boolean } | null>(null);
 
 
 const navigate = useNavigate();
 
 const openClientChatroom = (booking: Booking) => {
+
   const params = new URLSearchParams({
     bookingId: booking.id,
     receiverId: booking.customer_id,
@@ -447,10 +522,8 @@ const openClientChatroom = (booking: Booking) => {
   const [actionLoading, setActionLoading] = useState(false);
 
   // INTERNAL NOTES
-  const [internalNote, setInternalNote] = useState('');
-  const [savingInternalNote, setSavingInternalNote] = useState(false);
-  const [internalNoteMessage, setInternalNoteMessage] = useState('');
-  const [internalNoteError, setInternalNoteError] = useState('');
+  const internalNotes = useBookingInternalNotes(selectedBooking?.id ?? null, userId ?? null);
+  const savingInternalNote = internalNotes.saving;
 
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -510,9 +583,6 @@ const openClientChatroom = (booking: Booking) => {
     }
 
     setSelectedBooking(null);
-    setInternalNote('');
-    setInternalNoteMessage('');
-    setInternalNoteError('');
     resetActionForms();
     resetRefundForm();
     resetDisputeForm();
@@ -521,6 +591,7 @@ const openClientChatroom = (booking: Booking) => {
   };
 
   const loadBookings = useCallback(async () => {
+
     if (!catererId) {
       setBookings([]);
       setRefundDisputes([]);
@@ -534,60 +605,7 @@ const openClientChatroom = (booking: Booking) => {
     try {
       const { data, error: queryError } = await supabase
         .from('bookings')
-        .select(`
-          id,
-          customer_id,
-          caterer_id,
-          package_id,
-          status,
-          event_date,
-          event_time,
-          event_type,
-          guest_count,
-          total_cost,
-          downpayment_amount,
-          downpayment_deadline,
-          venue,
-          special_requests,
-          caterer_notes,
-          customized_items,
-          payment_method,
-          payment_receipt_url,
-          payment_reference,
-          payment_submitted_at,
-          payment_verified_at,
-          rejection_reason,
-          cancelled_by,
-          cancellation_reason,
-          cancelled_at,
-          refund_status,
-          refund_amount,
-          refund_due_at,
-          refunded_at,
-          refund_account_details,
-          created_at,
-          customer:profiles!bookings_customer_id_fkey (
-            full_name,
-            email,
-            avatar_url,
-            phone_number
-          ),
-          packages (
-            name,
-            tier
-          ),
-          reviews!reviews_booking_id_fkey (
-            id,
-            food_quality,
-            service_quality,
-            timeliness,
-            overall,
-            comment,
-            caterer_reply,
-            caterer_replied_at,
-            created_at
-          )
-        `)
+        .select(BOOKING_DETAIL_SELECT)
         .eq('caterer_id', catererId)
         .order('created_at', { ascending: false });
 
@@ -659,6 +677,65 @@ const openClientChatroom = (booking: Booking) => {
   useEffect(() => {
     void loadBookings();
   }, [loadBookings]);
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible' && !actionLoading && !refundSubmitting && !disputeSubmitting && !replySavingId && !savingInternalNote) void loadBookings(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    const timer = window.setInterval(refresh, 15000);
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); window.clearInterval(timer); };
+  }, [loadBookings, actionLoading, refundSubmitting, disputeSubmitting, replySavingId, savingInternalNote]);
+
+
+  useEffect(() => {
+    if (!requestedBookingId || !catererId || !userId) return;
+    const key = `${userId}:${requestedNotificationId ?? requestedBookingId}:${requestedSection ?? ''}`;
+    if (lastReviewNotification.current === key) return;
+    let active = true;
+    const open = async () => {
+      try {
+        const result = await supabase.from('bookings').select(BOOKING_DETAIL_SELECT).eq('id', requestedBookingId).eq('caterer_id', catererId).maybeSingle();
+        if (!active) return;
+        if (result.error || !result.data) throw new Error('The booking is missing or no longer accessible.');
+        lastReviewNotification.current = key;
+        setShowDisputes(false);
+        setSelectedBooking(result.data as unknown as Booking);
+      } catch (error) { if (active) setError(getErrorMessage(error)); }
+    };
+    void open();
+    return () => { active = false; };
+  }, [requestedBookingId, requestedNotificationId, requestedSection, catererId, userId]);
+
+  useEffect(() => {
+    if (requestedSection !== 'review' || selectedBooking?.id !== requestedBookingId) return;
+    const frame = requestAnimationFrame(() => reviewSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    return () => cancelAnimationFrame(frame);
+  }, [selectedBooking?.id, selectedBooking?.reviews?.length, requestedBookingId, requestedNotificationId, requestedSection]);
+
+  const submitReviewReply = async (review: BookingReview) => {
+    if (replySavingId || !selectedBooking || !catererId || !userId) return;
+    const booking = selectedBooking;
+    const text = replyDrafts[review.id]?.trim();
+    if (!text || review.caterer_reply || !booking.reviews?.some(item => item.id === review.id)) return;
+    setReplySavingId(review.id);
+    setReplyFeedback(null);
+    try {
+      // Same existing reviews.caterer_reply operation as Mobile. RLS remains authoritative.
+      const { data, error } = await supabase.from('reviews').update({ caterer_reply: text })
+        .eq('id', review.id).eq('booking_id', booking.id).eq('caterer_id', catererId)
+        .is('caterer_reply', null).select('id,caterer_reply,caterer_replied_at').maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('Reply was not saved. It may already exist or access may have changed. Refresh before retrying.');
+      const update = (item: Booking): Booking => item.id === booking.id ? {
+        ...item, reviews: item.reviews?.map(existing => existing.id === data.id ? { ...existing, ...data } : existing) ?? null,
+      } : item;
+      setSelectedBooking(current => current ? update(current) : null);
+      setBookings(current => current.map(update));
+      setReplyEditorId(null);
+      setReplyDrafts(current => ({ ...current, [review.id]: '' }));
+      setReplyFeedback({ id: review.id, message: 'Reply saved successfully.', error: false });
+    } catch (error) { setReplyFeedback({ id: review.id, message: getErrorMessage(error), error: true }); }
+    finally { setReplySavingId(null); }
+  };
 
   useEffect(() => {
     let active = true;
@@ -688,67 +765,13 @@ const openClientChatroom = (booking: Booking) => {
   // INTERNAL NOTES
   // =========================================
 
-  const handleSaveInternalNote = async () => {
-    if (!selectedBooking || !catererId || savingInternalNote) return;
-
-    if (internalNote.length > 2000) {
-      setInternalNoteError('Internal notes cannot exceed 2,000 characters.');
-      return;
-    }
-
-    const bookingId = selectedBooking.id;
-
-    setSavingInternalNote(true);
-    setInternalNoteError('');
-    setInternalNoteMessage('');
-
-    try {
-      const { data, error: updateError } = await supabase
-        .from('bookings')
-        .update({
-          caterer_notes: internalNote.trim() || null,
-        })
-        .eq('id', bookingId)
-        .eq('caterer_id', catererId)
-        .select('id, caterer_notes')
-        .maybeSingle();
-
-      if (updateError) throw updateError;
-
-      if (!data) {
-        throw new Error(
-          'Unable to save your internal note. Please refresh and try again.'
-        );
-      }
-
-      setBookings((current) =>
-        current.map((booking) =>
-          booking.id === bookingId
-            ? { ...booking, caterer_notes: data.caterer_notes }
-            : booking
-        )
-      );
-
-      setSelectedBooking((current) =>
-        current?.id === bookingId
-          ? { ...current, caterer_notes: data.caterer_notes }
-          : current
-      );
-
-      setInternalNote(data.caterer_notes ?? '');
-      setInternalNoteMessage('Internal note saved successfully.');
-    } catch (err) {
-      setInternalNoteError(getErrorMessage(err));
-    } finally {
-      setSavingInternalNote(false);
-    }
-  };
 
   const counts = useMemo(() => {
     const result: Record<BookingFilter, number> = {
       all: bookings.length,
       pending: 0,
       confirmed: 0,
+      awaiting_payment: 0,
       paid: 0,
       ongoing: 0,
       completed: 0,
@@ -801,6 +824,7 @@ const openClientChatroom = (booking: Booking) => {
   // =========================================
 
   const handleBookingAction = async (action: BookingAction) => {
+
     if (!selectedBooking || !catererId || actionLoading) return;
 
     const booking = selectedBooking;
@@ -917,85 +941,41 @@ const openClientChatroom = (booking: Booking) => {
 
   const handleEmergencyCancellation = async () => {
     if (!selectedBooking || !catererId || actionLoading) return;
-
     const booking = selectedBooking;
-
     if (!['confirmed', 'paid'].includes(booking.status)) {
-      setError(
-        'Only confirmed or paid bookings can be emergency-cancelled.'
-      );
+      setError('Only confirmed or paid bookings may be emergency-cancelled.');
       return;
     }
-
-    if (!emergencyCancelReason) {
-      setError('Please select or specify a reason for cancellation.');
+    const reason = emergencyCancelReason === 'Other'
+      ? emergencyCancelCustomReason.trim() : emergencyCancelReason.trim();
+    if (reason.length < 3 || reason.length > 1000) {
+      setError('Please provide a cancellation reason between 3 and 1000 characters.');
       return;
     }
-
-    const finalCancelReason =
-      emergencyCancelReason === 'Other'
-        ? emergencyCancelCustomReason.trim()
-        : emergencyCancelReason;
-
-    if (!finalCancelReason) {
-      setError('Please select or specify a reason for cancellation.');
-      return;
-    }
-
-    const refundAmount = booking.payment_verified_at
-      ? Number(booking.downpayment_amount ?? 0)
-      : 0;
-
-    const refundStatus = booking.payment_verified_at
-      ? 'pending'
-      : 'none';
-
-    const confirmed = window.confirm(
-      'Are you sure you want to emergency-cancel this booking? The customer will be informed, and this action cannot be undone.'
-    );
-
-    if (!confirmed) return;
-
+    if (!window.confirm('Cancel this booking? Verified downpayments require a full refund. This cannot be undone.')) return;
     setActionLoading(true);
     setError('');
     setActionMessage('');
-
     try {
-      const { data, error: updateError } = await supabase
-        .from('bookings')
-        .update({
-          status: 'cancelled',
-          cancelled_by: 'caterer',
-          cancellation_reason: finalCancelReason,
-          cancelled_at: new Date().toISOString(),
-          refund_amount: refundAmount,
-          refund_status: refundStatus,
-        })
-        .eq('id', booking.id)
-        .eq('caterer_id', catererId)
-        .in('status', ['confirmed', 'paid'])
-        .select('id')
-        .maybeSingle();
-
-      if (updateError) throw updateError;
-
-      if (!data) {
-        throw new Error(
-          'This booking could not be cancelled. Its status may have changed. Please refresh and try again.'
-        );
+      const { data, error: functionError } = await supabase.functions.invoke('cancel-caterer-booking', {
+        body: { booking_id: booking.id, reason },
+      });
+      if (functionError) throw new Error(await getFunctionErrorMessage(functionError));
+      if (!data?.success || data.booking_id !== booking.id) {
+        throw new Error(data?.error || 'The server did not confirm cancellation. Refresh before retrying.');
       }
-
-      setActionMessage('Emergency cancellation successfully recorded.');
+      setActionMessage('Booking cancelled. The customer has been notified.');
       resetActionForms();
-
       await loadBookings();
     } catch (err) {
       setError(getErrorMessage(err));
+      await loadBookings(); // Network failure could occur after server committed; refresh before retry.
     } finally {
       setActionLoading(false);
     }
   };
 
+  // =========================================
   // =========================================
   // REFUND PROOF UPLOAD AND SUBMISSION
   // =========================================
@@ -1037,13 +1017,14 @@ const openClientChatroom = (booking: Booking) => {
   };
 
   const handleRefundProofSubmission = async () => {
+
     if (!selectedBooking || !catererId || refundSubmitting) return;
 
     const booking = selectedBooking;
     const selectedFile = refundProofFile;
     const transferReference = refundTransferReference.trim();
 
-    if (booking.status !== 'cancelled' || booking.cancelled_by !== 'caterer') {
+    if (booking.status !== 'cancelled') {
       setRefundError('This booking is not eligible for refund submission.');
       return;
     }
@@ -1058,7 +1039,7 @@ const openClientChatroom = (booking: Booking) => {
       return;
     }
 
-    if (!booking.refund_due_at) {
+    if (!booking.refund_due_at || !Number.isFinite(Date.parse(booking.refund_due_at))) {
       setRefundError('The refund deadline is missing. Please contact support.');
       return;
     }
@@ -1099,6 +1080,7 @@ const openClientChatroom = (booking: Booking) => {
 
     let uploadedPath: string | null = null;
     let submissionSucceeded = false;
+    let submissionAttempted = false;
 
     try {
       const {
@@ -1134,6 +1116,7 @@ const openClientChatroom = (booking: Booking) => {
 
       uploadedPath = proofPath;
 
+      submissionAttempted = true;
       const { data, error: functionError } =
         await supabase.functions.invoke('submit-refund-proof', {
           body: {
@@ -1150,11 +1133,12 @@ const openClientChatroom = (booking: Booking) => {
         throw new Error(await getFunctionErrorMessage(functionError));
       }
 
-      if (!data || data.success !== true) {
+      // Deployed submit-refund-proof responds with flat success, booking_id and proof_path.
+      if (data?.success !== true ||
+          data?.booking_id !== booking.id ||
+          data?.proof_path !== proofPath) {
         throw new Error(
-          data?.error ||
-            data?.message ||
-            'The server did not confirm the refund proof submission.'
+          data?.error || 'The server did not confirm this booking and refund proof path.'
         );
       }
 
@@ -1182,9 +1166,13 @@ const openClientChatroom = (booking: Booking) => {
       const message = getErrorMessage(err);
 
       console.error('Refund proof submission failed:', err);
-      setRefundError(message);
+      setRefundError(submissionAttempted
+        ? `${message} Refresh bookings and verify the refund proof status before retrying; your uploaded receipt was kept.`
+        : message);
 
-      if (uploadedPath && !submissionSucceeded) {
+      // A network error after invocation does not prove the server rejected it.
+      // Keep the uploaded evidence for reconciliation rather than deleting it.
+      if (uploadedPath && !submissionSucceeded && !submissionAttempted) {
         const { error: removeError } = await supabase.storage
           .from('refund-proofs')
           .remove([uploadedPath]);
@@ -1202,6 +1190,7 @@ const openClientChatroom = (booking: Booking) => {
   };
 
   const openRefundProof = async (proofPath: string) => {
+
     const proofWindow = window.open('about:blank', '_blank');
     if (!proofWindow) {
       setRefundSubmissionError('Allow pop-ups for this site to view the private refund proof.');
@@ -1228,6 +1217,7 @@ const openClientChatroom = (booking: Booking) => {
   // =========================================
 
   const handleDisputeResponse = async () => {
+
     if (!selectedDispute || disputeSubmitting) return;
 
     const response = disputeResponse.trim();
@@ -1289,6 +1279,7 @@ const openClientChatroom = (booking: Booking) => {
   const getStatusIcon = (status: BookingStatus) => {
     switch (status) {
       case 'pending':
+      case 'awaiting_payment':
         return <Clock size={14} />;
 
       case 'confirmed':
@@ -1326,7 +1317,7 @@ const openClientChatroom = (booking: Booking) => {
 
   const canSubmitRefund =
     selectedBooking?.status === 'cancelled' &&
-    selectedBooking.cancelled_by === 'caterer' &&
+    !!selectedBooking.refund_due_at && Number.isFinite(Date.parse(selectedBooking.refund_due_at)) &&
     ['pending', 'overdue'].includes(selectedBooking.refund_status ?? '') &&
     Number(selectedBooking.refund_amount ?? 0) > 0 &&
     !refundSubmissions[selectedBooking.id];
@@ -1408,6 +1399,8 @@ const openClientChatroom = (booking: Booking) => {
         </button>}
       />
 
+
+
       {error && (
         <div className="bookings-alert error">
           <AlertCircle size={17} />
@@ -1415,7 +1408,7 @@ const openClientChatroom = (booking: Booking) => {
         </div>
       )}
 
-      <section className="booking-quota-panel" aria-label="Monthly accepted booking usage">
+      {<section className="booking-quota-panel" aria-label="Monthly accepted booking usage">
         <div className="booking-quota-heading">
           <div>
             <span>MONTHLY ACCEPTED BOOKINGS</span>
@@ -1458,7 +1451,7 @@ const openClientChatroom = (booking: Booking) => {
         <small className="booking-quota-footnote">
           Pending and rejected requests do not count. The server checks the limit when a booking is confirmed.
         </small>
-      </section>
+      </section>}
 
       {catererData?.account_standing && catererData.account_standing !== 'good_standing' && (
         <section className={`booking-standing-alert ${catererData.account_standing === 'refund_overdue' ? 'warning' : 'restricted'}`}>
@@ -1492,7 +1485,6 @@ const openClientChatroom = (booking: Booking) => {
                 className={`booking-refund-alert ${urgent ? 'urgent' : ''}`}
                 onClick={() => {
                   setSelectedBooking(booking);
-                  setInternalNote(booking.caterer_notes ?? '');
                   resetActionForms();
                   resetRefundForm();
                   resetDisputeForm();
@@ -1556,6 +1548,7 @@ const openClientChatroom = (booking: Booking) => {
             <button
               type="button"
               key={item.value}
+              aria-pressed={filter === item.value}
               className={`bookings-tab ${
                 filter === item.value ? 'active' : ''
               }`}
@@ -1636,9 +1629,6 @@ const openClientChatroom = (booking: Booking) => {
                       onClick={() => {
                         if (!booking) return;
                         setSelectedBooking(booking);
-                        setInternalNote(booking.caterer_notes ?? '');
-                        setInternalNoteMessage('');
-                        setInternalNoteError('');
                         setError('');
                         setActionMessage('');
                         resetActionForms();
@@ -1669,7 +1659,7 @@ const openClientChatroom = (booking: Booking) => {
               ? 'No matching bookings'
               : filter === 'all'
                 ? 'No bookings yet'
-                : `No ${filter} bookings`}
+                : `No ${getStatusLabel(filter).toLowerCase()} bookings`}
           </h2>
           <p>
             {search
@@ -1690,6 +1680,8 @@ const openClientChatroom = (booking: Booking) => {
         <div className="bookings-list">
           {filteredBookings.map((booking) => (
             <article className="booking-card" key={booking.id}>
+
+
               <div className="booking-card-main">
                 <div className="booking-customer">
                   {booking.customer?.avatar_url ? (
@@ -1711,6 +1703,7 @@ const openClientChatroom = (booking: Booking) => {
                     <span>
                       Booking #{booking.id.slice(0, 8).toUpperCase()}
                     </span>
+                    {!!booking.reviews?.length && <span className="booking-reviewed-indicator">Reviewed · {booking.reviews[0].overall ?? '—'}/5</span>}
                   </div>
                 </div>
 
@@ -1766,9 +1759,6 @@ const openClientChatroom = (booking: Booking) => {
                     onClick={() => {
                       setSelectedBooking(booking);
 
-                      setInternalNote(booking.caterer_notes ?? '');
-                      setInternalNoteMessage('');
-                      setInternalNoteError('');
 
                       setError('');
                       setActionMessage('');
@@ -1820,6 +1810,7 @@ const openClientChatroom = (booking: Booking) => {
               <button
                 type="button"
                 className="booking-modal-close"
+                aria-label="Close booking details"
                 disabled={
                   actionLoading ||
                   refundSubmitting ||
@@ -1832,7 +1823,8 @@ const openClientChatroom = (booking: Booking) => {
               </button>
             </div>
 
-            <div className="booking-modal-body">
+            <div className="booking-modal-body" tabIndex={0} aria-label="Booking details content">
+
               <div className="booking-detail-status">
                 <span
                   className={`booking-status ${
@@ -1843,298 +1835,6 @@ const openClientChatroom = (booking: Booking) => {
                   {getStatusLabel(selectedBooking.status)}
                 </span>
               </div>
-
-              {/* BOOKING ACTIONS */}
-              {['pending', 'confirmed', 'paid', 'ongoing'].includes(
-                selectedBooking.status
-              ) && (
-                <section className="booking-detail-section booking-actions-section">
-                  <h3>
-                    <CheckCircle2 size={16} />
-                    Booking Actions
-                  </h3>
-
-                  {actionMessage && (
-                    <div className="booking-action-success">
-                      <CheckCircle2 size={16} />
-                      {actionMessage}
-                    </div>
-                  )}
-
-                  {selectedBooking.status === 'pending' && (
-                    <>
-                      <p>
-                        Review the customer's event details before confirming
-                        or rejecting this booking request.
-                      </p>
-
-                      {!showRejectForm ? (
-                        <div className="booking-action-buttons">
-                          <button
-                            type="button"
-                            className="booking-action-button confirm"
-                            disabled={actionLoading}
-                            onClick={() => handleBookingAction('confirm')}
-                          >
-                            {actionLoading ? (
-                              <LoaderCircle
-                                size={17}
-                                className="bookings-spin"
-                              />
-                            ) : (
-                              <CheckCircle2 size={17} />
-                            )}
-                            Confirm Booking
-                          </button>
-
-                          <button
-                            type="button"
-                            className="booking-action-button reject"
-                            disabled={actionLoading}
-                            onClick={() => {
-                              setError('');
-                              setShowRejectForm(true);
-                            }}
-                          >
-                            <XCircle size={17} />
-                            Reject Booking
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="booking-reject-form">
-                          <label htmlFor="booking-rejection-reason">
-                            Reason for rejecting this booking
-                          </label>
-
-                          <textarea
-                            id="booking-rejection-reason"
-                            value={rejectionReason}
-                            onChange={(event) =>
-                              setRejectionReason(event.target.value)
-                            }
-                            placeholder="Explain why you cannot accept this booking..."
-                            rows={4}
-                          />
-
-                          <small>
-                            Please provide a reason for rejecting this booking.
-                          </small>
-
-                          <div className="booking-action-buttons">
-                            <button
-                              type="button"
-                              className="booking-action-button reject"
-                              disabled={actionLoading}
-                              onClick={() => handleBookingAction('reject')}
-                            >
-                              {actionLoading ? (
-                                <LoaderCircle
-                                  size={17}
-                                  className="bookings-spin"
-                                />
-                              ) : (
-                                <XCircle size={17} />
-                              )}
-                              Submit Rejection
-                            </button>
-
-                            <button
-                              type="button"
-                              className="bookings-secondary-button"
-                              disabled={actionLoading}
-                              onClick={() => {
-                                setShowRejectForm(false);
-                                setRejectionReason('');
-                              }}
-                            >
-                              Go Back
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {['confirmed', 'paid'].includes(selectedBooking.status) && (
-                    <div className="booking-emergency-cancel">
-                      {!showEmergencyCancelForm ? (
-                        <button
-                          type="button"
-                          className="booking-action-button emergency-cancel"
-                          disabled={actionLoading}
-                          onClick={() => {
-                            setError('');
-                            setShowEmergencyCancelForm(true);
-                          }}
-                        >
-                          <XCircle size={17} />
-                          Emergency Cancel
-                        </button>
-                      ) : (
-                        <div className="booking-emergency-form">
-                          <h4>Emergency Cancellation</h4>
-
-                          <p>
-                            Use this option only when an unexpected situation
-                            prevents you from providing the catering service.
-                            The customer will be notified and may request a
-                            refund of their verified downpayment.
-                          </p>
-
-                          <label htmlFor="emergency-cancel-reason">
-                            Emergency reason
-                          </label>
-
-                          <select
-                            id="emergency-cancel-reason"
-                            value={emergencyCancelReason}
-                            onChange={(event) =>
-                              setEmergencyCancelReason(event.target.value)
-                            }
-                            disabled={actionLoading}
-                          >
-                            <option value="">
-                              Select an emergency reason
-                            </option>
-                            {CATERER_CANCEL_REASONS.map((reason) => (
-                              <option key={reason} value={reason}>
-                                {reason}
-                              </option>
-                            ))}
-                          </select>
-
-                          {emergencyCancelReason === 'Other' && (
-                            <>
-                              <label htmlFor="emergency-cancel-custom-reason">
-                                Specify the emergency
-                              </label>
-                              <textarea
-                                id="emergency-cancel-custom-reason"
-                                value={emergencyCancelCustomReason}
-                                onChange={(event) =>
-                                  setEmergencyCancelCustomReason(event.target.value)
-                                }
-                                placeholder="Please specify your emergency..."
-                                rows={4}
-                                disabled={actionLoading}
-                              />
-                            </>
-                          )}
-
-                          {selectedBooking.payment_verified_at ? (
-                            <div className="booking-emergency-refund-info">
-                              <Wallet size={17} />
-                              <span>
-                                A full downpayment refund of{' '}
-                                <strong>
-                                  {formatCurrency(
-                                    selectedBooking.downpayment_amount
-                                  )}
-                                </strong>{' '}
-                                will be recorded.
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="booking-emergency-refund-info">
-                              <Wallet size={17} />
-                              <span>
-                                No verified downpayment was recorded, so no
-                                refund amount will be due.
-                              </span>
-                            </div>
-                          )}
-
-                          <div className="booking-action-buttons">
-                            <button
-                              type="button"
-                              className="booking-action-button emergency-cancel"
-                              disabled={actionLoading}
-                              onClick={handleEmergencyCancellation}
-                            >
-                              {actionLoading ? (
-                                <LoaderCircle
-                                  size={17}
-                                  className="bookings-spin"
-                                />
-                              ) : (
-                                <XCircle size={17} />
-                              )}
-                              Confirm Cancel & Notify Client
-                            </button>
-
-                            <button
-                              type="button"
-                              className="bookings-secondary-button"
-                              disabled={actionLoading}
-                              onClick={() => {
-                                setShowEmergencyCancelForm(false);
-                                setEmergencyCancelReason('');
-                                setEmergencyCancelCustomReason('');
-                                setError('');
-                              }}
-                            >
-                              Go Back
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {selectedBooking.status === 'paid' && (
-                    <>
-                      <p>
-                        The booking has been accepted. Once the event
-                        preparation or service begins, you can mark it as
-                        ongoing.
-                      </p>
-
-                      <button
-                        type="button"
-                        className="booking-action-button ongoing"
-                        disabled={actionLoading}
-                        onClick={() => handleBookingAction('ongoing')}
-                      >
-                        {actionLoading ? (
-                          <LoaderCircle
-                            size={17}
-                            className="bookings-spin"
-                          />
-                        ) : (
-                          <CalendarDays size={17} />
-                        )}
-                        Mark as Ongoing
-                      </button>
-                    </>
-                  )}
-
-                  {selectedBooking.status === 'ongoing' && (
-                    <>
-                      <p>
-                        Mark this booking as completed after the catering
-                        service and event have finished.
-                      </p>
-
-                      <button
-                        type="button"
-                        className="booking-action-button complete"
-                        disabled={actionLoading}
-                        onClick={() => handleBookingAction('complete')}
-                      >
-                        {actionLoading ? (
-                          <LoaderCircle
-                            size={17}
-                            className="bookings-spin"
-                          />
-                        ) : (
-                          <CheckCircle2 size={17} />
-                        )}
-                        Mark as Completed
-                      </button>
-                    </>
-                  )}
-                </section>
-              )}
 
               {/* CUSTOMER INFORMATION */}
               <section className="booking-detail-section">
@@ -2306,72 +2006,6 @@ const openClientChatroom = (booking: Booking) => {
                 </div>
               </section>
 
-              {/* CATERER-ONLY INTERNAL NOTES */}
-              <section className="booking-detail-section booking-internal-notes">
-                <h3>
-                  <FileText size={16} />
-                  Internal Notes
-                </h3>
-
-                <p className="booking-internal-notes-description">
-                  These notes are for your catering business records. They are
-                  intended for internal use and are not displayed in the
-                  customer-facing interface.
-                </p>
-
-                <textarea
-                  value={internalNote}
-                  onChange={(event) => {
-                    setInternalNote(event.target.value);
-                    setInternalNoteError('');
-                    setInternalNoteMessage('');
-                  }}
-                  placeholder="Write private notes about this booking..."
-                  rows={5}
-                  maxLength={2000}
-                  disabled={savingInternalNote}
-                />
-
-                <small>{internalNote.length}/2000 characters</small>
-
-                {internalNoteError && (
-                  <div className="bookings-alert error">
-                    <AlertCircle size={16} />
-                    <span>{internalNoteError}</span>
-                  </div>
-                )}
-
-                {internalNoteMessage && (
-                  <div className="booking-action-success">
-                    <CheckCircle2 size={16} />
-                    {internalNoteMessage}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  className="booking-action-button confirm"
-                  onClick={handleSaveInternalNote}
-                  disabled={
-                    savingInternalNote ||
-                    internalNote.length > 2000
-                  }
-                >
-                  {savingInternalNote ? (
-                    <LoaderCircle
-                      size={17}
-                      className="bookings-spin"
-                    />
-                  ) : (
-                    <FileText size={17} />
-                  )}
-
-                  {savingInternalNote
-                    ? 'Saving Note...'
-                    : 'Save Internal Note'}
-                </button>
-              </section>
-
               {/* PAYMENT INFORMATION */}
               <section className="booking-detail-section">
                 <h3>
@@ -2392,7 +2026,16 @@ const openClientChatroom = (booking: Booking) => {
                       {formatCurrency(selectedBooking.downpayment_amount)}
                     </strong>
                   </div>
+                  <div>
+                    <span>Verified downpayment</span>
+                    <strong>{selectedBooking.payment_verified_at ? formatCurrency(selectedBooking.downpayment_amount) : 'Not verified'}</strong>
+                  </div>
+                  {selectedBooking.payment_verified_at && !['cancelled', 'rejected'].includes(selectedBooking.status) && <div>
+                    <span>Balance after recorded downpayment</span>
+                    <strong>{formatCurrency(Math.max(0, Number(selectedBooking.total_cost) - Number(selectedBooking.downpayment_amount)))}</strong>
+                  </div>}
                 </div>
+                <p>Balance uses the recorded verified downpayment only; additional or offline payments are not included.</p>
 
                 <p>
                   <strong>Payment method:</strong>{' '}
@@ -2456,7 +2099,7 @@ const openClientChatroom = (booking: Booking) => {
               </section>
 
               {/* CUSTOMER REVIEW */}
-              <section className="booking-detail-section">
+              {(selectedBooking.status === 'completed' || !!selectedBooking.reviews?.length) && <section ref={reviewSectionRef} className="booking-detail-section booking-review-section">
                 <h3>
                   <Star size={16} /> Customer Review
                 </h3>
@@ -2467,7 +2110,7 @@ const openClientChatroom = (booking: Booking) => {
                     <div className="booking-review-card" key={review.id}>
                       <div className="booking-review-header">
                         <div>
-                          <strong>Overall Rating</strong>
+                          <strong>{selectedBooking.customer?.full_name ?? 'Customer'} · Overall Rating</strong>
 
                           <div className="booking-review-stars">
                             {Array.from({ length: 5 }, (_, index) => (
@@ -2527,15 +2170,35 @@ const openClientChatroom = (booking: Booking) => {
                         {review.caterer_reply ? (
                           <>
                             <p>{review.caterer_reply}</p>
-                            <small>
+                            {review.caterer_replied_at && <small>
                               Replied:{' '}
                               {formatDateTime(review.caterer_replied_at)}
-                            </small>
+                            </small>}
                           </>
                         ) : (
-                          <p>You have not replied to this review yet.</p>
+                          <>
+                            <p>You have not replied to this review yet.</p>
+                            {replyEditorId === review.id ? <div className="booking-review-editor">
+                              <label htmlFor={`review-reply-${review.id}`}>Your reply</label>
+                              <textarea id={`review-reply-${review.id}`} rows={3} value={replyDrafts[review.id] ?? ''}
+                                placeholder="Write a professional reply to this customer..."
+                                onChange={event => setReplyDrafts(current => ({ ...current, [review.id]: event.target.value }))}
+                                disabled={replySavingId === review.id} />
+                              <div className="booking-action-buttons">
+                                <button type="button" className="booking-action-button confirm"
+                                  disabled={!!replySavingId || !replyDrafts[review.id]?.trim()}
+                                  onClick={() => void submitReviewReply(review)}>
+                                  {replySavingId === review.id ? <LoaderCircle size={16} className="bookings-spin" /> : <Send size={16} />}
+                                  {replySavingId === review.id ? 'Saving Reply...' : 'Submit Reply'}
+                                </button>
+                                <button type="button" className="bookings-secondary-button" disabled={!!replySavingId} onClick={() => setReplyEditorId(null)}>Cancel</button>
+                              </div>
+                            </div> : <button type="button" className="booking-action-button confirm"
+                              onClick={() => { setReplyEditorId(review.id); setReplyFeedback(null); }}><MessageSquare size={16} />Reply to Review</button>}
+                          </>
                         )}
                       </div>
+                      {replyFeedback?.id === review.id && <p role={replyFeedback.error ? 'alert' : 'status'} className={replyFeedback.error ? 'booking-review-error' : 'booking-review-success'}>{replyFeedback.message}</p>}
                     </div>
                   ))
                 ) : (
@@ -2547,7 +2210,7 @@ const openClientChatroom = (booking: Booking) => {
                     </p>
                   </div>
                 )}
-              </section>
+              </section>}
 
               {/* REJECTION */}
               {selectedBooking.status === 'rejected' && (
@@ -2594,7 +2257,7 @@ const openClientChatroom = (booking: Booking) => {
 
                   <p>
                     <strong>Refund status:</strong>{' '}
-                    {selectedBooking.refund_status ?? 'None'}
+                    <span className="booking-refund-status-label">{refundStatusLabel(selectedBooking.refund_status)}</span>
                   </p>
 
                   <p>
@@ -2608,7 +2271,7 @@ const openClientChatroom = (booking: Booking) => {
                   </p>
 
                   <p>
-                    <strong>Refund completed:</strong>{' '}
+                    <strong>Customer confirmed receipt:</strong>{' '}
                     {formatDateTime(selectedBooking.refunded_at)}
                   </p>
 
@@ -2627,7 +2290,7 @@ const openClientChatroom = (booking: Booking) => {
                         </p>
 
                         <p>
-                          <strong>Account holder:</strong>{' '}
+                          <strong>Account name:</strong>{' '}
                           {refundAccount.account_holder || 'Not provided'}
                         </p>
 
@@ -2645,8 +2308,7 @@ const openClientChatroom = (booking: Booking) => {
                       </>
                     ) : (
                       <p>
-                        The customer has not submitted valid refund destination
-                        details yet.
+                        Waiting for Customer refund account details. Transfer proof can be submitted after the destination is provided and the transfer is completed.
                       </p>
                     )}
                   </div>
@@ -2663,6 +2325,7 @@ const openClientChatroom = (booking: Booking) => {
                       <h4><FileText size={16} /> Transfer Proof Submitted</h4>
                       <p><strong>Status:</strong> {refundSubmissions[selectedBooking.id].status}</p>
                       <p><strong>Transfer reference:</strong> {refundSubmissions[selectedBooking.id].transfer_reference}</p>
+
                       <p><strong>Submitted:</strong> {formatDateTime(refundSubmissions[selectedBooking.id].submitted_at)}
                         {refundSubmissions[selectedBooking.id].submitted_late ? ' (late)' : ''}</p>
                       {refundSubmissions[selectedBooking.id].review_note && (
@@ -2676,7 +2339,7 @@ const openClientChatroom = (booking: Booking) => {
                         <ExternalLink size={15} /> View private transfer proof
                       </button>
                       <small>
-                        The refund remains pending until the customer confirms receipt. Contact Platform Staff about any issue with submitted evidence.
+                        {selectedBooking.refund_status === 'processed' ? 'Processed. The Customer confirmed receiving the refund.' : 'Awaiting Customer confirmation. Contact Platform Staff about any issue with submitted evidence.'}
                       </small>
                     </div>
                   )}
@@ -2831,7 +2494,7 @@ const openClientChatroom = (booking: Booking) => {
                     )}
 
                   {/* REFUND SUBMISSION FORM */}
-                  {canSubmitRefund && (
+                  {canSubmitRefund && !!selectedBooking.refund_account_details?.trim() && (
                     <div className="booking-refund-submit">
                       <h4>
                         <Upload size={17} />
@@ -3016,6 +2679,373 @@ const openClientChatroom = (booking: Booking) => {
                     <p>
                       No refund is due for this cancelled booking.
                     </p>
+                  )}
+                </section>
+              )}
+
+              {/* CATERER-ONLY INTERNAL NOTES */}
+              <section className="booking-detail-section booking-internal-notes">
+                <div className="booking-notes-header">
+                  <h3><FileText size={16} />Internal Notes</h3>
+                  <button type="button" className="booking-notes-refresh" onClick={internalNotes.reload}
+                    disabled={internalNotes.loading || savingInternalNote}
+                    title="Load Latest Saved Note" aria-label="Load Latest Saved Note" aria-busy={internalNotes.loading}>
+                    <RefreshCw size={18} aria-hidden="true" className={internalNotes.loading ? 'bookings-spin' : undefined} />
+                  </button>
+                </div>
+
+                <p className="booking-internal-notes-description">
+                  Private notes are only accessible to the assigned Caterer.
+                </p>
+
+                <textarea
+                  aria-label="Private booking notes"
+                  value={internalNotes.note}
+                  onChange={(event) => internalNotes.setNote(event.target.value)}
+                  placeholder="Write private notes about this booking..."
+                  rows={3}
+                  disabled={!internalNotes.ready || savingInternalNote}
+                />
+
+                <small>{internalNotes.count.toLocaleString()} / 5,000 characters</small>
+
+                {internalNotes.loading && <p role="status">Loading private notes...</p>}
+                {internalNotes.review && (
+                  <div className="bookings-alert">
+                    <div>
+                      <strong>Latest saved note — compare with your draft above</strong>
+                      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{internalNotes.savedNote || '(Empty note)'}</pre>
+                      <button type="button" onClick={internalNotes.useSavedNote} disabled={savingInternalNote}>Use saved note instead</button>
+                    </div>
+                  </div>
+                )}
+
+                {internalNotes.error && (
+                  <div className="bookings-alert error" role="alert">
+                    <AlertCircle size={16} />
+                    <span>{internalNotes.error}</span>
+                  </div>
+                )}
+
+                {internalNotes.message && (
+                  <div className="booking-action-success" role="status">
+                    <CheckCircle2 size={16} />
+                    {internalNotes.message}
+                  </div>
+                )}
+
+                <div className="booking-notes-actions">
+                  <button
+                    type="button"
+                    className="booking-action-button confirm"
+                    onClick={() => void internalNotes.save()}
+                    disabled={!internalNotes.canSave}
+                  >
+                    {savingInternalNote ? (
+                      <LoaderCircle
+                        size={17}
+                        className="bookings-spin"
+                      />
+                    ) : (
+                      <FileText size={17} />
+                    )}
+
+                    {savingInternalNote
+                      ? 'Saving Note...'
+                      : 'Save Note'}
+                  </button>
+                </div>
+              </section>
+
+              {/* BOOKING ACTIONS */}
+              {['pending', 'confirmed', 'paid', 'ongoing'].includes(
+                selectedBooking.status
+              ) && (
+                <section className="booking-detail-section booking-actions-section">
+                  <h3>
+                    <CheckCircle2 size={16} />
+                    Booking Actions
+                  </h3>
+
+                  {actionMessage && (
+                    <div className="booking-action-success">
+                      <CheckCircle2 size={16} />
+                      {actionMessage}
+                    </div>
+                  )}
+
+                  {selectedBooking.status === 'pending' && (
+                    <>
+                      <p>
+                        Review the customer's event details before confirming
+                        or rejecting this booking request.
+                      </p>
+
+                      {!showRejectForm ? (
+                        <div className="booking-action-buttons">
+                          <button
+                            type="button"
+                            className="booking-action-button confirm"
+                            disabled={actionLoading}
+                            onClick={() => handleBookingAction('confirm')}
+                          >
+                            {actionLoading ? (
+                              <LoaderCircle
+                                size={17}
+                                className="bookings-spin"
+                              />
+                            ) : (
+                              <CheckCircle2 size={17} />
+                            )}
+                            Confirm Booking
+                          </button>
+
+                          <button
+                            type="button"
+                            className="booking-action-button reject"
+                            disabled={actionLoading}
+                            onClick={() => {
+                              setError('');
+                              setShowRejectForm(true);
+                            }}
+                          >
+                            <XCircle size={17} />
+                            Reject Booking
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="booking-reject-form">
+                          <label htmlFor="booking-rejection-reason">
+                            Reason for rejecting this booking
+                          </label>
+
+                          <textarea
+                            id="booking-rejection-reason"
+                            value={rejectionReason}
+                            onChange={(event) =>
+                              setRejectionReason(event.target.value)
+                            }
+                            placeholder="Explain why you cannot accept this booking..."
+                            rows={4}
+                          />
+
+                          <small>
+                            Please provide a reason for rejecting this booking.
+                          </small>
+
+                          <div className="booking-action-buttons">
+                            <button
+                              type="button"
+                              className="booking-action-button reject"
+                              disabled={actionLoading}
+                              onClick={() => handleBookingAction('reject')}
+                            >
+                              {actionLoading ? (
+                                <LoaderCircle
+                                  size={17}
+                                  className="bookings-spin"
+                                />
+                              ) : (
+                                <XCircle size={17} />
+                              )}
+                              Submit Rejection
+                            </button>
+
+                            <button
+                              type="button"
+                              className="bookings-secondary-button"
+                              disabled={actionLoading}
+                              onClick={() => {
+                                setShowRejectForm(false);
+                                setRejectionReason('');
+                              }}
+                            >
+                              Go Back
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {['confirmed', 'paid'].includes(selectedBooking.status) && (
+                    <div className="booking-emergency-cancel">
+                      {selectedBooking.status === 'paid' && <p>A verified downpayment requires a 100% refund. The Customer must confirm receipt after transfer proof is submitted.</p>}
+                      {!showEmergencyCancelForm ? (
+                        <button
+                          type="button"
+                          className="booking-action-button emergency-cancel"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            setError('');
+                            setShowEmergencyCancelForm(true);
+                          }}
+                        >
+                          <XCircle size={17} />
+                          Emergency Cancel
+                        </button>
+                      ) : (
+                        <div className="booking-emergency-form">
+                          <h4>Emergency Cancellation</h4>
+
+                          <p>
+                            Use this option only when an unexpected situation
+                            prevents you from providing the catering service.
+                            The customer will be notified and may request a
+                            refund of their verified downpayment.
+                          </p>
+
+                          <label htmlFor="emergency-cancel-reason">
+                            Emergency reason
+                          </label>
+
+                          <select
+                            id="emergency-cancel-reason"
+                            value={emergencyCancelReason}
+                            onChange={(event) =>
+                              setEmergencyCancelReason(event.target.value)
+                            }
+                            disabled={actionLoading}
+                          >
+                            <option value="">
+                              Select an emergency reason
+                            </option>
+                            {CATERER_CANCEL_REASONS.map((reason) => (
+                              <option key={reason} value={reason}>
+                                {reason}
+                              </option>
+                            ))}
+                          </select>
+
+                          {emergencyCancelReason === 'Other' && (
+                            <>
+                              <label htmlFor="emergency-cancel-custom-reason">
+                                Specify the emergency
+                              </label>
+                              <textarea
+                                id="emergency-cancel-custom-reason"
+                                value={emergencyCancelCustomReason}
+                                onChange={(event) =>
+                                  setEmergencyCancelCustomReason(event.target.value)
+                                }
+                                placeholder="Please specify your emergency..."
+                                rows={4}
+                                disabled={actionLoading}
+                              />
+                            </>
+                          )}
+
+                          {selectedBooking.payment_verified_at ? (
+                            <div className="booking-emergency-refund-info">
+                              <Wallet size={17} />
+                              <span>
+                                A full downpayment refund of{' '}
+                                <strong>
+                                  {formatCurrency(
+                                    selectedBooking.downpayment_amount
+                                  )}
+                                </strong>{' '}
+                                requires a full refund of the verified downpayment after cancellation.
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="booking-emergency-refund-info">
+                              <Wallet size={17} />
+                              <span>
+                                No verified downpayment was recorded, so no
+                                refund amount will be due.
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="booking-action-buttons">
+                            <button
+                              type="button"
+                              className="booking-action-button emergency-cancel"
+                              disabled={actionLoading}
+                              onClick={handleEmergencyCancellation}
+                            >
+                              {actionLoading ? (
+                                <LoaderCircle
+                                  size={17}
+                                  className="bookings-spin"
+                                />
+                              ) : (
+                                <XCircle size={17} />
+                              )}
+                              Confirm Cancel & Notify Client
+                            </button>
+
+                            <button
+                              type="button"
+                              className="bookings-secondary-button"
+                              disabled={actionLoading}
+                              onClick={() => {
+                                setShowEmergencyCancelForm(false);
+                                setEmergencyCancelReason('');
+                                setEmergencyCancelCustomReason('');
+                                setError('');
+                              }}
+                            >
+                              Go Back
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedBooking.status === 'paid' && (
+                    <>
+                      <p>
+                        The booking has been accepted. Once the event
+                        preparation or service begins, you can mark it as
+                        ongoing.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="booking-action-button ongoing"
+                        disabled={actionLoading}
+                        onClick={() => handleBookingAction('ongoing')}
+                      >
+                        {actionLoading ? (
+                          <LoaderCircle
+                            size={17}
+                            className="bookings-spin"
+                          />
+                        ) : (
+                          <CalendarDays size={17} />
+                        )}
+                        Mark as Ongoing
+                      </button>
+                    </>
+                  )}
+
+                  {selectedBooking.status === 'ongoing' && (
+                    <>
+                      <p>
+                        Mark this booking as completed after the catering
+                        service and event have finished.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="booking-action-button complete"
+                        disabled={actionLoading}
+                        onClick={() => handleBookingAction('complete')}
+                      >
+                        {actionLoading ? (
+                          <LoaderCircle
+                            size={17}
+                            className="bookings-spin"
+                          />
+                        ) : (
+                          <CheckCircle2 size={17} />
+                        )}
+                        Mark as Completed
+                      </button>
+                    </>
                   )}
                 </section>
               )}

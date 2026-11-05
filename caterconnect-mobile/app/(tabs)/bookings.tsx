@@ -1,16 +1,21 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 // app/(tabs)/CustomerBookings.tsx
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Platform,
+  ActivityIndicator, Alert, Image, Modal, Platform, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import BookingPaymentSummary from '../../components/BookingPaymentSummary';
+import BookingReviewDisplay, { type BookingReview } from '../../components/BookingReviewDisplay';
+import { useReviewSectionScroll } from '../../hooks/useReviewSectionScroll';
+import BookingRefundSummary, { refundStatusLabel } from '../../components/BookingRefundSummary';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useBookingRefresh } from '../../hooks/useBookingRefresh';
-import { initiateGCashPayment, openGCashCheckout } from '../../lib/xendit';
+import { bookingPaymentUnavailable, payBookingDownpayment } from '../../lib/bookingPayment';
 import ReviewScreen from '../../screens/auth/ReviewScreen';
 import ChatScreen from '../../screens/auth/ChatScreen';
 import {
@@ -21,6 +26,9 @@ import {
 type Booking = {
   id: string; status: string;
   event_date: string; event_type: string | null;
+  event_time?: string | null;
+  payment_reference?: string | null;
+  refund_due_at?: string | null;
   guest_count: number; total_cost: number;
   downpayment_amount: number; downpayment_deadline: string | null;
   venue: string | null; created_at: string;
@@ -38,10 +46,10 @@ type Booking = {
   refunded_at: string | null;
   refund_account_details: string | null;
   caterer_notes: string | null;
-  caterers: { 
-    business_name: string; 
-    logo_url: string | null; 
-    city: string | null; 
+  caterers: {
+    business_name: string;
+    logo_url: string | null;
+    city: string | null;
     user_id: string;
     accepted_payment_methods?: string[] | null;
     accepted_payment_details?: Record<string, string> | null;
@@ -49,6 +57,7 @@ type Booking = {
   packages: { name: string; tier: string; [key: string]: any } | null;
   customized_items?: unknown;
   special_requests?: string | null;
+  reviews?: BookingReview[];
 };
 
 // Display only the payment channel recorded on the verified booking.
@@ -71,10 +80,11 @@ const displayXenditPaymentMethod = (method: string | null | undefined): string =
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending:   { label: 'Pending Review',   color: '#B45309', bg: '#FEF3C7', icon: Clock },
-  confirmed: { label: 'Confirmed',        color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
-  paid:      { label: 'Payment Verified', color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
-  ongoing:   { label: 'Event Ongoing',    color: '#D97706', bg: '#FFFBEB', icon: RefreshCw },
-  completed: { label: 'Completed',        color: '#15803D', bg: '#DCFCE7', icon: PartyPopper },
+  confirmed: { label: 'Confirmed',        color: '#1D4ED8', bg: '#DBEAFE', icon: CheckCircle2 },
+  awaiting_payment: { label: 'Awaiting Payment', color: '#B45309', bg: '#FEF3C7', icon: CreditCard },
+  paid:      { label: 'Downpayment Verified', color: '#15803D', bg: '#DCFCE7', icon: ShieldCheck },
+  ongoing:   { label: 'Event Ongoing',    color: '#6D28D9', bg: '#EDE9FE', icon: RefreshCw },
+  completed: { label: 'Completed',        color: '#047857', bg: '#D1FAE5', icon: PartyPopper },
   rejected:  { label: 'Rejected',         color: '#B91C1C', bg: '#FEE2E2', icon: XCircle },
   cancelled: { label: 'Cancelled',        color: '#4B5563', bg: '#F3F4F6', icon: Ban },
 };
@@ -87,7 +97,7 @@ const PAYMENT_CHANNEL_CONFIG: Record<string, { label: string; sub: string; icon:
   card: { label: 'Credit / Debit Card', sub: 'Visa, Mastercard, JCB', icon: CreditCard },
 };
 
-const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed', 'rejected', 'cancelled'];
+const FILTERS = ['all', 'pending', 'confirmed', 'awaiting_payment', 'paid', 'ongoing', 'completed', 'rejected', 'cancelled'];
 
 const REFUND_METHODS = [
   { key: 'gcash', label: 'GCash', type: 'wallet' },
@@ -117,11 +127,11 @@ const getDaysBeforeEvent = (eventDateString: string): number => {
     .map(Number);
 
   const eventDay = Date.UTC(year, month - 1, day);
-  const today = new Date();
+  const today = new Date(Date.now() + 8 * 60 * 60 * 1000);
   const todayDay = Date.UTC(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate()
   );
 
   return Math.round((eventDay - todayDay) / (1000 * 60 * 60 * 24));
@@ -181,7 +191,8 @@ function BookingTimeline({ status }: { status: string }) {
   const getStepIndex = (st: string) => {
     switch (st) {
       case 'pending': return 0;
-      case 'confirmed': return 1;
+      case 'confirmed':
+      case 'awaiting_payment': return 1;
       case 'paid':
       case 'ongoing': return 2;
       case 'completed': return 3;
@@ -192,9 +203,9 @@ function BookingTimeline({ status }: { status: string }) {
   };
 
   const currentStep = getStepIndex(status);
-  if (currentStep === -1) return null; 
+  if (currentStep === -1) return null;
 
-  const steps = ['Requested', 'Confirmed', 'Paid', 'Event Day'];
+  const steps = ['Requested', 'Confirmed', 'Downpayment', 'Completed'];
 
   return (
     <View style={tl.wrap}>
@@ -271,7 +282,8 @@ const describePackageField = (value: unknown): string[] => {
     const title = obj.name ?? obj.item_name ?? obj.menu_item_name ?? obj.title;
     if (title != null) {
       const quantity = obj.quantity ?? obj.qty;
-      return [String(title) + (quantity != null ? ` (x${quantity})` : '')];
+      return [String(title) + (quantity != null ? ` (x${quantity})` : '') +
+        (obj.price_per_guest != null ? ` | PHP ${Number(obj.price_per_guest).toLocaleString('en-PH')} / guest` : '')];
     }
     return Object.entries(obj).flatMap(([key, val]) =>
       val == null ? [] : [`${key.replace(/_/g, ' ')}: ${typeof val === 'object' ? JSON.stringify(val) : String(val)}`]
@@ -283,10 +295,12 @@ const describePackageField = (value: unknown): string[] => {
 export default function CustomerBookings() {
   const { session } = useAuth();
   const router = useRouter();
-  const { id: notificationBookingId, notification_id: notificationId } = useLocalSearchParams<{ id?: string; notification_id?: string }>();
+  const { id: notificationBookingId, notification_id: notificationId, section: notificationSection } = useLocalSearchParams<{ id?: string; notification_id?: string; section?: string }>();
   const lastOpenedNotification = useRef<string | null>(null);
   const [refundEvidence, setRefundEvidence] = useState<Record<string, boolean>>({});
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
+  const [reviewFocus, setReviewFocus] = useState<{ bookingId: string; key: string } | null>(null);
+  const reviewScroll = useReviewSectionScroll(detailBooking?.id ?? null, reviewFocus?.bookingId === detailBooking?.id ? reviewFocus?.key ?? null : null);
   const [transferEvidence, setTransferEvidence] = useState<any[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [refundDisputes, setRefundDisputes] = useState<Record<string, { status: string; reason: string; created_at: string; caterer_response: string | null; caterer_responded_at: string | null }>>({});
@@ -297,8 +311,9 @@ export default function CustomerBookings() {
   const [confirmingRefundId, setConfirmingRefundId] = useState<string | null>(null);
   const [bookings, setBookings]            = useState<Booking[]>([]);
   const [loading, setLoading]              = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [filter, setFilter]                = useState('all');
-  
+
   // Payment Modal States
   const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('gcash');
@@ -311,7 +326,7 @@ export default function CustomerBookings() {
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
-  const [refundAccount, setRefundAccount] = useState(''); 
+  const [refundAccount, setRefundAccount] = useState('');
   // Refund destination fields, saved with the cancellation request.
   const [refundMethod, setRefundMethod] = useState<RefundMethod>('gcash');
   const [refundHolderName, setRefundHolderName] = useState('');
@@ -319,6 +334,14 @@ export default function CustomerBookings() {
   const [refundBankName, setRefundBankName] = useState('');
 
   const [isCancelling, setIsCancelling] = useState(false);
+  const cancellationInFlight = useRef(false);
+  const [, setCancellationClock] = useState(Date.now());
+  useEffect(() => {
+    if (!cancellingBooking) return;
+    setCancellationClock(Date.now());
+    const timer = setInterval(() => setCancellationClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [cancellingBooking?.id]);
 
   // Refund destination after a caterer-initiated emergency cancellation.
   const [refundDestinationBooking, setRefundDestinationBooking] = useState<Booking | null>(null);
@@ -329,6 +352,7 @@ export default function CustomerBookings() {
   const [emergencyRefundBank, setEmergencyRefundBank] = useState('');
 
   const submitEmergencyRefundDestination = async () => {
+
     if (!refundDestinationBooking || savingRefundDestination || !session?.user?.id) return;
     const holder = emergencyRefundHolder.trim();
     const account = emergencyRefundNumber.trim();
@@ -378,26 +402,29 @@ export default function CustomerBookings() {
   loadScope.current = `${session?.user.id ?? ''}:${filter}`;
   const loadVersion = useRef(0);
   const load = async (silent = false) => {
+
     const scope = loadScope.current;
     const version = ++loadVersion.current;
     const isCurrent = () => scope === loadScope.current && version === loadVersion.current;
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) { setBookings([]); setLoading(false); return; }
     if (!silent) setLoading(true);
+    setLoadError('');
+    try {
     let query = supabase
       .from('bookings')
       .select(`
         *,
         caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details),
         packages(*),
-        reviews(id)
+        reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, caterer_replied_at, created_at)
       `)
       .eq('customer_id', session.user.id)
       .order('created_at', { ascending: false });
-    
+
     if (filter !== 'all') query = query.eq('status', filter);
     const { data, error: bookingLoadError } = await query;
     if (!isCurrent()) return;
-    if (bookingLoadError) { setLoading(false); return; }
+    if (bookingLoadError) { setLoadError(bookingLoadError.message); setLoading(false); return; }
     let fetchedBookings = (data as any) ?? [];
 
     // Payment deadline enforcement must run on a trusted backend job.
@@ -411,7 +438,7 @@ export default function CustomerBookings() {
       const { data: evidenceRows, error: evidenceError } = await supabase
         .from('refund_transfer_submissions')
         .select('booking_id')
-        .in('booking_id', pendingIds);
+        .in('booking_id', pendingIds).in('status', ['submitted', 'verified']);
       if (!isCurrent()) return;
       if (evidenceError) {
         console.warn('Could not load refund submission status:', evidenceError.message);
@@ -441,21 +468,37 @@ export default function CustomerBookings() {
     }
 
     setBookings(fetchedBookings);
+    if (cancellingBooking && !isCancelling) {
+      const { data: current, error } = await supabase.from('bookings').select('*')
+        .eq('id', cancellingBooking.id).eq('customer_id', session.user.id).maybeSingle();
+      if (!isCurrent()) return;
+      if (error) setLoadError('Cancellation details could not be refreshed. Refresh before confirming.');
+      else if (!current || !['pending', 'confirmed', 'paid'].includes(current.status)) {
+        setCancellingBooking(null);
+        Alert.alert('Booking changed', 'This booking is no longer eligible for Customer cancellation.');
+      } else setCancellingBooking(previous => previous?.id === current.id ? { ...previous, ...current } as Booking : previous);
+    }
     // Keep an open details sheet current even when a status filter removes the
     // booking from the visible list. This only reads the authorized booking.
     if (detailBooking) {
       const { data: current } = await supabase.from('bookings')
-        .select('*, caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details), packages(*), reviews(id)')
+        .select('*, caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details), packages(*), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, caterer_replied_at, created_at)')
         .eq('id', detailBooking.id).eq('customer_id', session.user.id).maybeSingle();
       if (!isCurrent()) return;
-      if (current) setDetailBooking(previous => previous?.id === current.id ? current as Booking : previous);
+      if (current) {
+        setDetailBooking(previous => previous?.id === current.id ? current as Booking : previous);
+
+      }
     }
-    setLoading(false);
+    } catch (error: any) {
+      if (isCurrent()) setLoadError(error?.message || 'Bookings could not be refreshed.');
+    } finally { if (isCurrent()) setLoading(false); }
   };
 
   useBookingRefresh(session?.user.id ? `${session.user.id}:${filter}` : null, () => load(true));
 
   useEffect(() => {
+
     const bookingId = Array.isArray(notificationBookingId) ? notificationBookingId[0] : notificationBookingId;
     const notificationKey = Array.isArray(notificationId) ? notificationId[0] : notificationId;
     if (!session?.user?.id || !bookingId) return;
@@ -469,7 +512,7 @@ export default function CustomerBookings() {
     const openFromNotification = async () => {
       const { data, error } = await supabase
         .from('bookings')
-        .select('*, caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details), packages(*), reviews(id)')
+        .select('*, caterers(id, business_name, logo_url, city, user_id, accepted_payment_methods, accepted_payment_details), packages(*), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, caterer_replied_at, created_at)')
         .eq('id', bookingId)
         .eq('customer_id', session.user.id)
         .maybeSingle();
@@ -478,12 +521,13 @@ export default function CustomerBookings() {
         Alert.alert('Booking unavailable', 'This booking could not be opened. It may no longer be accessible.');
         return;
       }
+      setReviewFocus(notificationSection === 'review' ? { bookingId, key } : null);
       await openBookingDetails(data as Booking);
     };
 
     void openFromNotification();
     return () => { cancelled = true; };
-  }, [notificationBookingId, notificationId, session?.user?.id]);
+  }, [notificationBookingId, notificationId, notificationSection, session?.user?.id]);
 
 
 
@@ -494,56 +538,22 @@ export default function CustomerBookings() {
     d ? new Date(d) < new Date() : false;
 
   const handleProcessPayment = async () => {
-    if (!payingBookingId) return;
-    const targetBooking = bookings.find(b => b.id === payingBookingId);
-    if (!targetBooking) return;
-
-    setIsProcessingPayment(true);
-
-    try {
-      const paymentResult = await initiateGCashPayment({
-        type: 'booking',
-        amount: Number(targetBooking.downpayment_amount),
-        referenceId: `booking_${targetBooking.id}_${Date.now()}`,
-        customerName: session?.user?.user_metadata?.full_name || session?.user?.email || 'Customer',
-        customerEmail: session?.user?.email || '',
-        description: `Downpayment for Booking #${targetBooking.id.slice(0, 8)}`,
-        paymentMethod: selectedPaymentMethod,
-      });
-
-      if (!paymentResult.success || !paymentResult.checkoutUrl || !paymentResult.chargeId) {
-        throw new Error(paymentResult.error || 'Failed to initialize Xendit checkout.');
-      }
-
-      const checkoutStatus = await openGCashCheckout(
-        paymentResult.checkoutUrl,
-        paymentResult.chargeId,
-        paymentResult.webUrl
-      );
-
-      if (checkoutStatus === 'success') {
-        // The mobile client never verifies or marks a booking as paid.
-        // Only the trusted Xendit webhook can update payment status.
-        setPayingBookingId(null);
-        await load();
-        Alert.alert(
-          'Payment Confirmed',
-          'Your downpayment has been verified and saved to your booking.'
-        );
-      } else if (checkoutStatus === 'failed') {
-        Alert.alert('Payment Failed', 'The Xendit transaction failed or was declined.');
-      } else if (checkoutStatus === 'pending') {
-        setPayingBookingId(null);
-        await load();
-        Alert.alert('Payment Processing', 'Confirmation is still pending. Your bookings will refresh automatically. Do not pay again while confirmation is pending.');
-      } else {
-        Alert.alert('Payment Cancelled', 'The payment session was closed or cancelled.');
-      }
-    } catch (err: any) {
-      Alert.alert('Payment Error', err.message || 'An unexpected error occurred.');
-    } finally {
-      setIsProcessingPayment(false);
+    if (!payingBookingId || isProcessingPayment) return;
+    if (!availableMethods.includes(selectedPaymentMethod)) {
+      Alert.alert('Payment method unavailable', 'Select an available Xendit payment method before continuing.');
+      return;
     }
+    setIsProcessingPayment(true);
+    try {
+      const outcome = await payBookingDownpayment(payingBookingId,
+        session?.user?.user_metadata?.full_name || session?.user?.email || 'Customer', selectedPaymentMethod);
+      setPayingBookingId(null);
+      await load(true);
+      if (outcome === 'success') Alert.alert('Payment Confirmed', 'Your downpayment has been verified and saved by the server.');
+      else if (outcome === 'failed') Alert.alert('Payment Failed', 'The provider reports this payment failed.');
+      else Alert.alert('Payment confirmation pending', 'Refresh to check your booking. If you reopen checkout in this app session, the existing payment attempt will be reused. Do not start another payment elsewhere.');
+    } catch (error: any) { Alert.alert('Payment unavailable', error?.message || 'Refresh before trying again.'); }
+    finally { setIsProcessingPayment(false); }
   };
 
   // Cancellation preview; the same policy is recalculated before saving.
@@ -596,53 +606,66 @@ export default function CustomerBookings() {
   };
 
   const confirmCancelBooking = async () => {
-    if (!cancellingBooking || isCancelling || !session?.user?.id) return;
+
+    if (!cancellingBooking || isCancelling || cancellationInFlight.current || !session?.user?.id) return;
     const finalReason = selectedReason === 'Other' ? customReason.trim() : selectedReason;
     if (finalReason.length < 3 || finalReason.length > 1000) {
       Alert.alert('Invalid Reason', 'Please provide a cancellation reason between 3 and 1,000 characters.');
       return;
     }
 
-    // The server is authoritative; this estimate only determines whether
-    // to request refund account information in the form.
-    const preview = getCancellationPreview(cancellingBooking);
-    let accountDetails: Record<string, string | null> | null = null;
-    if (preview && preview.amount > 0) {
-      const holder = refundHolderName.trim();
-      const account = refundAccountNumber.trim();
-      const bank = refundBankName.trim();
-      const isWallet = refundMethod === 'gcash' || refundMethod === 'maya';
-      if (!holder || !account || (refundMethod === 'other_bank' && !bank)) {
-        Alert.alert('Missing Refund Details', 'Enter the account holder, account number and bank name if applicable.');
-        return;
-      }
-      if (isWallet && !/^09\d{9}$/.test(account)) {
-        Alert.alert('Invalid Mobile Number', 'Enter an 11-digit number beginning with 09.');
-        return;
-      }
-      if (!isWallet && !/^\\d{6,20}$/.test(account)) {
-        Alert.alert('Invalid Account Number', 'Enter a 6–20 digit bank account number.');
-        return;
-      }
-      if (holder.length > 120 || bank.length > 120) {
-        Alert.alert('Invalid Refund Details', 'Account holder or bank name is too long.');
-        return;
-      }
-      accountDetails = {
-        method: refundMethod,
-        bank_name: refundMethod === 'other_bank'
-          ? bank
-          : refundMethod === 'bpi' ? 'BPI' : refundMethod === 'bdo' ? 'BDO' : null,
-        account_holder: holder,
-        account_number: account,
-      };
-    }
-
+    cancellationInFlight.current = true;
     setIsCancelling(true);
     try {
+      const { data: current, error: readError } = await supabase.from('bookings').select('*')
+        .eq('id', cancellingBooking.id).eq('customer_id', session.user.id).maybeSingle();
+      if (readError) throw new Error(readError.message);
+      if (!current || !['pending', 'confirmed', 'paid'].includes(current.status)) {
+        setCancellingBooking(null);
+        await load(true);
+        throw new Error('This booking is no longer eligible for Customer cancellation.');
+      }
+      const freshBooking = { ...cancellingBooking, ...current } as Booking;
+      setCancellingBooking(freshBooking);
+
+      // The server is authoritative; this estimate only determines whether
+      // to request refund account information in the form.
+      const preview = getCancellationPreview(freshBooking);
+      let accountDetails: Record<string, string | null> | null = null;
+      if (preview && preview.amount > 0) {
+        const holder = refundHolderName.trim();
+        const account = refundAccountNumber.trim();
+        const bank = refundBankName.trim();
+        const isWallet = refundMethod === 'gcash' || refundMethod === 'maya';
+        if (!holder || !account || (refundMethod === 'other_bank' && !bank)) {
+          Alert.alert('Missing Refund Details', 'Enter the account holder, account number and bank name if applicable.');
+          return;
+        }
+        if (isWallet && !/^09\d{9}$/.test(account)) {
+          Alert.alert('Invalid Mobile Number', 'Enter an 11-digit number beginning with 09.');
+          return;
+        }
+        if (!isWallet && !/^\d{6,20}$/.test(account)) {
+          Alert.alert('Invalid Account Number', 'Enter a 6–20 digit bank account number.');
+          return;
+        }
+        if (holder.length > 120 || bank.length > 120) {
+          Alert.alert('Invalid Refund Details', 'Account holder or bank name is too long.');
+          return;
+        }
+        accountDetails = {
+          method: refundMethod,
+          bank_name: refundMethod === 'other_bank'
+            ? bank
+            : refundMethod === 'bpi' ? 'BPI' : refundMethod === 'bdo' ? 'BDO' : null,
+          account_holder: holder,
+          account_number: account,
+        };
+      }
+
       const { data, error } = await supabase.functions.invoke('cancel-customer-booking', {
         body: {
-          booking_id: cancellingBooking.id,
+          booking_id: freshBooking.id,
           reason: finalReason,
           refund_account_details: accountDetails,
         },
@@ -686,13 +709,21 @@ export default function CustomerBookings() {
     } catch (err: any) {
       Alert.alert('Cancellation Failed', err?.message || 'Please try again.');
     } finally {
+      cancellationInFlight.current = false;
       setIsCancelling(false);
     }
   };
 
-  const openBookingDetails = async (booking: Booking) => {
-    setDetailBooking(booking);
+  const openBookingDetails = (booking: Booking) => { setDetailBooking(booking); };
+
+  useEffect(() => {
+    let active = true;
+    const booking = detailBooking;
     setTransferEvidence([]);
+    setEvidenceLoading(false);
+    if (!booking) return;
+    const loadEvidence = async () => {
+
     if (booking.status !== 'cancelled' || Number(booking.refund_amount) <= 0) return;
     setEvidenceLoading(true);
     try {
@@ -712,15 +743,19 @@ export default function CustomerBookings() {
         }
         return { ...row, proofUrl };
       }));
-      setTransferEvidence(rows);
+      if (active) setTransferEvidence(rows);
     } catch (error: any) {
-      Alert.alert('Evidence Unavailable', error?.message || 'Unable to load transfer evidence.');
+      if (active) Alert.alert('Evidence Unavailable', error?.message || 'Unable to load transfer evidence.');
     } finally {
-      setEvidenceLoading(false);
+      if (active) setEvidenceLoading(false);
     }
-  };
+    };
+    void loadEvidence();
+    return () => { active = false; };
+  }, [detailBooking?.id, detailBooking?.refund_status, session?.user.id]);
 
   const confirmRefundReceived = (booking: Booking) => {
+
     Alert.alert(
       'Confirm refund received?',
       `Only confirm after checking that ₱${Number(booking.refund_amount).toLocaleString('en-PH')} has actually arrived in your wallet or bank account. A receipt screenshot alone is not confirmation.`,
@@ -764,6 +799,7 @@ export default function CustomerBookings() {
   };
 
   const submitRefundDispute = async () => {
+
     if (!disputeBooking || submittingDispute || !session?.user?.id) return;
     const reason = disputeReason.trim();
     if (reason.length < 10) {
@@ -774,12 +810,21 @@ export default function CustomerBookings() {
       Alert.alert('Too Long', 'Please keep the explanation under 2,000 characters.');
       return;
     }
-    if (disputeBooking.status !== 'cancelled' || !['pending', 'overdue', 'awaiting_customer_confirmation'].includes(disputeBooking.refund_status)) {
+    if (disputeBooking.status !== 'cancelled' || disputeBooking.refund_status !== 'awaiting_customer_confirmation') {
       Alert.alert('Refund Updated', 'Only unresolved refunds can be reported.');
       return;
     }
     setSubmittingDispute(true);
     try {
+      const { data: current, error: bookingError } = await supabase.from('bookings')
+        .select('id,status,refund_status,refund_amount').eq('id', disputeBooking.id).eq('customer_id', session.user.id).maybeSingle();
+      if (bookingError) throw bookingError;
+      const { data: evidence, error: evidenceError } = await supabase.from('refund_transfer_submissions')
+        .select('booking_id').eq('booking_id', disputeBooking.id).in('status', ['submitted', 'verified']).maybeSingle();
+      if (evidenceError) throw evidenceError;
+      if (!current || current.status !== 'cancelled' || current.refund_status !== 'awaiting_customer_confirmation' || Number(current.refund_amount) <= 0 || !evidence) {
+        throw new Error('A missing-refund report requires submitted transfer proof and a refund awaiting Customer confirmation. Refresh to check the latest state.');
+      }
       const { error } = await supabase.from('refund_disputes').insert({
         booking_id: disputeBooking.id,
         customer_id: session.user.id,
@@ -805,16 +850,16 @@ export default function CustomerBookings() {
   const cancellationPreview = getCancellationPreview(cancellingBooking);
 
   const activePaymentBooking = bookings.find(b => b.id === payingBookingId);
-  const availableMethods = activePaymentBooking?.caterers?.accepted_payment_methods?.length 
-    ? activePaymentBooking.caterers.accepted_payment_methods 
-    : ['gcash', 'maya', 'bpi', 'bdo', 'card'];
+  const availableMethods = (activePaymentBooking?.caterers?.accepted_payment_methods?.length
+    ? activePaymentBooking.caterers.accepted_payment_methods
+    : Object.keys(PAYMENT_CHANNEL_CONFIG)).filter(method => Object.prototype.hasOwnProperty.call(PAYMENT_CHANNEL_CONFIG, method));
 
   return (
     <View style={styles.root}>
       {/* ── Secure Xendit Payment Modal with Rectangular Vertical List Payment UI/UX ── */}
       <Modal visible={!!payingBookingId} animationType="slide" presentationStyle="pageSheet" onShow={() => {
         if (activePaymentBooking) {
-          const allowed = activePaymentBooking.caterers?.accepted_payment_methods;
+          const allowed = availableMethods;
           if (allowed && allowed.length > 0 && !allowed.includes(selectedPaymentMethod)) {
             setSelectedPaymentMethod(allowed[0]);
           }
@@ -886,7 +931,8 @@ export default function CustomerBookings() {
                 <Text style={styles.paySectionTitle}>Select Payment Method</Text>
                 <Text style={styles.methodInfoSub}>Choose a secure payment channel supported by this caterer.</Text>
               </View>
-              
+
+              {availableMethods.length === 0 && <Text style={styles.payNote}>No supported checkout method is configured. Contact the Caterer.</Text>}
               <View style={styles.paymentMethodsList}>
                 {availableMethods.map((methodKey) => {
                   const channel = PAYMENT_CHANNEL_CONFIG[methodKey];
@@ -899,7 +945,7 @@ export default function CustomerBookings() {
                     <TouchableOpacity
                       key={methodKey}
                       style={[
-                        styles.rectangularMethodRow, 
+                        styles.rectangularMethodRow,
                         isSelected && styles.rectangularMethodRowActive
                       ]}
                       onPress={() => setSelectedPaymentMethod(methodKey)}
@@ -914,7 +960,7 @@ export default function CustomerBookings() {
                           {channel.label}
                         </Text>
                         <Text style={styles.rectangularMethodSub} numberOfLines={1}>{channel.sub}</Text>
-                        
+
                         {customAccountVal ? (
                           <Text style={styles.customAccountRowText} selectable numberOfLines={1}>
                             Acct: {customAccountVal}
@@ -934,7 +980,7 @@ export default function CustomerBookings() {
               <TouchableOpacity
                 style={styles.confirmPayBtn}
                 onPress={handleProcessPayment}
-                disabled={isProcessingPayment}
+                disabled={isProcessingPayment || !availableMethods.includes(selectedPaymentMethod) || !!bookingPaymentUnavailable(activePaymentBooking)}
                 activeOpacity={0.85}
               >
                 {isProcessingPayment ? (
@@ -959,116 +1005,36 @@ export default function CustomerBookings() {
 
       {/* Booking details and refund transfer evidence */}
       <Modal visible={!!detailBooking} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailBooking(null)}>
-        <View style={styles.paymentModalRoot}>
+        <SafeAreaView edges={['top', 'bottom']} style={styles.paymentModalRoot}>
           <View style={styles.paymentModalHeader}>
-            <View style={styles.detailHeaderTitle}><ClipboardList size={21} color={Colors.orange} /><Text style={styles.paymentModalTitle}>Booking Details</Text></View>
-            <TouchableOpacity onPress={() => setDetailBooking(null)} style={styles.paymentCloseBtn}>
+            <View style={[styles.detailHeaderTitle, { flex: 1 }]}><ClipboardList size={21} color={Colors.orange} /><Text style={styles.paymentModalTitle}>Booking Details</Text></View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close booking details" onPress={() => setDetailBooking(null)} style={[styles.paymentCloseBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }]}>
               <X size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
           {detailBooking && (
-            <ScrollView contentContainerStyle={styles.paymentModalBody}>
-              {detailBooking.status === 'cancelled' && (
-                <View style={styles.paySummaryCard}>
-                  <View style={styles.detailSectionHeading}><View style={[styles.detailSectionIcon, {backgroundColor: '#FEF2F2'}]}><Ban size={18} color="#B91C1C" /></View><Text style={styles.paySectionTitle}>Cancellation & Refund</Text></View>
-                  <Text style={styles.detailText}>Cancelled by: {detailBooking.cancelled_by ?? '—'}</Text>
-                  <Text style={styles.detailText}>Reason: {detailBooking.cancellation_reason ?? '—'}</Text>
-                  <Text style={styles.detailText}>Refund Status: {detailBooking.refund_status?.toUpperCase() ?? 'NONE'}</Text>
-                  <Text style={styles.detailText}>Refund Amount: ₱{Number(detailBooking.refund_amount).toLocaleString('en-PH')}</Text>
-                  {detailBooking.refund_account_details && (
-                    <Text style={styles.detailText} selectable>
-                      Destination: {'\n'}{formatRefundDestination(detailBooking.refund_account_details)}
-                    </Text>
-                  )}
-                  {detailBooking.refunded_at && (
-                    <Text style={styles.detailText}>Completed: {formatDate(detailBooking.refunded_at)}</Text>
-                  )}
-                </View>
-              )}
-              {detailBooking.status === 'cancelled' && Number(detailBooking.refund_amount) > 0 && (
-                <View style={styles.paySummaryCard}>
-                  <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><ReceiptText size={18} color={Colors.orange} /></View><Text style={styles.paySectionTitle}>Refund Transfer Evidence</Text></View>
-                  {evidenceLoading ? <ActivityIndicator color={Colors.orange} /> :
-                    transferEvidence.length === 0 ? (
-                      <Text style={styles.detailText}>No transfer evidence has been submitted yet.</Text>
-                    ) : transferEvidence.map((item, index) => (
-                      <View key={item.id ?? index} style={styles.evidenceItem}>
-                        <View style={styles.detailSubheading}><FileText size={15} color={Colors.orange} /><Text style={styles.detailText}>Submission {index + 1} · {item.status ?? 'submitted'}</Text></View>
-                        {(item.transfer_reference ?? item.reference_number ?? item.reference_id) && (
-                          <Text style={styles.detailText} selectable>
-                            Reference: {item.transfer_reference ?? item.reference_number ?? item.reference_id}
-                          </Text>
-                        )}
-                        {(item.submitted_at ?? item.created_at) && <Text style={styles.detailText}>Submitted: {formatDate(item.submitted_at ?? item.created_at)}</Text>}
-                        {item.proofUrl ? (
-                          <Image source={{ uri: item.proofUrl }} style={styles.evidenceImage} resizeMode="contain" />
-                        ) : (
-                          <Text style={styles.detailText}>Proof image is unavailable or access is restricted.</Text>
-                        )}
-                      </View>
-                    ))
-                  }
-                  {detailBooking.refund_status === 'awaiting_customer_confirmation' && transferEvidence.length > 0 && (
-                    <TouchableOpacity style={styles.refundConfirmButton} onPress={() => confirmRefundReceived(detailBooking)}>
-                      <Text style={styles.confirmPayBtnText}>I Received My Refund</Text>
-                    </TouchableOpacity>
-                  )}
-                  {(refundDisputes[detailBooking.id] || ['pending', 'overdue', 'awaiting_customer_confirmation'].includes(detailBooking.refund_status)) && (
-                    refundDisputes[detailBooking.id] ? (
-                      <View style={styles.disputeNotice}>
-                        <AlertTriangle size={18} color="#B45309" />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.disputeNoticeTitle}>Refund issue reported · {refundDisputes[detailBooking.id].status.toUpperCase()}</Text>
-                          <Text style={styles.detailText}>{refundDisputes[detailBooking.id].reason}</Text>
-                          <Text style={[styles.detailText, { fontSize: 11, color: Colors.textSecondary }]}>
-                            Reported: {new Date(refundDisputes[detailBooking.id].created_at).toLocaleString('en-PH')}
-                          </Text>
-                          <View style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' }}>
-                            <Text style={{ fontWeight: '800', fontSize: 13, color: Colors.black, marginBottom: 6 }}>
-                              Caterer's Investigation Response
-                            </Text>
-                            {refundDisputes[detailBooking.id].caterer_response?.trim() ? (
-                              <>
-                                <Text style={styles.detailText} selectable>
-                                  {refundDisputes[detailBooking.id].caterer_response}
-                                </Text>
-                                {refundDisputes[detailBooking.id].caterer_responded_at ? (
-                                  <Text style={[styles.detailText, { fontSize: 11, color: Colors.textSecondary }]}>
-                                    Replied: {new Date(refundDisputes[detailBooking.id].caterer_responded_at!).toLocaleString('en-PH')}
-                                  </Text>
-                                ) : null}
-                              </>
-                            ) : (
-                              <Text style={styles.detailText}>
-                                No investigation response has been submitted by the caterer yet.
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                      </View>
-                    ) : (
-                      <TouchableOpacity style={styles.disputeButton} onPress={() => { setDisputeReason(''); setDetailBooking(null); setDisputeBooking(detailBooking); }}>
-                        <AlertTriangle size={17} color="#B91C1C" />
-                        <Text style={styles.disputeButtonText}>I Haven't Received My Refund</Text>
-                      </TouchableOpacity>
-                    )
-                  )}
-                  <Text style={styles.detailText}>Only confirm after checking your wallet or bank account. Platform Staff monitors the process but does not handle the payment.</Text>
-                </View>
-              )}
+            <ScrollView ref={reviewScroll.scrollRef} onContentSizeChange={reviewScroll.onContentSizeChange} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.paymentModalBody}>
+              <Text selectable style={styles.detailText}>Reference: {detailBooking.id}</Text>
+              <Text style={[styles.detailStatusBadge, { color: STATUS_CONFIG[detailBooking.status]?.color, backgroundColor: STATUS_CONFIG[detailBooking.status]?.bg }]}>{STATUS_CONFIG[detailBooking.status]?.label ?? detailBooking.status}</Text>
+
               <View style={styles.paySummaryCard}>
-                <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><ClipboardList size={18} color={Colors.orange} /></View><View style={{flex:1}}><Text style={styles.paySectionTitle}>Booking Overview</Text><Text style={styles.detailSectionSubtitle}>{detailBooking.caterers?.business_name ?? 'Caterer'}</Text></View></View>
+                <Text style={styles.paySectionTitle}>Caterer Information</Text>
+                <Text style={styles.detailText}>{detailBooking.caterers?.business_name ?? 'Caterer'}</Text>
+                <Text style={styles.detailText}>{detailBooking.caterers?.city ?? 'Location not provided'}</Text>
+                <TouchableOpacity  style={styles.chatBtn} onPress={() => { setChatBooking(detailBooking); setDetailBooking(null); }}>
+                  <MessageSquare size={17} color={Colors.black} /><Text style={styles.chatBtnText}>Chat Caterer</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.paySummaryCard}>
+                <View style={styles.detailSectionHeading}><CalendarDays size={18} color={Colors.orange} /><Text style={styles.paySectionTitle}>Event Information</Text></View>
                 {([
-                  ['Booking ID', detailBooking.id, Hash],
-                  ['Status', STATUS_CONFIG[detailBooking.status]?.label ?? detailBooking.status, CheckCircle2],
                   ['Package', detailBooking.packages?.name ?? '—', Package],
+                  ['Package Tier', detailBooking.packages?.tier ?? 'Not specified', Package],
                   ['Event', detailBooking.event_type ?? 'Catering Event', PartyPopper],
                   ['Event Date', formatDate(detailBooking.event_date), CalendarDays],
+                  ['Event Time', detailBooking.event_time ?? 'Not specified', Clock],
                   ['Guests', `${detailBooking.guest_count} pax`, Users],
                   ['Venue', detailBooking.venue ?? '—', MapPin],
-                  ['Total Cost', `₱${Number(detailBooking.total_cost).toLocaleString('en-PH')}`, Wallet],
-                  ['Downpayment', `₱${Number(detailBooking.downpayment_amount).toLocaleString('en-PH')}`, CreditCard],
-                  ['Payment Method', displayXenditPaymentMethod(detailBooking.payment_method), ReceiptText],
                 ] as [string, string, any][]).map(([label, value, RowIcon]) => (
                   <View key={label} style={styles.paySummaryRow}>
                     <View style={styles.detailLabelGroup}><RowIcon size={16} color={Colors.orange} /><Text style={styles.paySummaryLabel}>{label}</Text></View>
@@ -1076,8 +1042,9 @@ export default function CustomerBookings() {
                   </View>
                 ))}
               </View>
+
               <View style={styles.paySummaryCard}>
-                <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><UtensilsCrossed size={18} color={Colors.orange} /></View><Text style={styles.paySectionTitle}>What's Inside Your Package</Text></View>
+                <View style={styles.detailSectionHeading}><UtensilsCrossed size={18} color={Colors.orange} /><Text style={styles.paySectionTitle}>Selected Menu & Customizations</Text></View>
                 <Text style={styles.detailText}>Package: {detailBooking.packages?.name ?? 'Not available'}</Text>
                 {detailBooking.packages?.tier && (
                   <Text style={styles.detailText}>Tier: {detailBooking.packages.tier}</Text>
@@ -1117,9 +1084,109 @@ export default function CustomerBookings() {
                   <Text style={styles.detailText}>Detailed package inclusions have not been provided in this package record.</Text>
                 )}
               </View>
+
+              <BookingPaymentSummary booking={detailBooking} methodLabel={displayXenditPaymentMethod(detailBooking.payment_method)} />
+
+              {detailBooking.status === 'rejected' && <View style={styles.paySummaryCard}>
+                <Text style={styles.paySectionTitle}>Rejection Reason</Text>
+                <Text style={styles.detailText}>{detailBooking.rejection_reason ?? 'No reason recorded.'}</Text>
+              </View>}
+              {(detailBooking.status === 'completed' || !!detailBooking.reviews?.length) && <View onLayout={reviewScroll.onReviewLayout} style={styles.paySummaryCard}>
+                <Text style={styles.paySectionTitle}>Customer Review</Text>
+                {detailBooking.reviews?.length ? detailBooking.reviews.map(review => <BookingReviewDisplay key={review.id} review={review} />) : <>
+                  <Text style={styles.detailText}>Share your experience with this catering service.</Text>
+                  <TouchableOpacity disabled={detailBooking.status !== 'completed'} style={styles.reviewBtn} onPress={() => { setReviewBooking(detailBooking); setDetailBooking(null); }}>
+                    <Star size={17} color={Colors.white} /><Text style={styles.reviewBtnText}>Write Review</Text>
+                  </TouchableOpacity>
+                </>}
+              </View>}
+
+              {detailBooking.status === 'cancelled' && (
+                <BookingRefundSummary booking={detailBooking}>
+                  {detailBooking.cancelled_by === 'caterer' && Number(detailBooking.refund_amount) > 0 &&
+                    ['pending', 'overdue'].includes(detailBooking.refund_status) && !detailBooking.refund_account_details?.trim() && (
+                    <TouchableOpacity  style={styles.provideRefundAccountButton}
+                      onPress={() => { setRefundDestinationBooking(detailBooking); setEmergencyRefundMethod('gcash'); setDetailBooking(null); }}>
+                      <Text style={styles.confirmPayBtnText}>Provide Refund Account</Text>
+                    </TouchableOpacity>
+                  )}
+                </BookingRefundSummary>
+              )}
+
+              {detailBooking.status === 'cancelled' && Number(detailBooking.refund_amount) > 0 && (
+                <View style={styles.paySummaryCard}>
+                  <View style={styles.detailSectionHeading}><View style={styles.detailSectionIcon}><ReceiptText size={18} color={Colors.orange} /></View><Text style={styles.paySectionTitle}>Refund Transfer Evidence</Text></View>
+                  {evidenceLoading ? <ActivityIndicator color={Colors.orange} /> :
+                    transferEvidence.length === 0 ? (
+                      <Text style={styles.detailText}>No transfer evidence has been submitted yet.</Text>
+                    ) : transferEvidence.map((item, index) => (
+                      <View key={item.id ?? index} style={styles.evidenceItem}>
+                        <View style={styles.detailSubheading}><FileText size={15} color={Colors.orange} /><Text style={styles.detailText}>Submission {index + 1} · {item.status ?? 'submitted'}</Text></View>
+                        {(item.transfer_reference ?? item.reference_number ?? item.reference_id) && (
+                          <Text style={styles.detailText} selectable>
+                            Reference: {item.transfer_reference ?? item.reference_number ?? item.reference_id}
+                          </Text>
+                        )}
+                        {(item.submitted_at ?? item.created_at) && <Text style={styles.detailText}>Submitted: {formatDate(item.submitted_at ?? item.created_at)}</Text>}
+                        {item.proofUrl ? (
+                          <Image source={{ uri: item.proofUrl }} style={styles.evidenceImage} resizeMode="contain" />
+                        ) : (
+                          <Text style={styles.detailText}>Proof image is unavailable or access is restricted.</Text>
+                        )}
+                      </View>
+                    ))
+                  }
+                  {detailBooking.refund_status === 'awaiting_customer_confirmation' && transferEvidence.some(item => ['submitted', 'verified'].includes(item.status)) && (
+                    <TouchableOpacity  style={styles.refundConfirmButton} onPress={() => confirmRefundReceived(detailBooking)}>
+                      <Text style={styles.confirmPayBtnText}>Confirm Refund Received</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(refundDisputes[detailBooking.id] || (detailBooking.refund_status === 'awaiting_customer_confirmation' && transferEvidence.some(item => ['submitted', 'verified'].includes(item.status)))) && (
+                    refundDisputes[detailBooking.id] ? (
+                      <View style={styles.disputeNotice}>
+                        <AlertTriangle size={18} color="#B45309" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.disputeNoticeTitle}>Refund issue reported · {refundDisputes[detailBooking.id].status.toUpperCase()}</Text>
+                          <Text style={styles.detailText}>{refundDisputes[detailBooking.id].reason}</Text>
+                          <Text style={[styles.detailText, { fontSize: 11, color: Colors.textSecondary }]}>
+                            Reported: {new Date(refundDisputes[detailBooking.id].created_at).toLocaleString('en-PH')}
+                          </Text>
+                          <View style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' }}>
+                            <Text style={{ fontWeight: '800', fontSize: 13, color: Colors.black, marginBottom: 6 }}>
+                              Caterer's Investigation Response
+                            </Text>
+                            {refundDisputes[detailBooking.id].caterer_response?.trim() ? (
+                              <>
+                                <Text style={styles.detailText} selectable>
+                                  {refundDisputes[detailBooking.id].caterer_response}
+                                </Text>
+                                {refundDisputes[detailBooking.id].caterer_responded_at ? (
+                                  <Text style={[styles.detailText, { fontSize: 11, color: Colors.textSecondary }]}>
+                                    Replied: {new Date(refundDisputes[detailBooking.id].caterer_responded_at!).toLocaleString('en-PH')}
+                                  </Text>
+                                ) : null}
+                              </>
+                            ) : (
+                              <Text style={styles.detailText}>
+                                No investigation response has been submitted by the caterer yet.
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity  style={styles.disputeButton} onPress={() => { setDisputeReason(''); setDetailBooking(null); setDisputeBooking(detailBooking); }}>
+                        <AlertTriangle size={17} color="#B91C1C" />
+                        <Text style={styles.disputeButtonText}>I Haven't Received My Refund</Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                  <Text style={styles.detailText}>Only confirm after checking your wallet or bank account. Platform Staff monitors the process but does not handle the payment.</Text>
+                </View>
+              )}
             </ScrollView>
           )}
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Missing refund dispute form: fixed footer keeps both actions visible on small screens */}
@@ -1262,7 +1329,7 @@ export default function CustomerBookings() {
           <View style={styles.modalContent}>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>Cancel Booking</Text>
-            
+
             <Text style={styles.modalWarningText}>
               {getCancelWarningMessage(cancellingBooking)}
             </Text>
@@ -1288,12 +1355,12 @@ export default function CustomerBookings() {
             )}
 
             <Text style={styles.modalSubPrompt}>Please let us know why you are cancelling:</Text>
-            
+
             {CANCELLATION_REASONS.map((reason) => (
               <TouchableOpacity
                 key={reason}
                 style={[
-                  styles.reasonRow, 
+                  styles.reasonRow,
                   selectedReason === reason && styles.reasonRowSelected
                 ]}
                 onPress={() => setSelectedReason(reason)}
@@ -1395,8 +1462,8 @@ export default function CustomerBookings() {
             )}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.closeBtn} 
+              <TouchableOpacity
+                style={styles.closeBtn}
                 onPress={() => {
                   setCancellingBooking(null);
                   setSelectedReason('');
@@ -1411,9 +1478,9 @@ export default function CustomerBookings() {
               >
                 <Text style={styles.closeBtnText}>Keep Booking</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.confirmCancelBtn} 
+
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
                 onPress={confirmCancelBooking}
                 disabled={isCancelling}
               >
@@ -1439,7 +1506,12 @@ export default function CustomerBookings() {
           </View>
         </View>
 
+
+
         {/* Filters */}
+        {!!loadError && <TouchableOpacity accessibilityRole="button" onPress={() => void load()} style={{ padding: 12 }}>
+          <Text accessibilityRole="alert" style={{ color: Colors.error }}>{loadError} Tap to refresh.</Text>
+        </TouchableOpacity>}
         <View style={styles.filterOuterWrap}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
             {FILTERS.map(f => {
@@ -1448,6 +1520,9 @@ export default function CustomerBookings() {
               return (
                 <TouchableOpacity
                   key={f}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`${label} bookings`}
                   style={[styles.filterChip, isActive && styles.filterChipActive]}
                   onPress={() => setFilter(f)}
                   activeOpacity={0.75}
@@ -1476,12 +1551,13 @@ export default function CustomerBookings() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 32, paddingTop: 6 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.list} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={Colors.orange} />} contentContainerStyle={{ paddingBottom: 32, paddingTop: 6 }} showsVerticalScrollIndicator={false}>
           {bookings.map(b => {
             const sc = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.pending;
             const StatusIcon = sc.icon;
-            const needsPayment = b.status === 'confirmed';
+            const needsPayment = ['confirmed', 'awaiting_payment'].includes(b.status) && !b.payment_verified_at;
             const paymentOverdue = needsPayment && deadlinePassed(b.downpayment_deadline);
+            const paymentUnavailable = bookingPaymentUnavailable(b);
             const countdownString = getCountdownText(b.event_date);
 
             let displayLabel = sc.label;
@@ -1503,6 +1579,8 @@ export default function CustomerBookings() {
                 </View>
 
                 <View style={styles.cardContent}>
+
+
                   {/* Caterer Row */}
                   <View style={styles.catererRow}>
                     {(b.caterers as any)?.logo_url ? (
@@ -1573,15 +1651,15 @@ export default function CustomerBookings() {
                         <Text style={styles.cancelledTitle}>Booking Cancelled</Text>
                         <Text style={styles.cancelledText}>
                           Initiated by: {
-                            b.cancelled_by === 'caterer' ? 'Caterer' : 
-                            b.cancelled_by === 'system' ? 'System (Overdue)' : 
+                            b.cancelled_by === 'caterer' ? 'Caterer' :
+                            b.cancelled_by === 'system' ? 'System (Overdue)' :
                             'You (Customer)'
                           }
                         </Text>
                         {b.cancellation_reason && (
                           <Text style={styles.cancelledText}>Reason: {b.cancellation_reason}</Text>
                         )}
-                        
+
                         {b.cancelled_by === 'caterer' &&
                           Number(b.refund_amount) > 0 &&
                           !b.refund_account_details && (
@@ -1606,13 +1684,13 @@ export default function CustomerBookings() {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                               <Wallet size={14} color={b.refund_status === 'processed' ? '#16A34A' : '#D97706'} />
                               <Text style={{ fontSize: 12, fontWeight: '900', color: Colors.black }}>
-                                Refund Status: 
-                                <Text style={{ 
-                                  color: b.refund_status === 'processed' ? '#16A34A' : '#D97706' 
-                                }}> {b.refund_status.toUpperCase()}</Text>
+                                Refund Status:
+                                <Text style={{
+                                  color: b.refund_status === 'processed' ? '#16A34A' : '#D97706'
+                                }}> {refundStatusLabel(b.refund_status)}</Text>
                               </Text>
                             </View>
-                            
+
                             <Text style={{ fontSize: 12, color: Colors.textSecondary, marginBottom: 2 }}>
                               Amount to Refund: <Text style={{ fontWeight: '800', color: Colors.black }}>₱{Number(b.refund_amount).toLocaleString()}</Text>
                             </Text>
@@ -1652,8 +1730,8 @@ export default function CustomerBookings() {
                                     <AlertTriangle size={16} color="#B45309" />
                                     <Text style={styles.disputeNoticeTitle}>Refund issue reported · {refundDisputes[b.id].status.toUpperCase()}</Text>
                                   </View>
-                                ) : (
-                                  <TouchableOpacity style={styles.disputeButton} onPress={(event) => {
+                                ) : b.refund_status === 'awaiting_customer_confirmation' && refundEvidence[b.id] ? (
+                                  <TouchableOpacity  style={styles.disputeButton} onPress={(event) => {
                                     event.stopPropagation();
                                     setDisputeReason('');
                                     setDisputeBooking(b);
@@ -1661,7 +1739,7 @@ export default function CustomerBookings() {
                                     <AlertTriangle size={16} color="#B91C1C" />
                                     <Text style={styles.disputeButtonText}>I Haven't Received My Refund</Text>
                                   </TouchableOpacity>
-                                )}
+                                ) : null}
                                 <Text style={{ fontSize: 11, color: Colors.textSecondary }}>
                                   Haven't received it? Do not confirm. Contact the caterer while your report is investigated.
                                 </Text>
@@ -1685,7 +1763,7 @@ export default function CustomerBookings() {
                     </View>
                   )}
 
-                  {b.status === 'confirmed' && (
+                  {needsPayment && (
                     <View style={styles.ctaSection}>
                       <View style={[styles.deadlineBox, paymentOverdue && styles.deadlineBoxUrgent]}>
                         <View style={styles.deadlineLabelRow}>
@@ -1699,31 +1777,22 @@ export default function CustomerBookings() {
                         </Text>
                       </View>
 
-                      {paymentOverdue ? (
-                        <TouchableOpacity
-                          style={[styles.payBtn, { backgroundColor: '#9CA3AF', shadowOpacity: 0 }]}
-                          activeOpacity={1}
-                          onPress={() => Alert.alert('Overdue', 'The payment deadline has passed. This booking is being cancelled by the system.')}
-                        >
-                          <Ban size={16} color={Colors.white} />
-                          <Text style={styles.payBtnText}>Deadline Passed</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.payBtn}
-                          onPress={() => setPayingBookingId(b.id)}
-                          activeOpacity={0.85}
-                        >
-                          <CreditCard size={16} color={Colors.white} />
-                          <Text style={styles.payBtnText}>Pay ₱{Number(b.downpayment_amount).toLocaleString()} Downpayment</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={[styles.payBtn, !!paymentUnavailable && { opacity: 0.6 }]}
+                        disabled={!!paymentUnavailable || isProcessingPayment}
+                        onPress={() => setPayingBookingId(b.id)}
+                        activeOpacity={0.85}
+                      >
+                        <CreditCard size={16} color={Colors.white} />
+                        <Text style={styles.payBtnText}>Pay ₱{Number(b.downpayment_amount).toLocaleString()} Downpayment</Text>
+                      </TouchableOpacity>
 
                       <Text style={styles.payNote}>
-                        {paymentOverdue 
-                          ? 'System is currently processing the auto-cancellation.' 
+                        {paymentOverdue
+                          ? 'The displayed deadline has passed. Checkout eligibility is checked by the server; this booking has not been automatically cancelled.'
                           : 'Secure processing via Xendit gateway with automated e-receipt.'}
                       </Text>
+                      {!!paymentUnavailable && <Text style={styles.payNote}>{paymentUnavailable}</Text>}
                     </View>
                   )}
 
@@ -1798,6 +1867,8 @@ export default function CustomerBookings() {
 }
 
 const styles = StyleSheet.create({
+  provideRefundAccountButton: { minHeight: 46, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.orange, padding: 12, borderRadius: 12, marginTop: 14 },
+  detailStatusBadge: { alignSelf: 'flex-start', fontSize: 13, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, marginTop: 8, marginBottom: 14 },
   disputeModalContent: {
     maxHeight: '82%',
     paddingBottom: 16,
@@ -1836,20 +1907,20 @@ const styles = StyleSheet.create({
   disputeButtonText: { fontSize: 12, fontWeight: '800', color: '#B91C1C', flexShrink: 1 },
   disputeNotice: { marginTop: 12, borderRadius: 12, padding: 12, backgroundColor: '#FFFBEB', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#FDE68A' },
   disputeNoticeTitle: { fontSize: 12, fontWeight: '800', color: '#92400E', flexShrink: 1 },
-  detailText: { fontSize: 13, color: Colors.textSecondary, lineHeight: 20, marginTop: 7 },
+  detailText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 21, marginTop: 6 },
   evidenceItem: { borderTopWidth: 1, borderTopColor: '#E5E7EB', marginTop: 12, paddingTop: 12 },
   evidenceImage: { width: '100%', height: 280, backgroundColor: '#F9FAFB', borderRadius: 12, marginTop: 10 },
   refundConfirmButton: { backgroundColor: '#15803D', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 14 },
-  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  root: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  
+
   // Payment Modal Styling
   paymentModalRoot: { flex: 1, backgroundColor: '#F9FAFB' },
-  paymentModalHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 20, 
+  paymentModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: Colors.white,
     borderBottomWidth: 1,
@@ -1858,8 +1929,8 @@ const styles = StyleSheet.create({
   paymentModalTitle: { fontSize: 18, fontWeight: '900', color: Colors.black },
   paymentCloseBtn: { paddingVertical: 6, paddingHorizontal: 12 },
   paymentCloseText: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
-  paymentModalBody: { padding: 20, paddingBottom: 40 },
-  
+  paymentModalBody: { padding: 16, paddingBottom: 24 },
+
   paySummaryCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,
@@ -1873,12 +1944,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 1
   },
-  paySectionTitle: { fontSize: 14, fontWeight: '900', color: Colors.black, marginBottom: 4 },
+  paySectionTitle: { fontSize: 16, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
   paymentSectionHeaderWrap: { marginBottom: 12, marginTop: 4 },
   methodInfoSub: { fontSize: 12, color: Colors.textSecondary },
-  paySummaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
-  paySummaryLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
-  paySummaryVal: { fontSize: 13, color: Colors.black, fontWeight: '800', maxWidth: '60%', textAlign: 'right' },
+  paySummaryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  paySummaryLabel: { fontSize: 14, lineHeight: 21, flexShrink: 1, color: Colors.textSecondary, fontWeight: '500' },
+  paySummaryVal: { fontSize: 14, lineHeight: 21, color: Colors.textPrimary, fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
 
   // --- Rectangular Vertical Payment Method List UI ---
   paymentMethodsList: { gap: 10, marginBottom: 20 },
@@ -1974,9 +2045,9 @@ const styles = StyleSheet.create({
   confirmPayBtnText: { color: Colors.white, fontSize: 15, fontWeight: '900' },
   secureNotice: { textAlign: 'center', fontSize: 11, color: Colors.textMuted, fontWeight: '600', lineHeight: 16 },
 
-  header: { 
-    backgroundColor: Colors.white, 
-    borderBottomWidth: 1, 
+  header: {
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
     paddingBottom: 4,
   },
@@ -1987,7 +2058,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 12,
   },
-  pageTitle: { fontSize: 24, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageTitle: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.5 },
   pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
   countBadge: {
     backgroundColor: '#FFF7ED',
@@ -2001,44 +2072,46 @@ const styles = StyleSheet.create({
 
   filterOuterWrap: { backgroundColor: Colors.white },
   filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
-  filterChip: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 7, 
-    borderRadius: 16, 
-    backgroundColor: '#F1F5F9', 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0',
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   filterChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
   filterText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   filterTextActive: { color: Colors.white, fontWeight: '800' },
 
-  list: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
+  list: { flex: 1, width: '100%', maxWidth: 1200, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 10 },
 
-  bookingCard: { 
-    backgroundColor: Colors.white, 
-    borderRadius: 20, 
-    marginBottom: 16, 
-    borderWidth: 1, 
-    borderColor: '#E5E7EB', 
-    overflow: 'hidden', 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.04, 
-    shadowRadius: 12, 
-    elevation: 2 
+  bookingCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2
   },
   bookingCardUrgent: { borderColor: Colors.error, borderWidth: 1.5 },
-  
-  statusBar: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 16, 
-    paddingVertical: 10 
+
+  statusBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10
   },
-  statusTextRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.2 },
+  statusTextRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  statusText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.2, flexShrink: 1 },
   statusDate: { fontSize: 11, fontWeight: '700', opacity: 0.9 },
 
   cardContent: { padding: 16 },
@@ -2050,35 +2123,35 @@ const styles = StyleSheet.create({
   catererName: { fontSize: 16, fontWeight: '800', color: Colors.black, marginBottom: 3 },
   catererCityRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   catererCity: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
-  
-  tierPill: { 
-    backgroundColor: '#FFF7ED', 
-    borderWidth: 1, 
+
+  tierPill: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
     borderColor: '#FED7AA',
-    paddingHorizontal: 10, 
-    paddingVertical: 5, 
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 10,
     maxWidth: 100,
   },
   tierPillText: { fontSize: 11, fontWeight: '800', color: Colors.orange, textAlign: 'center' },
 
-  eventInfoRow: { 
-    flexDirection: 'row', 
-    backgroundColor: '#F9FAFB', 
-    borderRadius: 14, 
-    padding: 12, 
-    marginBottom: 12, 
-    borderWidth: 1, 
+  eventInfoRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
     borderColor: '#F3F4F6',
     alignItems: 'center'
   },
   eventInfoItem: { flex: 1, alignItems: 'center' },
   eventInfoDivider: { width: 1, height: 24, backgroundColor: '#E5E7EB' },
-  eventInfoLabel: { fontSize: 9, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.8, marginBottom: 3 },
-  eventInfoValue: { fontSize: 13, fontWeight: '900', color: Colors.black },
+  eventInfoLabel: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 0.3, marginBottom: 4 },
+  eventInfoValue: { fontSize: 14, lineHeight: 21, fontWeight: '700', color: Colors.textPrimary },
 
   venueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-  venueText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
+  venueText: { fontSize: 14, lineHeight: 21, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
 
   rejectionBox: {
     flexDirection: 'row',
@@ -2109,47 +2182,47 @@ const styles = StyleSheet.create({
   cancelledText: { fontSize: 12, fontWeight: '600', color: '#4B5563', lineHeight: 16 },
 
   ctaSection: { gap: 10, marginTop: 4 },
-  deadlineBox: { 
-    backgroundColor: '#FEF3C7', 
-    borderRadius: 12, 
-    paddingHorizontal: 12, 
-    paddingVertical: 10, 
-    borderWidth: 1, 
-    borderColor: '#FDE68A', 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center' 
+  deadlineBox: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
   deadlineBoxUrgent: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
   deadlineLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   deadlineLabel: { fontSize: 12, fontWeight: '700', color: '#92400E' },
   deadlineDate: { fontSize: 12, fontWeight: '900', color: '#92400E' },
 
-  payBtn: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 8, 
-    backgroundColor: Colors.orange, 
-    borderRadius: 14, 
-    paddingVertical: 14, 
-    shadowColor: Colors.orange, 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.2, 
-    shadowRadius: 8, 
-    elevation: 3 
+  payBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.orange,
+    borderRadius: 14,
+    paddingVertical: 14,
+    shadowColor: Colors.orange,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3
   },
   payBtnText: { color: Colors.white, fontWeight: '900', fontSize: 14 },
   payNote: { fontSize: 11, color: Colors.textMuted, textAlign: 'center', marginTop: 2, lineHeight: 15 },
 
-  statusMessageBox: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    backgroundColor: '#DCFCE7', 
-    borderRadius: 12, 
-    padding: 12, 
-    borderWidth: 1, 
+  statusMessageBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#DCFCE7',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
     borderColor: '#86EFAC',
     marginBottom: 4
   },
@@ -2173,11 +2246,11 @@ const styles = StyleSheet.create({
 
   bookingActions: { flexDirection: 'row', gap: 10, marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#F3F4F6', flexWrap: 'wrap' },
   chatBtn: {
-    flex: 1, 
+    flex: 1,
     minWidth: 100,
     backgroundColor: '#F3F4F6',
-    borderRadius: 12, 
-    paddingVertical: 12, 
+    borderRadius: 12,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2185,11 +2258,11 @@ const styles = StyleSheet.create({
   },
   chatBtnText: { fontSize: 13, fontWeight: '800', color: Colors.black },
   reviewBtn: {
-    flex: 1, 
+    flex: 1,
     minWidth: 100,
     backgroundColor: Colors.orange,
-    borderRadius: 12, 
-    paddingVertical: 12, 
+    borderRadius: 12,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2199,14 +2272,14 @@ const styles = StyleSheet.create({
   reviewedBadge: {
     flex: 1,
     minWidth: 100,
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#DCFCE7', 
+    backgroundColor: '#DCFCE7',
     borderRadius: 12,
-    paddingVertical: 12, 
-    borderWidth: 1, 
+    paddingVertical: 12,
+    borderWidth: 1,
     borderColor: '#86EFAC',
   },
   reviewedText: { fontSize: 13, fontWeight: '800', color: '#15803D' },
@@ -2225,16 +2298,16 @@ const styles = StyleSheet.create({
   cancelActionText: { fontSize: 13, fontWeight: '800', color: Colors.error },
 
   modalOverlay: {
-    flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.5)', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20
   },
   modalContent: {
-    backgroundColor: Colors.white, 
-    borderRadius: 20, 
-    padding: 24, 
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxHeight: '90%',
     elevation: 10,
@@ -2252,9 +2325,9 @@ const styles = StyleSheet.create({
   refundPreviewDisclaimer: { fontSize: 10, color: '#9A3412', marginTop: 8 },
   modalWarningText: { fontSize: 13, color: '#B91C1C', fontWeight: '600', lineHeight: 18, marginBottom: 16, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 10, borderWidth: 1, borderColor: '#FECACA' },
   modalSubPrompt: { fontSize: 14, fontWeight: '800', color: Colors.black, marginBottom: 12 },
-  
+
   reasonRow: {
-    padding: 14, borderRadius: 12, borderWidth: 1, 
+    padding: 14, borderRadius: 12, borderWidth: 1,
     borderColor: '#E5E7EB', marginBottom: 10,
     backgroundColor: '#F9FAFB'
   },
@@ -2263,13 +2336,13 @@ const styles = StyleSheet.create({
   },
   reasonText: { fontSize: 14, color: Colors.black, fontWeight: '600' },
   reasonTextSelected: { color: Colors.error, fontWeight: '800' },
-  
+
   customInput: {
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, 
-    padding: 14, height: 80, textAlignVertical: 'top', 
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12,
+    padding: 14, height: 80, textAlignVertical: 'top',
     marginBottom: 10, fontSize: 14, backgroundColor: '#F9FAFB'
   },
-  
+
   refundDestinationSection: { marginTop: 12, marginBottom: 10 },
   refundDestinationHint: { fontSize: 11, color: Colors.textSecondary, lineHeight: 16, marginBottom: 12 },
   refundMethodRow: {
@@ -2290,12 +2363,12 @@ const styles = StyleSheet.create({
 
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
   closeBtn: {
-    flex: 1, padding: 14, borderRadius: 12, 
+    flex: 1, padding: 14, borderRadius: 12,
     borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center'
   },
   closeBtnText: { fontWeight: '800', color: Colors.black, fontSize: 14 },
   confirmCancelBtn: {
-    flex: 1, padding: 14, borderRadius: 12, 
+    flex: 1, padding: 14, borderRadius: 12,
     backgroundColor: Colors.error, alignItems: 'center',
     shadowColor: Colors.error, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3
   },

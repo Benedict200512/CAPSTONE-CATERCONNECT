@@ -571,7 +571,7 @@ export default function CatererBusinessProfile() {
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!caterer) return;
+    if (!caterer || saving) return;
 
     setError('');
     setSuccess('');
@@ -752,16 +752,22 @@ export default function CatererBusinessProfile() {
         businessUpdates.rejection_reason = null;
       }
 
-      const { data: updatedData, error: updateError } =
-        await supabase
+      let saveQuery = supabase
           .from('caterers')
           .update(businessUpdates)
           .eq('id', caterer.id)
-          .eq('user_id', caterer.user_id)
+          .eq('user_id', caterer.user_id);
+
+      // A stale/retried submission cannot re-open a newer review decision.
+      if (requiresVerification) {
+        saveQuery = saveQuery.eq('verification_status', caterer.verification_status);
+      }
+      const { data: updatedData, error: updateError } = await saveQuery
           .select()
-          .single();
+          .maybeSingle();
 
       if (updateError) throw updateError;
+      if (!updatedData) throw new Error('Your verification status changed. Refresh before submitting again.');
 
       setCaterer((previous) =>
         previous ? { ...previous, ...updatedData } : previous
@@ -1306,10 +1312,15 @@ export default function CatererBusinessProfile() {
           <div className="document-list">
             {REQUIRED_DOCS.map((item) => {
               const doc = docs.find(
-                (entry) => entry.document_type === item.type
+                (entry) => entry.document_type === item.type && Boolean(entry.file_url)
               );
 
-              const status = doc ? getStatus(doc.status) : null;
+              // Overall business approval does not update individual document records.
+              const acceptedWithBusiness =
+                caterer.verification_status === 'approved' && doc?.status === 'pending';
+              const status = acceptedWithBusiness
+                ? { label: 'Accepted with business approval', className: 'approved', icon: CheckCircle }
+                : doc ? getStatus(doc.status) : null;
               const StatusIcon = status?.icon;
               const DocumentIcon = item.icon;
 

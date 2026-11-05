@@ -2,10 +2,11 @@
 
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   Animated,
+  ActivityIndicator,
   Modal,
   Platform,
   ScrollView,
@@ -21,6 +22,9 @@ import { supabase } from '../../lib/supabase';
 
 import NotificationsScreen from '../../screens/auth/NotificationsScreen';
 import MonthlyBookingQuotaSummary from '../../components/MonthlyBookingQuotaSummary';
+import AvailabilityMonthCalendar from '../../components/AvailabilityMonthCalendar';
+import { availabilityError, loadAvailability, manilaToday, shiftMonth } from '../../lib/availability';
+import { loadCatererReport, reportError, reportRange, type CatererReport } from '../../lib/catererReports';
 
 import {
   X,
@@ -39,11 +43,12 @@ import {
   Inbox,
   ShieldAlert,
   BarChart3,
-  Sparkles,
   UserRound,
   FileCheck,
   ShieldCheck,
   Clock,
+  CalendarDays,
+  TrendingUp,
 } from 'lucide-react-native';
 
 export default function CatererDashboard() {
@@ -65,6 +70,16 @@ export default function CatererDashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifs, setShowNotifs] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [availabilityMonth, setAvailabilityMonth] = useState(() => manilaToday().slice(0, 7));
+  const [availabilitySelected, setAvailabilitySelected] = useState(() => manilaToday());
+  const [availabilityData, setAvailabilityData] = useState<Awaited<ReturnType<typeof loadAvailability>> | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(true);
+  const [availabilityErrorMessage, setAvailabilityErrorMessage] = useState('');
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0);
+  const [trendReport, setTrendReport] = useState<CatererReport | null>(null);
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [trendError, setTrendError] = useState('');
+  const [trendRefreshKey, setTrendRefreshKey] = useState(0);
 
   const shimmerAnim = useRef(new Animated.Value(0.3)).current;
 
@@ -223,6 +238,79 @@ export default function CatererDashboard() {
     }
   };
 
+  useEffect(() => {
+    let current = true;
+
+    if (!catererData?.id || !session?.user?.id || catererData.verification_status !== 'approved') {
+      setAvailabilityData(null);
+      setAvailabilityLoading(false);
+      return () => { current = false; };
+    }
+
+    setAvailabilityLoading(true);
+    setAvailabilityErrorMessage('');
+    loadAvailability(catererData.id, session.user.id, availabilityMonth)
+      .then((data) => {
+        if (current) setAvailabilityData(data);
+      })
+      .catch((error) => {
+        if (current) setAvailabilityErrorMessage(availabilityError(error));
+      })
+      .finally(() => {
+        if (current) setAvailabilityLoading(false);
+      });
+
+    return () => { current = false; };
+  }, [catererData?.id, catererData?.verification_status, session?.user?.id, availabilityMonth, availabilityRefreshKey]);
+
+  const dashboardMonth = manilaToday().slice(0, 7);
+  const reportThisMonth = reportRange('This Month');
+  const dashboardTrendRange = {
+    start: `${shiftMonth(dashboardMonth, -5)}-01`,
+    end: reportThisMonth.end,
+  };
+
+  useEffect(() => {
+    let current = true;
+
+    if (!catererData?.id || profile?.role !== 'caterer' || catererData.verification_status !== 'approved') {
+      setTrendReport(null);
+      setTrendLoading(false);
+      return () => { current = false; };
+    }
+
+    setTrendLoading(true);
+    setTrendError('');
+    loadCatererReport(dashboardTrendRange)
+      .then((report) => {
+        if (current) setTrendReport(report);
+      })
+      .catch((error) => {
+        if (current) setTrendError(reportError(error));
+      })
+      .finally(() => {
+        if (current) setTrendLoading(false);
+      });
+
+    return () => { current = false; };
+  }, [catererData?.id, catererData?.verification_status, profile?.role, dashboardTrendRange.start, dashboardTrendRange.end, trendRefreshKey]);
+
+  const trendMonths = useMemo(() => {
+    if (!trendReport) return [];
+    const recorded = new Map(trendReport.months.map((month) => [month.month.slice(0, 7), month.count]));
+    return Array.from({ length: 5 }, (_, index) => {
+      const date = new Date(`${dashboardMonth}-01T00:00:00Z`);
+      date.setUTCMonth(date.getUTCMonth() - (4 - index));
+      const month = date.toISOString().slice(0, 7);
+      return {
+        month,
+        label: date.toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' }),
+        count: recorded.get(month) ?? 0,
+      };
+    });
+  }, [trendReport, dashboardMonth]);
+  const maxTrendCount = Math.max(1, ...trendMonths.map((month) => month.count));
+
   const loadUnreadCount = async () => {
     if (!session?.user?.id) return;
 
@@ -257,6 +345,9 @@ export default function CatererDashboard() {
   const currentPlan = catererData?.subscription_plan ?? 'free';
   const planColor = planColors[currentPlan] ?? Colors.orange;
   const isPremium = currentPlan === 'premium';
+  const selectedDateCount = availabilityData?.counts[availabilitySelected] ?? 0;
+  const selectedDateBlocked = availabilityData?.blocked.includes(availabilitySelected) ?? false;
+  const selectedDateFull = !!availabilityData && !selectedDateBlocked && selectedDateCount >= availabilityData.capacity;
 
   const statCards = [
     {
@@ -354,9 +445,9 @@ export default function CatererDashboard() {
           ]}
         >
           <View style={{ flex: 1, gap: 8 }}>
-            {pulse({ width: 128, height: 18, borderRadius: 9 })}
-            {pulse({ width: '75%', height: 24, borderRadius: 10 })}
-            {pulse({ width: '85%', height: 11, borderRadius: 6 })}
+            {pulse({ width: 150, height: 12, borderRadius: 6 })}
+            {pulse({ width: 142, height: 24, borderRadius: 10 })}
+            {pulse({ width: '75%', height: 27, borderRadius: 10 })}
           </View>
 
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -367,24 +458,8 @@ export default function CatererDashboard() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 44 }}
+          contentContainerStyle={{ width: '100%', maxWidth: 1280, alignSelf: 'center', paddingBottom: 44 }}
         >
-          <View style={styles.skeletonWelcome}>
-            <View style={styles.skeletonRow}>
-              {pulse({ width: 42, height: 42, borderRadius: 14 })}
-              {pulse({ width: 128, height: 23, borderRadius: 14 })}
-            </View>
-
-            {pulse({ width: '80%', height: 24, borderRadius: 8 })}
-            {pulse({ width: '95%', height: 13, borderRadius: 6 })}
-            {pulse({ width: '68%', height: 13, borderRadius: 6 })}
-          </View>
-
-          <View style={styles.skeletonSection}>
-            {pulse({ width: 154, height: 21, borderRadius: 7 })}
-            {pulse({ width: 182, height: 12, borderRadius: 6 })}
-          </View>
-
           <View style={styles.statsGrid}>
             {[0, 1, 2, 3].map((i) => (
               <View key={i} style={styles.statCard}>
@@ -395,16 +470,74 @@ export default function CatererDashboard() {
             ))}
           </View>
 
-          <View style={styles.skeletonSection}>
-            {pulse({ width: 143, height: 21, borderRadius: 7 })}
-            {pulse({ width: 205, height: 12, borderRadius: 6 })}
+          <View style={styles.skeletonSubscription}>
+            <View style={{ flex: 1, gap: 10 }}>
+              {pulse({ width: 122, height: 10, borderRadius: 5 })}
+              {pulse({ width: '70%', height: 21, borderRadius: 7 })}
+              {pulse({ width: '90%', height: 12, borderRadius: 6 })}
+              {pulse({ width: '76%', height: 12, borderRadius: 6 })}
+            </View>
+            {pulse({ width: 84, height: 38, borderRadius: 18 })}
+          </View>
 
-            {[0, 1, 2, 3].map((i) => (
-              <View key={i} style={styles.actionRow}>
-                {pulse({ width: 43, height: 43, borderRadius: 15 })}
-                <View style={{ flex: 1, gap: 9 }}>
-                  {pulse({ width: '72%', height: 15, borderRadius: 7 })}
-                  {pulse({ width: '91%', height: 11, borderRadius: 6 })}
+          <View style={styles.skeletonFeatureCard}>
+            {pulse({ width: 120, height: 10, borderRadius: 5 })}
+            {pulse({ width: 172, height: 21, borderRadius: 7 })}
+            {pulse({ width: '95%', height: 12, borderRadius: 6 })}
+            {pulse({ width: 144, height: 36, borderRadius: 10 })}
+            <View style={styles.skeletonCalendarMonthRow}>
+              {pulse({ width: 34, height: 34, borderRadius: 17 })}
+              {pulse({ width: 130, height: 16, borderRadius: 7 })}
+              {pulse({ width: 34, height: 34, borderRadius: 17 })}
+            </View>
+            <View style={styles.skeletonCalendarWeekdays}>
+              {Array.from({ length: 7 }, (_, i) => <View key={i} style={styles.skeletonCalendarWeekday}>{pulse({ width: 20, height: 9, borderRadius: 5 })}</View>)}
+            </View>
+            <View style={styles.skeletonCalendarGrid}>
+              {Array.from({ length: 42 }, (_, i) => (
+                <View key={i} style={styles.skeletonCalendarCell}>
+                  {pulse({ width: '72%', height: 34, borderRadius: 8 })}
+                </View>
+              ))}
+            </View>
+            <View style={styles.skeletonLegendRow}>
+              {[0, 1, 2].map((i) => <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>{pulse({ width: 9, height: 9, borderRadius: 5 })}{pulse({ width: 46, height: 10, borderRadius: 5 })}</View>)}
+            </View>
+            {pulse({ width: '82%', height: 11, borderRadius: 5 })}
+          </View>
+
+          <View style={styles.skeletonFeatureCard}>
+            {pulse({ width: 138, height: 10, borderRadius: 5 })}
+            {pulse({ width: 188, height: 21, borderRadius: 7 })}
+            {pulse({ width: '95%', height: 12, borderRadius: 6 })}
+            <View style={styles.skeletonTrendChart}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <View key={i} style={styles.skeletonTrendColumn}>
+                  {pulse({ width: 22, height: 12, borderRadius: 5 })}
+                  {pulse({ width: '70%', height: 104, borderRadius: 9 })}
+                  {pulse({ width: 34, height: 11, borderRadius: 5 })}
+                  {pulse({ width: 28, height: 10, borderRadius: 5 })}
+                </View>
+              ))}
+            </View>
+            <View style={styles.skeletonLegendRow}>{pulse({ width: 10, height: 10, borderRadius: 5 })}{pulse({ width: 182, height: 10, borderRadius: 5 })}</View>
+            {pulse({ width: 184, height: 38, borderRadius: 10 })}
+          </View>
+
+          <View style={styles.skeletonSection}>
+            {pulse({ width: 132, height: 21, borderRadius: 7 })}
+            {pulse({ width: 190, height: 12, borderRadius: 6 })}
+            {[0, 1].map((i) => (
+              <View key={i} style={styles.skeletonRecentBooking}>
+                {pulse({ width: 48, height: 48, borderRadius: 24 })}
+                <View style={{ flex: 1, gap: 8 }}>
+                  {pulse({ width: '72%', height: 14, borderRadius: 6 })}
+                  {pulse({ width: '55%', height: 11, borderRadius: 5 })}
+                  {pulse({ width: '64%', height: 11, borderRadius: 5 })}
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                  {pulse({ width: 70, height: 14, borderRadius: 6 })}
+                  {pulse({ width: 62, height: 20, borderRadius: 10 })}
                 </View>
               </View>
             ))}
@@ -444,19 +577,25 @@ export default function CatererDashboard() {
           ]}
         >
           <View style={{ flex: 1, paddingRight: 12, flexShrink: 1 }}>
+            <Text style={styles.headerDate} numberOfLines={2}>
+              {new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Manila',
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              }).format(new Date()).toUpperCase()}
+            </Text>
+
             <View style={styles.greetingRow}>
-              <View style={styles.greetingDot} />
-              <Text style={styles.headerGreeting}>Welcome back!</Text>
-              <Text style={styles.waveEmoji}>👋</Text>
+              <Text style={styles.headerGreeting}>Welcome Back!{displayName ? ',' : ''}</Text>
+              {displayName ? (
+                <Text style={styles.headerName} numberOfLines={2}>
+                  {displayName}
+                </Text>
+              ) : null}
             </View>
 
-            <Text style={styles.headerName} numberOfLines={2}>
-              {displayName}
-            </Text>
-
-            <Text style={styles.headerCaption}>
-              Here’s what’s happening with your catering business.
-            </Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -681,7 +820,7 @@ export default function CatererDashboard() {
           /* APPROVED CATERER DASHBOARD */
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1 }}
+            contentContainerStyle={{ width: '100%', maxWidth: 1280, alignSelf: 'center', flexGrow: 1 }}
           >
             <View style={styles.dashboardBody}>
               <View
@@ -709,81 +848,45 @@ export default function CatererDashboard() {
                 style={[styles.backgroundBlob, styles.blobBottomLeft]}
               />
 
-              {/* WELCOME CARD */}
-              <View style={styles.welcomeCard}>
-                <View
-                  pointerEvents="none"
-                  style={styles.cardBlobLarge}
-                />
-                <View
-                  pointerEvents="none"
-                  style={styles.cardBlobSmall}
-                />
-                <View
-                  pointerEvents="none"
-                  style={styles.cardBlobBottom}
-                />
-                <View
-                  pointerEvents="none"
-                  style={styles.cardAccentRing}
-                />
+              <View style={styles.statsGrid}>
+                {statCards.map((s) => {
+                  const StatIcon = s.icon;
 
-                <View style={styles.welcomeTop}>
-                  <View style={styles.welcomeIcon}>
-                    <Sparkles size={20} color="#FFFFFF" />
-                  </View>
+                  return (
+                    <View key={s.label} style={styles.statCard}>
+                      <View
+                        style={[
+                          styles.statIconWrap,
+                          { backgroundColor: s.tint },
+                        ]}
+                      >
+                        <StatIcon size={20} color={s.color} />
+                      </View>
 
-                  <View style={styles.welcomeTag}>
-                    <Text style={styles.welcomeTagText}>
-                      CATERER OVERVIEW
-                    </Text>
-                  </View>
-                </View>
+                      <Text
+                        style={styles.statLabel}
+                        numberOfLines={2}
+                      >
+                        {s.label}
+                      </Text>
 
-                <Text style={styles.welcomeTitle}>
-                  Your business, at a glance.
-                </Text>
+                      <Text
+                        style={[styles.statValue, { color: s.color }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        {s.value}
+                      </Text>
 
-                <Text style={styles.welcomeSubtitle}>
-                  Stay on top of reservations and keep your catering business
-                  moving.
-                </Text>
-
-                <View style={styles.welcomeLine} />
-
-                <View style={styles.welcomeBottom}>
-                  <View>
-                    <Text style={styles.welcomeMetric}>
-                      {stats.total}
-                    </Text>
-                    <Text style={styles.welcomeMetricLabel}>
-                      Total bookings
-                    </Text>
-                  </View>
-
-                  <View style={styles.welcomeDivider} />
-
-                  <View>
-                    <Text style={styles.welcomeMetric}>
-                      {stats.pending}
-                    </Text>
-                    <Text style={styles.welcomeMetricLabel}>
-                      Awaiting review
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Open bookings"
-                    onPress={() =>
-                      router.push('/(caterer)/bookings')
-                    }
-                    activeOpacity={0.8}
-                    style={styles.welcomeArrow}
-                  >
-                    <ArrowUpRight size={20} color="#F97316" />
-                  </TouchableOpacity>
-                </View>
+                      <View
+                        style={[
+                          styles.statAccent,
+                          { backgroundColor: s.color },
+                        ]}
+                      />
+                    </View>
+                  );
+                })}
               </View>
 
               {/* SUBSCRIPTION */}
@@ -792,10 +895,10 @@ export default function CatererDashboard() {
                   styles.subBanner,
                   { borderColor: planColor + '40' },
                 ]}
-                onPress={() => router.push('/(caterer)/profile')}
+                onPress={() => router.push('/(caterer)/subscription')}
                 activeOpacity={0.85}
               >
-                <View style={styles.subBannerLeft}>
+                <View style={styles.subBannerHeader}>
                   <View style={styles.planHeading}>
                     <View
                       style={[
@@ -824,146 +927,161 @@ export default function CatererDashboard() {
                     </View>
                   </View>
 
-                  <MonthlyBookingQuotaSummary compact />
-                </View>
-
-                <View
-                  style={[
-                    styles.subUpgradeBtn,
-                    { backgroundColor: planColor },
-                  ]}
-                >
-                  {isPremium ? (
-                    <>
-                      <Star
-                        size={16}
-                        color={Colors.white}
-                        fill={Colors.white}
-                      />
-                      <Text style={styles.subUpgradeBtnText}>
-                        Premium
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.subUpgradeBtnText}>
-                        Upgrade
-                      </Text>
-                      <ArrowUpRight
-                        size={16}
-                        color={Colors.white}
-                      />
-                    </>
-                  )}
-                </View>
-              </TouchableOpacity>
-
-              {/* BOOKING SNAPSHOT */}
-              <View style={styles.statsSectionTitle}>
-                <View>
-                  <Text style={styles.sectionTitle}>
-                    Booking Snapshot
-                  </Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Your latest booking totals
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.statsGrid}>
-                {statCards.map((s) => {
-                  const StatIcon = s.icon;
-
-                  return (
-                    <View key={s.label} style={styles.statCard}>
-                      <View
-                        style={[
-                          styles.statIconWrap,
-                          { backgroundColor: s.tint },
-                        ]}
-                      >
-                        <StatIcon size={20} color={s.color} />
-                      </View>
-
-                      <Text
-                        style={[styles.statValue, { color: s.color }]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                      >
-                        {s.value}
-                      </Text>
-
-                      <Text
-                        style={styles.statLabel}
-                        numberOfLines={2}
-                      >
-                        {s.label}
-                      </Text>
-
-                      <View
-                        style={[
-                          styles.statAccent,
-                          { backgroundColor: s.color },
-                        ]}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* QUICK ACTIONS */}
-              <View style={styles.section}>
-                <View style={styles.sectionRow}>
-                  <View>
-                    <Text style={styles.sectionTitle}>
-                      Quick Actions
-                    </Text>
-                    <Text style={styles.sectionSubtitle}>
-                      Manage your catering business
-                    </Text>
+                  <View
+                    style={[
+                      styles.subUpgradeBtn,
+                      { backgroundColor: planColor },
+                    ]}
+                  >
+                    {isPremium ? (
+                      <>
+                        <Star
+                          size={16}
+                          color={Colors.white}
+                          fill={Colors.white}
+                        />
+                        <Text style={styles.subUpgradeBtnText}>
+                          Premium
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.subUpgradeBtnText}>
+                          Upgrade
+                        </Text>
+                        <ArrowUpRight
+                          size={16}
+                          color={Colors.white}
+                        />
+                      </>
+                    )}
                   </View>
                 </View>
+                <MonthlyBookingQuotaSummary compact />
+              </TouchableOpacity>
 
-                <View style={styles.actionsList}>
-                  {quickActions.map((a) => {
-                    const ActionIcon = a.icon;
+              {/* CALENDAR OVERVIEW */}
+              <View style={styles.section}>
+                <View style={styles.dashboardFeatureCard}>
+                  <View style={styles.dashboardFeatureHeading}>
+                    <View style={styles.dashboardFeatureCopy}>
+                      <Text style={styles.dashboardEyebrow}>CALENDAR OVERVIEW</Text>
+                      <Text style={styles.dashboardFeatureTitle}>Monthly Availability</Text>
+                      <Text style={styles.dashboardFeatureDescription}>
+                        Committed bookings and dates blocked from new requests.
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      style={styles.dashboardFeatureButton}
+                      onPress={() => router.push('/(caterer)/availability')}
+                      activeOpacity={0.8}
+                    >
+                      <CalendarDays size={15} color={Colors.white} />
+                      <Text style={styles.dashboardFeatureButtonText}>Check Availability</Text>
+                    </TouchableOpacity>
+                  </View>
 
-                    return (
-                      <TouchableOpacity
-                        key={a.label}
-                        style={styles.actionRow}
-                        onPress={() => router.push(a.path as any)}
-                        activeOpacity={0.78}
-                      >
-                        <View
-                          style={[
-                            styles.actionIconWrap,
-                            { backgroundColor: a.bg },
-                          ]}
-                        >
-                          <ActionIcon
-                            size={21}
-                            color={a.color}
-                            strokeWidth={2.2}
-                          />
-                        </View>
-
-                        <View style={styles.actionTextWrap}>
-                          <Text style={styles.actionLabel}>
-                            {a.label}
-                          </Text>
-                          <Text style={styles.actionDescription}>
-                            {a.description}
-                          </Text>
-                        </View>
-
-                        <ChevronRight
-                          size={19}
-                          color="#94A3B8"
-                        />
+                  {availabilityLoading ? (
+                    <ActivityIndicator color={Colors.orange} style={styles.dashboardFeedback} />
+                  ) : availabilityErrorMessage ? (
+                    <View style={styles.dashboardFeedback}>
+                      <Text style={styles.dashboardError}>{availabilityErrorMessage}</Text>
+                      <TouchableOpacity onPress={() => setAvailabilityRefreshKey((key) => key + 1)}>
+                        <Text style={styles.dashboardLink}>Try again</Text>
                       </TouchableOpacity>
-                    );
-                  })}
+                    </View>
+                  ) : availabilityData ? (
+                    <>
+                      <AvailabilityMonthCalendar
+                        month={availabilityMonth}
+                        selected={availabilitySelected}
+                        blocked={availabilityData.blocked}
+                        counts={availabilityData.counts}
+                        capacity={availabilityData.capacity}
+                        onSelect={setAvailabilitySelected}
+                        onMonthChange={(month) => {
+                          setAvailabilityMonth(month);
+                          setAvailabilitySelected(`${month}-01`);
+                        }}
+                      />
+                      <View style={styles.calendarLegend}>
+                        <View style={styles.calendarLegendItem}><View style={styles.calendarLegendOpen} /><Text style={styles.calendarLegendText}>Open</Text></View>
+                        <View style={styles.calendarLegendItem}><View style={styles.calendarLegendFull} /><Text style={styles.calendarLegendText}>Fully booked</Text></View>
+                        <View style={styles.calendarLegendItem}><View style={styles.calendarLegendBlocked} /><Text style={styles.calendarLegendText}>Blocked</Text></View>
+                      </View>
+                      <Text style={styles.calendarCapacity}>
+                        Daily limit: {availabilityData.capacity} bookings. Pending requests are not included.
+                      </Text>
+                      <Text style={styles.calendarSelectedStatus}>
+                        {availabilitySelected}: {selectedDateCount} committed bookings · {selectedDateBlocked ? 'Blocked' : selectedDateFull ? 'Fully booked' : 'Open'}
+                      </Text>
+                    </>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* MONTHLY BOOKING TRENDS */}
+              <View style={styles.section}>
+                <View style={styles.dashboardFeatureCard}>
+                  <View style={styles.dashboardTrendsHeading}>
+                    <View style={styles.dashboardFeatureCopy}>
+                      <Text style={styles.dashboardEyebrow}>BOOKING PERFORMANCE</Text>
+                      <Text style={styles.dashboardFeatureTitle}>Monthly Booking Trends</Text>
+                      <Text style={styles.dashboardFeatureDescription}>
+                        Bookings by creation month across all statuses; this is activity, not a success count.
+                      </Text>
+                    </View>
+                    <View style={styles.dashboardTrendsIcon}>
+                      <TrendingUp size={19} color={Colors.orange} />
+                    </View>
+                  </View>
+
+                  {trendLoading ? (
+                    <ActivityIndicator color={Colors.orange} style={styles.dashboardFeedback} />
+                  ) : trendError ? (
+                    <View style={styles.dashboardFeedback}>
+                      <Text style={styles.dashboardError}>{trendError}</Text>
+                      <TouchableOpacity onPress={() => setTrendRefreshKey((key) => key + 1)}>
+                        <Text style={styles.dashboardLink}>Try again</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <>
+                      {trendMonths.length > 0 ? (
+                        <View style={styles.dashboardTrendChart}>
+                          {trendMonths.map((month) => (
+                            <View key={month.month} accessibilityLabel={`${month.month}: ${month.count} bookings`} style={styles.dashboardTrendColumn}>
+                              <Text style={styles.dashboardTrendCount}>{month.count}</Text>
+                              <View style={styles.dashboardTrendTrack}>
+                                <View style={[styles.dashboardTrendBar, {
+                                  height: `${month.count / maxTrendCount * 100}%`,
+                                  backgroundColor: month.count === maxTrendCount && month.count > 0 ? '#E96808' : '#FDBA74',
+                                }]} />
+                              </View>
+                              <Text style={styles.dashboardTrendMonth}>{month.label}</Text>
+                              <Text style={styles.dashboardTrendYear}>{month.month.slice(0, 4)}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.dashboardFeatureDescription}>Trend data is unavailable.</Text>
+                      )}
+                      <View style={styles.dashboardTrendLegend}>
+                        <View style={styles.dashboardTrendLegendDot} />
+                        <Text style={styles.calendarLegendText}>Monthly bookings · Philippine Standard Time</Text>
+                      </View>
+                    </>
+                  )}
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.dashboardReportButton}
+                    onPress={() => router.push(quickActions[0].path as any)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.dashboardReportButtonText}>View Report &amp; Analytics</Text>
+                    <ChevronRight size={17} color={Colors.orange} />
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -975,24 +1093,22 @@ export default function CatererDashboard() {
                       Recent Bookings
                     </Text>
                     <Text style={styles.sectionSubtitle}>
-                      Your latest customer requests
+                      Your latest customer booking requests
                     </Text>
                   </View>
 
-                  {recentBookings.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.seeAllRow}
-                      onPress={() =>
-                        router.push('/(caterer)/bookings')
-                      }
-                    >
-                      <Text style={styles.seeAll}>See all</Text>
-                      <ChevronRight
-                        size={16}
-                        color={Colors.orange}
-                      />
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.seeAllRow}
+                    onPress={() =>
+                      router.push('/(caterer)/bookings')
+                    }
+                  >
+                    <Text style={styles.seeAll}>View all</Text>
+                    <ChevronRight
+                      size={16}
+                      color={Colors.orange}
+                    />
+                  </TouchableOpacity>
                 </View>
 
                 {recentBookings.length === 0 ? (
@@ -1170,6 +1286,97 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  skeletonSubscription: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 20,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E9EEF4',
+  },
+
+  skeletonRecentBooking: {
+    minHeight: 76,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E9EEF4',
+  },
+
+  skeletonFeatureCard: {
+    marginHorizontal: 20,
+    padding: 18,
+    gap: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5EAF0',
+  },
+
+  skeletonCalendarMonthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+
+  skeletonCalendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+
+  skeletonCalendarWeekdays: {
+    flexDirection: 'row',
+    marginTop: 2,
+  },
+
+  skeletonCalendarWeekday: {
+    width: '14.285%',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+
+  skeletonCalendarCell: {
+    width: '14.285%',
+    minHeight: 55,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  skeletonLegendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  skeletonTrendChart: {
+    minHeight: 160,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+
+  skeletonTrendColumn: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 7,
+  },
+
   backgroundBlob: {
     position: 'absolute',
     backgroundColor: '#FED7AA',
@@ -1255,11 +1462,14 @@ const styles = StyleSheet.create({
   },
 
   header: {
+    width: '100%',
+    maxWidth: 1280,
+    alignSelf: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 19,
+    paddingBottom: 12,
     backgroundColor: Colors.white,
     borderBottomLeftRadius: 26,
     borderBottomRightRadius: 26,
@@ -1269,21 +1479,32 @@ const styles = StyleSheet.create({
   },
 
   headerGreeting: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#F97316',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#172033',
+    letterSpacing: -0.8,
+  },
+
+  headerDate: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    flexShrink: 1,
+    marginBottom: 4,
+    color: '#8993a2',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    lineHeight: 14,
   },
 
   greetingRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    marginBottom: 8,
-    backgroundColor: '#FFF1E6',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
+    alignItems: 'baseline',
+    alignSelf: 'stretch',
+    flexWrap: 'wrap',
+    columnGap: 6,
+    rowGap: 2,
+    marginBottom: 0,
   },
 
   greetingDot: {
@@ -1306,11 +1527,13 @@ const styles = StyleSheet.create({
   },
 
   headerName: {
-    fontSize: 20,
+    flexShrink: 1,
+    maxWidth: '100%',
+    fontSize: 22,
     fontWeight: '800',
-    color: Colors.black,
-    letterSpacing: -0.45,
-    lineHeight: 25,
+    color: '#f97316',
+    letterSpacing: -0.8,
+    lineHeight: 29,
   },
 
   headerRight: {
@@ -1603,15 +1826,15 @@ const styles = StyleSheet.create({
   // APPROVED DASHBOARD
 
   subBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 8,
     marginHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 20,
+    marginTop: 10,
+    marginBottom: 14,
     backgroundColor: Colors.white,
     borderRadius: 20,
-    padding: 16,
+    padding: 12,
     borderWidth: 1,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
@@ -1620,9 +1843,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  subBannerLeft: {
-    flex: 1,
-    gap: 4,
+  subBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
 
   subBannerLabel: {
@@ -1644,6 +1869,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 10,
     alignItems: 'center',
+    alignSelf: 'center',
   },
 
   subUpgradeBtnText: {
@@ -1664,9 +1890,9 @@ const styles = StyleSheet.create({
   statCard: {
     width: '47%',
     flexGrow: 1,
-    minHeight: 142,
+    minHeight: 128,
     backgroundColor: Colors.white,
-    borderRadius: 20,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: '#E9EEF4',
@@ -1688,8 +1914,8 @@ const styles = StyleSheet.create({
   },
 
   statValue: {
-    fontSize: 29,
-    fontWeight: '900',
+    fontSize: 25,
+    fontWeight: '800',
     letterSpacing: -0.8,
     marginTop: 4,
   },
@@ -1724,6 +1950,247 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 3,
+  },
+
+  dashboardFeatureCard: {
+    width: '100%',
+    padding: 18,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5EAF0',
+    shadowColor: '#18222C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+
+  dashboardFeatureHeading: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 13,
+    marginBottom: 17,
+  },
+
+  dashboardTrendsHeading: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+
+  dashboardFeatureCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  dashboardEyebrow: {
+    marginBottom: 6,
+    color: '#F97316',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+  },
+
+  dashboardFeatureTitle: {
+    color: '#202A35',
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+
+  dashboardFeatureDescription: {
+    marginTop: 5,
+    color: '#75808C',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  dashboardFeatureButton: {
+    minHeight: 40,
+    paddingHorizontal: 13,
+    borderRadius: 10,
+    backgroundColor: Colors.orange,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+  },
+
+  dashboardFeatureButtonText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  dashboardFeedback: {
+    minHeight: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  dashboardError: {
+    color: Colors.error,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+
+  dashboardLink: {
+    color: Colors.orange,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  calendarLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+
+  calendarLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+
+  calendarLegendOpen: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#DCFCE7',
+  },
+
+  calendarLegendFull: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.orangeLight,
+  },
+
+  calendarLegendBlocked: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: Colors.orangeLight,
+    borderWidth: 1,
+    borderColor: Colors.orange,
+  },
+
+  calendarLegendText: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+  },
+
+  calendarCapacity: {
+    marginTop: 12,
+    color: Colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+
+  calendarSelectedStatus: {
+    marginTop: 5,
+    color: '#475569',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  dashboardTrendsIcon: {
+    width: 38,
+    height: 38,
+    flexShrink: 0,
+    borderRadius: 12,
+    backgroundColor: '#FFF1E6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  dashboardTrendChart: {
+    width: '100%',
+    minHeight: 188,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+
+  dashboardTrendColumn: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    gap: 7,
+  },
+
+  dashboardTrendCount: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  dashboardTrendTrack: {
+    width: 27,
+    height: 128,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 9,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+
+  dashboardTrendBar: {
+    width: '100%',
+    borderRadius: 8,
+  },
+
+  dashboardTrendMonth: {
+    color: '#475569',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  dashboardTrendYear: {
+    color: '#64748B',
+    fontSize: 9,
+  },
+
+  dashboardTrendLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 7,
+  },
+
+  dashboardTrendLegendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#FDBA74',
+  },
+
+  dashboardReportButton: {
+    minHeight: 42,
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    paddingHorizontal: 13,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFE2CC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+
+  dashboardReportButtonText: {
+    color: Colors.orange,
+    fontSize: 12,
+    fontWeight: '800',
   },
 
   seeAllRow: {
@@ -2055,7 +2522,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 7,
+    flex: 1,
+    minWidth: 0,
   },
 
   planIcon: {
@@ -2064,14 +2532,6 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  statsSectionTitle: {
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    marginBottom: 13,
   },
 
   statAccent: {

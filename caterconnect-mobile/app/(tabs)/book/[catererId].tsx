@@ -381,14 +381,19 @@ export default function BookingWizard() {
     setMapModalVisible(false);
   };
 
+  const submissionLock = useRef(false);
+  const submittedBookingId = useRef<string | null>(null);
+
   const handleSubmit = async () => {
-    if (!session?.user?.id || !selectedPkg || !caterer || submitting) return;
+    if (!session?.user?.id || !selectedPkg || !caterer || submitting || submissionLock.current) return;
+    if (submittedBookingId.current) { router.push('/(tabs)/bookings'); return; }
 
     if (availabilityError || availabilityLoading) {
       Alert.alert('Availability Unavailable', 'Unable to check booked dates. Please reopen this page and try again.');
       return;
     }
 
+    submissionLock.current = true;
     setSubmitting(true);
     try {
       await requirePublishedPackage(selectedPkg.id, caterer.id);
@@ -435,9 +440,10 @@ export default function BookingWizard() {
       }).select('id,total_cost,downpayment_amount').single();
 
       if (error) throw error;
+      submittedBookingId.current = booking.id;
 
       if (customItems.length > 0 && booking) {
-        await supabase.from('booking_customizations').insert(
+        const { error: customizationError } = await supabase.from('booking_customizations').insert(
           customItems.map(c => ({
             booking_id: booking.id,
             menu_item_id: c.menuItem.id,
@@ -446,6 +452,10 @@ export default function BookingWizard() {
             is_added: true,
           }))
         );
+        if (customizationError) {
+          Alert.alert('Booking saved ? detail sync incomplete', 'Your booking and customization quote were saved, but the separate menu-detail rows could not be saved. Do not submit another booking. Contact support with booking ID ' + booking.id + '.', [{ text: 'View Bookings', onPress: () => router.push('/(tabs)/bookings') }]);
+          return;
+        }
       }
 
       // The database booking INSERT trigger sends the caterer notification.
@@ -459,6 +469,7 @@ export default function BookingWizard() {
       Alert.alert('Error', err.message);
       if (err.code === '23514') void refreshAvailability();
     } finally {
+      submissionLock.current = false;
       setSubmitting(false);
     }
   };
@@ -514,7 +525,7 @@ export default function BookingWizard() {
 
       <StepBar step={step} />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingBottom: 140 }}>
 
         {step === 0 && (
           <View style={styles.stepPad}>

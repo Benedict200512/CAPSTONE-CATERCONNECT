@@ -386,7 +386,7 @@ export default function MessagesInboxScreen({ onClose }: { onClose?: () => void 
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ padding: 16 }}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ width: '100%', maxWidth: 960, alignSelf: 'center', padding: 16 }}>
           {filteredConversations.map(conv => (
             <TouchableOpacity
               key={conv.bookingId}
@@ -448,7 +448,7 @@ const s = StyleSheet.create({
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 4, backgroundColor: Colors.bgInput, borderWidth: 1, borderColor: Colors.border, borderRadius: 16, minHeight: 46 },
   searchInput: { flex: 1, paddingVertical: 12, fontSize: 13, color: Colors.textPrimary },
   clearSearch: { padding: 10 },
-  root: { flex: 1, backgroundColor: '#F9FAFB' },
+  root: { flex: 1, width: '100%', maxWidth: 960, alignSelf: 'center', backgroundColor: '#F9FAFB' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
 
   header: {

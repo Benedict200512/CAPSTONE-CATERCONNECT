@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Dimensions,
   Image,
   ImageBackground,
   KeyboardAvoidingView,
@@ -38,7 +37,6 @@ import {
   Star, ChevronRight, HelpCircle, ChevronDown, ChevronUp,
 } from 'lucide-react-native';
 
-const { width } = Dimensions.get('window');
 
 // Real buffet photo used as the hero banner background.
 const HERO_BUFFET_IMAGE = require('../../assets/images/hero-buffet.png');
@@ -269,7 +267,7 @@ export default function HomeScreen() {
           <Animated.View style={[styles.skeletonBox, { width: '100%', height: 38, borderRadius: 18, opacity: shimmerAnim }]} />
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 1280, alignSelf: 'center', paddingBottom: 32 }}>
           {/* Hero Banner Skeleton */}
           <Animated.View style={[styles.skeletonBox, styles.heroBanner, { height: 165, opacity: shimmerAnim, marginHorizontal: 14, marginTop: 8 }]} />
 
@@ -374,6 +372,7 @@ export default function HomeScreen() {
       <ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ width: '100%', maxWidth: 1280, alignSelf: 'center' }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.orange} />
         }
@@ -1278,7 +1277,8 @@ const styles = StyleSheet.create({
   // How it works
   howGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 14, paddingBottom: 6 },
   howItem: {
-    width: (width - 38) / 2,
+    width: '48%',
+    maxWidth: 480,
     backgroundColor: Colors.white,
     borderRadius: 14,
     padding: 14,

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   RefreshControl,
   ScrollView,
@@ -285,6 +286,10 @@ export default function NotificationsScreen() {
         },
       } as Href);
     } else if (notif.type === 'new_review') {
+      if (!notif.booking_id) {
+        Alert.alert('Review unavailable', 'This notification does not include an accessible booking reference.');
+        return;
+      }
       router.push({
         pathname:
           profile?.role === 'caterer'
@@ -293,13 +298,14 @@ export default function NotificationsScreen() {
         params: {
           ...(notif.booking_id ? { id: notif.booking_id } : {}),
           notification_id: notif.id,
+          section: 'review',
         },
       } as Href);
     } else if (notif.type.includes('subscription')) {
       router.push('/profile' as Href);
     } else if (notif.booking_id) {
       router.push({
-        pathname: '/bookings',
+        pathname: profile?.role === 'caterer' ? '/(caterer)/bookings' : '/(tabs)/bookings',
         params: {
           id: notif.booking_id,
           notification_id: notif.id,
@@ -377,6 +383,9 @@ export default function NotificationsScreen() {
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
+            width: '100%',
+            maxWidth: 960,
+            alignSelf: 'center',
             padding: 20,
             paddingBottom: 40,
           }}

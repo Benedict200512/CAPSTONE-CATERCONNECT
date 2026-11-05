@@ -1,16 +1,22 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 // app/(tabs)/CatererBookings.tsx
 import { useEffect, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useReviewSectionScroll } from '../../hooks/useReviewSectionScroll';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import {
-  ActivityIndicator, Alert, Image, Modal, Platform,
+  ActivityIndicator, Alert, Animated, Easing, Image, Modal, Platform,
   ScrollView, StyleSheet, Text, TextInput,
-  TouchableOpacity, View, Linking,
+  TouchableOpacity, Pressable, View, Linking,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
+import BookingPaymentSummary from '../../components/BookingPaymentSummary';
+import BookingRefundSummary, { refundStatusLabel } from '../../components/BookingRefundSummary';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useBookingRefresh } from '../../hooks/useBookingRefresh';
+import { useBookingInternalNotes } from '../../hooks/useBookingInternalNotes';
 import ChatScreen from '../../screens/auth/ChatScreen';
 import MonthlyBookingQuotaSummary from '../../components/MonthlyBookingQuotaSummary';
 import { isMonthlyQuotaRejection } from '../../lib/monthlyBookingQuota';
@@ -30,6 +36,7 @@ type Review = {
   overall: number;
   comment: string | null;
   caterer_reply: string | null;
+  caterer_replied_at?: string | null;
   created_at: string;
 };
 
@@ -47,6 +54,7 @@ type Booking = {
   venue: string | null;
   special_requests: string | null;
   payment_method: string | null;
+  payment_reference?: string | null;
   payment_receipt_url: string | null;
   payment_submitted_at: string | null;
   payment_verified_at: string | null;
@@ -64,8 +72,10 @@ type Booking = {
   profiles: { full_name: string; email: string; avatar_url: string | null; phone_number: string | null } | null;
   packages: { name: string; tier: string } | null;
   reviews: Review[] | null;
-  caterer_notes: string | null;
 };
+
+// Explicit booking projection keeps legacy shared notes out of this editor's data.
+const BOOKING_SELECT = 'id, customer_id, caterer_id, package_id, status, event_date, event_time, event_type, guest_count, total_cost, downpayment_amount, downpayment_deadline, venue, special_requests, payment_method, payment_receipt_url, payment_reference, payment_submitted_at, payment_verified_at, customized_items, created_at, rejection_reason, cancelled_by, cancellation_reason, cancelled_at, refund_status, refund_amount, refund_due_at, refunded_at, refund_account_details, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, caterer_replied_at, created_at)';
 
 type RefundDispute = {
   id: string;
@@ -99,16 +109,17 @@ const displayXenditPaymentMethod = (method: string | null | undefined): string =
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  pending:   { label: 'Pending',    color: '#B45309', bg: '#FEF3C7', icon: Clock },
-  confirmed: { label: 'Confirmed', color: '#15803D', bg: '#DCFCE7', icon: CheckCircle },
-  paid:      { label: 'Paid',      color: '#15803D', bg: '#DCFCE7', icon: ShieldCheck },
-  ongoing:   { label: 'Ongoing',   color: '#C2410C', bg: '#FFEDD5', icon: RefreshCw },
-  completed: { label: 'Completed', color: '#1E40AF', bg: '#DBEAFE', icon: PartyPopper },
+  pending:   { label: 'Pending Review', color: '#B45309', bg: '#FEF3C7', icon: Clock },
+  confirmed: { label: 'Confirmed', color: '#1D4ED8', bg: '#DBEAFE', icon: CheckCircle },
+  awaiting_payment: { label: 'Awaiting Payment', color: '#B45309', bg: '#FEF3C7', icon: Clock },
+  paid:      { label: 'Downpayment Verified', color: '#15803D', bg: '#DCFCE7', icon: ShieldCheck },
+  ongoing:   { label: 'Event Ongoing', color: '#6D28D9', bg: '#EDE9FE', icon: RefreshCw },
+  completed: { label: 'Completed', color: '#047857', bg: '#D1FAE5', icon: PartyPopper },
   rejected:  { label: 'Rejected',  color: '#B91C1C', bg: '#FEE2E2', icon: XCircle },
   cancelled: { label: 'Cancelled', color: '#4B5563', bg: '#F3F4F6', icon: Ban },
 };
 
-const FILTERS = ['all', 'pending', 'confirmed', 'paid', 'ongoing', 'completed', 'cancelled', 'rejected'];
+const FILTERS = ['all', 'pending', 'confirmed', 'awaiting_payment', 'paid', 'ongoing', 'completed', 'cancelled', 'rejected'];
 
 const CATERER_CANCEL_REASONS = [
   "Equipment or kitchen failure",
@@ -171,21 +182,40 @@ const getCancelWarningMessage = (booking: Booking | null) => {
     : `${urgency}No verified downpayment is recorded, so cancelling this booking does not create a refund. The Customer will be notified.`;
 };
 
+function NotesRefreshIcon({ loading }: { loading: boolean }) {
+  const rotation = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!loading) { rotation.setValue(0); return; }
+    const animation = Animated.loop(Animated.timing(rotation, {
+      toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true,
+    }));
+    animation.start();
+    return () => { animation.stop(); rotation.setValue(0); };
+  }, [loading, rotation]);
+  return <Animated.View accessible={false} style={{ transform: [{ rotate: rotation.interpolate({
+    inputRange: [0, 1], outputRange: ['0deg', '360deg'],
+  }) }] }}><RefreshCw size={19} color={Colors.orange} /></Animated.View>;
+}
+
 export default function CatererBookings() {
-  const { catererData, refreshCatererData } = useAuth() as any;
+  const { catererData, refreshCatererData, session } = useAuth() as any;
+  const { id: requestedBookingId, notification_id: reviewNotificationId, section: requestedSection } = useLocalSearchParams<{ id?: string; notification_id?: string; section?: string }>();
+  const lastReviewNotification = useRef('');
   const [bookings, setBookings]         = useState<Booking[]>([]);
   const [quotaRefresh, setQuotaRefresh] = useState(0);
   const [refundAlerts, setRefundAlerts] = useState<Booking[]>([]);
   const [clockNow, setClockNow] = useState(Date.now());
   const [loading, setLoading]           = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [filter, setFilter]             = useState('all');
   const [selected, setSelected]         = useState<Booking | null>(null);
-  const [catererNotes, setCatererNotes] = useState('');
-  const [savingCatererNotes, setSavingCatererNotes] = useState(false);
+  const [reviewFocus, setReviewFocus] = useState<{ bookingId: string; key: string } | null>(null);
+  const reviewScroll = useReviewSectionScroll(selected?.id ?? null, reviewFocus?.bookingId === selected?.id ? reviewFocus?.key ?? null : null);
+  const internalNotes = useBookingInternalNotes(selected?.id ?? null, session?.user?.id ?? null);
   const [updating, setUpdating]         = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
-  
+
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -215,11 +245,14 @@ export default function CatererBookings() {
   loadScope.current = `${catererData?.id ?? ''}:${filter}`;
   const loadVersion = useRef(0);
   const load = async (silent = false) => {
+
     const scope = loadScope.current;
     const version = ++loadVersion.current;
     const isCurrent = () => scope === loadScope.current && version === loadVersion.current;
-    if (!catererData?.id) return;
+    if (!catererData?.id) { setBookings([]); setSelected(null); setLoading(false); return; }
     if (!silent) setLoading(true);
+    setLoadError('');
+    try {
 
     if (refreshCatererData) {
       await refreshCatererData();
@@ -228,20 +261,20 @@ export default function CatererBookings() {
 
     let query = supabase
       .from('bookings')
-      .select('*, customer_id, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, created_at)')
+      .select(BOOKING_SELECT)
       .eq('caterer_id', catererData.id)
       .order('created_at', { ascending: false });
 
     if (filter !== 'all') query = query.eq('status', filter);
     const { data, error: bookingLoadError } = await query;
     if (!isCurrent()) return;
-    if (bookingLoadError) { setLoading(false); return; }
+    if (bookingLoadError) { setLoadError(bookingLoadError.message); setLoading(false); return; }
     setBookings((data as any) ?? []);
 
     // Fetch actionable refund deadlines separately so alerts remain visible under every filter.
     const { data: refundAlertRows, error: refundAlertError } = await supabase
       .from('bookings')
-      .select('*, customer_id, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, created_at)')
+      .select(BOOKING_SELECT)
       .eq('caterer_id', catererData.id)
       .eq('status', 'cancelled')
       .in('refund_status', ['pending', 'overdue'])
@@ -287,7 +320,7 @@ export default function CatererBookings() {
       setRefundSubmissions(byBooking);
     }
 
-    const statuses = ['pending', 'confirmed', 'paid', 'ongoing', 'completed', 'cancelled', 'rejected'];
+    const statuses = ['pending', 'confirmed', 'awaiting_payment', 'paid', 'ongoing', 'completed', 'cancelled', 'rejected'];
     const countRes = await Promise.all(
       statuses.map(s => supabase.from('bookings').select('id', { count: 'exact', head: true })
         .eq('caterer_id', catererData.id).eq('status', s))
@@ -299,56 +332,44 @@ export default function CatererBookings() {
     setCounts(c);
     if (selected) {
       const { data: current } = await supabase.from('bookings')
-        .select('*, customer_id, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, created_at)')
+        .select(BOOKING_SELECT)
         .eq('id', selected.id).eq('caterer_id', catererData.id).maybeSingle();
       if (!isCurrent()) return;
       if (current) setSelected(previous => previous?.id === current.id ? current as unknown as Booking : previous);
     }
-    setLoading(false);
+    } catch (error: any) {
+      if (isCurrent()) setLoadError(error?.message || 'Bookings could not be refreshed.');
+    } finally { if (isCurrent()) setLoading(false); }
   };
 
   useBookingRefresh(catererData?.id ? `${catererData.id}:${filter}` : null, () => load(true));
+
+  useEffect(() => {
+    const id = Array.isArray(requestedBookingId) ? requestedBookingId[0] : requestedBookingId;
+    if (!id || !catererData?.id || !session?.user?.id) return;
+    const key = `${session.user.id}:${reviewNotificationId ?? id}:${requestedSection ?? ''}`;
+    if (lastReviewNotification.current === key) return;
+    let active = true;
+    const open = async () => {
+      try {
+        const result = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).eq('caterer_id', catererData.id).maybeSingle();
+        if (!active) return;
+        if (result.error || !result.data) throw new Error('This booking is missing or no longer accessible.');
+        lastReviewNotification.current = key;
+        setShowDisputes(false);
+        setReviewFocus(requestedSection === 'review' ? { bookingId: id, key } : null);
+        setSelected(result.data as unknown as Booking);
+      } catch (error: any) { if (active) Alert.alert('Review unavailable', error?.message || 'Unable to open this booking.'); }
+    };
+    void open();
+    return () => { active = false; };
+  }, [requestedBookingId, reviewNotificationId, requestedSection, catererData?.id, session?.user?.id]);
   // Update deadline labels while the screen is open.
   useEffect(() => {
     const timer = setInterval(() => setClockNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
 
-  // Keep the notes editor in sync when a different booking is opened.
-  useEffect(() => {
-    setCatererNotes(selected?.caterer_notes ?? '');
-  }, [selected?.id]);
-
-  const saveCatererNotes = async () => {
-    if (!selected || !catererData?.id || savingCatererNotes) return;
-    setSavingCatererNotes(true);
-    try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .update({ caterer_notes: catererNotes })
-        .eq('id', selected.id)
-        .eq('caterer_id', catererData.id)
-        .select('id, caterer_notes')
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!data) throw new Error('The notes were not saved. Please refresh the booking and try again.');
-
-      const savedNote = data.caterer_notes ?? '';
-      setCatererNotes(savedNote);
-      setSelected(previous => previous?.id === selected.id
-        ? { ...previous, caterer_notes: savedNote }
-        : previous);
-      setBookings(previous => previous.map(booking => booking.id === selected.id
-        ? { ...booking, caterer_notes: savedNote }
-        : booking));
-      Alert.alert('Saved', 'Caterer notes have been saved.');
-    } catch (error) {
-      Alert.alert('Unable to save notes', error instanceof Error ? error.message : 'Please try again.');
-    } finally {
-      setSavingCatererNotes(false);
-    }
-  };
 
   const getRefundAlert = (booking: Booking) => {
     if (booking.status !== 'cancelled' ||
@@ -382,6 +403,7 @@ export default function CatererBookings() {
 
 
   const openDispute = async (dispute: RefundDispute) => {
+
     setActiveDispute(dispute);
     setDisputeReply(dispute.caterer_response ?? '');
     setDisputeProofUrl(null);
@@ -396,6 +418,7 @@ export default function CatererBookings() {
   };
 
   const submitDisputeReply = async () => {
+
     if (!activeDispute || savingDisputeReply || activeDispute.status === 'resolved') return;
     const reply = disputeReply.trim();
     if (reply.length < 10 || reply.length > 2000) {
@@ -427,116 +450,60 @@ export default function CatererBookings() {
   };
 
   const handleAction = async (action: string, booking: Booking) => {
-    if (updating) return;
+    if (updating || !catererData?.id) return;
     setUpdating(true);
     try {
-    let updates: Record<string, any> = {};
-
-    switch (action) {
-      case 'confirm':
-        updates = { status: 'confirmed' };
-        break;
-
-      case 'reject':
-        if (!rejectReason.trim()) {
-          Alert.alert('Required', 'Please provide a reason for rejection.');
-          setUpdating(false); return;
+      let updates: Record<string, unknown>;
+      let expected: string;
+      switch (action) {
+        case 'confirm': expected = 'pending'; updates = { status: 'confirmed' }; break;
+        case 'reject':
+          if (!rejectReason.trim()) throw new Error('Please provide a rejection reason.');
+          expected = 'pending'; updates = { status: 'rejected', rejection_reason: rejectReason.trim() }; break;
+        case 'mark_ongoing': expected = 'paid'; updates = { status: 'ongoing' }; break;
+        case 'complete': expected = 'ongoing'; updates = { status: 'completed' }; break;
+        case 'caterer_cancel': {
+          const reason = selectedReason === 'Other' ? customReason.trim() : selectedReason.trim();
+          if (reason.length < 3 || reason.length > 1000) {
+            throw new Error('Please provide a cancellation reason between 3 and 1000 characters.');
+          }
+          if (!['confirmed', 'paid'].includes(booking.status)) {
+            throw new Error('This booking is no longer eligible for cancellation.');
+          }
+          const { data, error } = await supabase.functions.invoke('cancel-caterer-booking', {
+            body: { booking_id: booking.id, reason },
+          });
+          if (error) throw error;
+          if (!data?.success || data.booking_id !== booking.id) {
+            throw new Error(data?.error || 'The server did not confirm cancellation. Refresh before retrying.');
+          }
+          setQuotaRefresh(value => value + 1);
+          setShowCancelModal(false);
+          setSelectedReason('');
+          setCustomReason('');
+          await load(true);
+          return;
         }
-        updates = { 
-          status: 'rejected',
-          rejection_reason: rejectReason
-        };
-        break;
-
-      case 'caterer_cancel': {
-        if (!['confirmed', 'paid'].includes(booking.status)) {
-          Alert.alert('Cancellation Unavailable', 'Only confirmed or paid bookings can be cancelled here.');
-          setUpdating(false); return;
-        }
-        const finalCancelReason = selectedReason === 'Other' ? customReason.trim() : selectedReason;
-        if (!finalCancelReason) {
-          Alert.alert('Required', 'Please select or specify a reason for cancellation.');
-          setUpdating(false); return;
-        }
-
-        const refundAmount = hasVerifiedDownpayment(booking)
-          ? Number(booking.downpayment_amount)
-          : 0;
-        updates = {
-          status: 'cancelled',
-          cancelled_by: 'caterer',
-          cancellation_reason: finalCancelReason,
-          cancelled_at: new Date().toISOString(),
-          refund_status: refundAmount > 0 ? 'pending' : 'none',
-          refund_amount: refundAmount,
-          refunded_at: null,
-        };
-        break;
+        default: throw new Error('This booking action is unavailable.');
       }
-
-      case 'mark_ongoing':
-        updates = { status: 'ongoing' };
-        break;
-
-      case 'complete':
-        updates = { status: 'completed' };
-        break;
-    }
-
-    // Re-read cancellation eligibility to avoid acting on stale booking data.
-    if (action === 'caterer_cancel') {
-      const { data: current, error: readError } = await supabase
-        .from('bookings')
-        .select('status, payment_verified_at, downpayment_amount')
-        .eq('id', booking.id)
-        .eq('caterer_id', catererData.id)
-        .single();
-      if (readError || !current || current.status !== booking.status) {
-        Alert.alert('Booking Changed', 'This booking has changed. Refresh and try again.');
-        setUpdating(false); load(); return;
-      }
-      const verifiedAmount = current.payment_verified_at
-        ? Number(current.downpayment_amount) : 0;
-      updates.refund_amount = Number.isFinite(verifiedAmount) && verifiedAmount > 0
-        ? verifiedAmount : 0;
-      updates.refund_status = updates.refund_amount > 0 ? 'pending' : 'none';
-    }
-
-    let updateQuery = supabase.from('bookings').update(updates).eq('id', booking.id);
-    if (action === 'caterer_cancel') {
-      updateQuery = updateQuery.eq('caterer_id', catererData.id).eq('status', booking.status);
-    }
-    if (action === 'confirm') {
-      updateQuery = updateQuery.eq('caterer_id', catererData.id).eq('status', 'pending');
-    }
-    const { data: updatedRows, error } = await updateQuery.select('id');
-    if (error || (['confirm', 'caterer_cancel'].includes(action) && updatedRows?.length !== 1)) {
-      if (action === 'confirm' && isMonthlyQuotaRejection(error)) {
-        setQuotaRefresh(value => value + 1);
-        Alert.alert('Monthly booking limit reached', 'This booking remains pending. Your plan has reached its monthly accepted-booking limit. Review Plans & Billing or confirm in a later month. Pending requests are still allowed.');
-        return;
-      }
-      Alert.alert('Error', error?.message || 'The booking was not updated. It may have changed or you may no longer have permission. Refresh and try again.');
-      setUpdating(false); return;
-    }
-
-    setUpdating(false);
-    setQuotaRefresh(value => value + 1);
-    setSelected(null);
-    setShowRejectModal(false);
-    setShowCancelModal(false);
-    setRejectReason('');
-    setSelectedReason('');
-    setCustomReason('');
-    load();
-    } catch (error) {
-      Alert.alert('Booking not updated', error instanceof Error ? error.message : 'Please refresh and try again.');
-    } finally {
-      setUpdating(false);
-    }
+      if (booking.status !== expected) throw new Error('This booking changed. Refresh before trying this action.');
+      let query = supabase.from('bookings').update(updates).eq('id', booking.id).eq('caterer_id', catererData.id).eq('status', expected);
+      const { data: rows, error } = await query.select('id');
+      if (error) throw error;
+      if (rows?.length !== 1) throw new Error('No booking was updated. Its status or payment evidence changed; refresh before retrying.');
+      setQuotaRefresh(value => value + 1);
+      setSelected(current => current?.id === booking.id ? { ...current, ...updates } as Booking : current);
+      setShowRejectModal(false); setShowCancelModal(false); setRejectReason(''); setSelectedReason(''); setCustomReason('');
+      await load(true);
+    } catch (error: any) {
+      if (action === 'confirm' && isMonthlyQuotaRejection(error)) Alert.alert('Monthly booking limit reached', 'This booking remains pending. Review your current plan usage.');
+      else Alert.alert('Booking not updated', error?.message || 'Refresh before retrying.');
+      await load(true);
+    } finally { setUpdating(false); }
   };
 
   const pickRefundProof = async () => {
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission needed', 'Allow photo library access to select your transfer receipt.');
@@ -562,6 +529,7 @@ export default function CatererBookings() {
   };
 
   const submitRefundTransfer = async (booking: Booking) => {
+
     if (submittingRefund || !catererData?.id) return;
     const reference = refundReference.trim();
     if (reference.length < 5 || reference.length > 200) {
@@ -602,7 +570,7 @@ export default function CatererBookings() {
       if (existing) throw new Error('A transfer submission already exists. Contact Platform Staff if a correction is needed.');
 
       const extension = refundProof.mimeType === 'image/png' ? 'png' : 'jpg';
-      uploadedPath = `${booking.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+      uploadedPath = `${booking.id}/refund-proof-${Date.now()}.${extension}`;
       const { error: uploadError } = await supabase.storage
         .from('refund-proofs')
         .upload(uploadedPath, decode(refundProof.base64), {
@@ -622,9 +590,24 @@ export default function CatererBookings() {
           },
         },
       );
-      if (functionError) throw functionError;
+      if (functionError) {
+        // A non-2xx response may include an actionable validation message.
+        const response = (functionError as any).context;
+        let serverMessage: string | undefined;
+        if (response && typeof response.clone === 'function') {
+          try {
+            const errorBody = await response.clone().json();
+            serverMessage = typeof errorBody?.error === 'string'
+              ? errorBody.error
+              : typeof errorBody?.message === 'string' ? errorBody.message : undefined;
+          } catch { /* Fall back to the original Supabase error. */ }
+        }
+        throw new Error(serverMessage || functionError.message);
+      }
+      // The deployed Edge Function returns a flat { success, booking_id, proof_path } object.
       if (functionResult?.success !== true ||
-          functionResult?.submission?.refund_status !== 'awaiting_customer_confirmation') {
+          functionResult?.booking_id !== booking.id ||
+          functionResult?.proof_path !== uploadedPath) {
         throw new Error(functionResult?.error || 'Refund submission was not confirmed by the server.');
       }
 
@@ -636,9 +619,7 @@ export default function CatererBookings() {
       setSelected(null);
       Alert.alert(
         'Proof submitted',
-        functionResult.submission.submitted_late
-          ? 'Transfer proof was submitted after the deadline and recorded as late. The Customer must confirm receipt of the funds.'
-          : 'Transfer proof submitted. The Customer must confirm receipt of the funds.',
+        'Transfer proof submitted. The Customer must confirm receipt of the funds.',
       );
       await load();
     } catch (error: any) {
@@ -661,6 +642,7 @@ export default function CatererBookings() {
   };
 
   const handleReplyReview = async (reviewId: string) => {
+
     const text = replyText[reviewId]?.trim();
     if (!text) {
       Alert.alert('Required', 'Please enter a reply message.');
@@ -682,7 +664,7 @@ export default function CatererBookings() {
       if (selected) {
         const { data: updatedBooking } = await supabase
           .from('bookings')
-          .select('*, customer_id, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, created_at)')
+          .select(BOOKING_SELECT)
           .eq('id', selected.id)
           .single();
         if (updatedBooking) setSelected(updatedBooking as any);
@@ -739,13 +721,14 @@ export default function CatererBookings() {
           <Text style={styles.pageTitle}>Bookings</Text>
           <Text style={styles.pageSub}>{counts.all ?? 0} total requests · {counts.pending ?? 0} pending action</Text>
         </View>
-        <TouchableOpacity style={styles.refreshBtn} onPress={() => { void load(); }} activeOpacity={0.8}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Refresh bookings" style={styles.refreshBtn} onPress={() => { void load(); }} activeOpacity={0.8}>
           <RefreshCw size={18} color={Colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
       <View style={{ paddingHorizontal: 16 }}>
-        <MonthlyBookingQuotaSummary compact refreshKey={quotaRefresh} />
+        {!!loadError && <TouchableOpacity onPress={() => void load()}><Text accessibilityRole="alert" style={{ color: Colors.error, padding: 12 }}>{loadError} Tap to refresh.</Text></TouchableOpacity>}
+        {<MonthlyBookingQuotaSummary compact refreshKey={quotaRefresh} />}
       </View>
 
       {accountStanding !== 'good_standing' && (
@@ -839,7 +822,7 @@ export default function CatererBookings() {
       </View>
 
       {showDisputes ? (
-        <ScrollView style={styles.list} contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}>
+        <ScrollView style={styles.list} contentContainerStyle={{ width: '100%', maxWidth: 1100, alignSelf: 'center', padding: 16, paddingBottom: 40, gap: 12 }}>
           <View style={styles.disputeHeadingRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.disputeHeading}>Refund Disputes</Text>
@@ -907,6 +890,9 @@ export default function CatererBookings() {
             return (
               <TouchableOpacity
                 key={f}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={`${label} bookings, ${count}`}
                 style={[styles.filterChip, isActive && styles.filterChipActive]}
                 onPress={() => setFilter(f)}
                 activeOpacity={0.75}
@@ -931,7 +917,7 @@ export default function CatererBookings() {
           <Text style={styles.emptySub}>Bookings will show up here once clients send requests your way.</Text>
         </View>
       ) : (
-        <ScrollView style={styles.list} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 14 }}>
+        <ScrollView style={styles.list} showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 1100, alignSelf: 'center', padding: 16, gap: 14 }}>
           {bookings.map(b => {
             const sc = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.pending;
             const StatusIcon = sc.icon;
@@ -952,6 +938,8 @@ export default function CatererBookings() {
                 </View>
 
                 <View style={styles.cardBody}>
+
+
                   <View style={styles.cardCustomerRow}>
                     {b.profiles?.avatar_url ? (
                       <Image source={{ uri: b.profiles.avatar_url }} style={styles.customerAvatar} />
@@ -964,6 +952,7 @@ export default function CatererBookings() {
                     )}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.customerName} numberOfLines={1}>{b.profiles?.full_name ?? '—'}</Text>
+                      {!!b.reviews?.length && <Text style={{ color: Colors.orangeDark, fontSize: 13, fontWeight: '700' }}>Reviewed · {b.reviews[0].overall}/5</Text>}
                       <Text style={styles.eventTypeName} numberOfLines={1}>{b.event_type ?? 'Catering Event'}</Text>
                     </View>
                     <View style={styles.cardAmount}>
@@ -1062,7 +1051,7 @@ export default function CatererBookings() {
                 <View style={styles.disputeCard}>
                   <Text style={styles.disputeSectionTitle}>Refund & Transfer Evidence</Text>
                   <Text style={styles.disputeInfo}>Amount: ₱{Number(related?.refund_amount ?? 0).toLocaleString('en-PH')}</Text>
-                  <Text style={styles.disputeInfo}>Refund status: {related?.refund_status ?? 'Pending'}</Text>
+                  <Text style={styles.disputeInfo}>Refund status: {refundStatusLabel(related?.refund_status)}</Text>
                   <Text style={styles.disputeInfo}>Customer destination: {formatRefundDestination(related?.refund_account_details ?? null) || 'Not provided'}</Text>
                   {submission ? (
                     <>
@@ -1103,17 +1092,22 @@ export default function CatererBookings() {
         })()}
       </Modal>
 
-      <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => {
+        setSelected(null); setShowRejectModal(false); setShowCancelModal(false);
+        setRejectReason(''); setSelectedReason(''); setCustomReason(''); setRefundReference(''); setRefundProof(null);
+      }}>
         {selected && (
-          <View style={styles.modal}>
+          <SafeAreaView edges={['top', 'bottom']} style={styles.modal}>
             <View style={styles.modalHeader}>
               <TouchableOpacity
                 style={styles.modalCloseBtn}
-                onPress={() => { 
-                  setSelected(null); 
-                  setShowRejectModal(false); 
+                accessibilityRole="button"
+                accessibilityLabel="Close booking details"
+                onPress={() => {
+                  setSelected(null);
+                  setShowRejectModal(false);
                   setShowCancelModal(false);
-                  setRejectReason(''); 
+                  setRejectReason('');
                   setSelectedReason('');
                   setCustomReason('');
                   setRefundReference('');
@@ -1123,11 +1117,13 @@ export default function CatererBookings() {
               >
                 <X size={20} color={Colors.black} />
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>Booking Summary</Text>
+              <Text style={styles.modalTitle}>Booking Details</Text>
               <View style={{ width: 32 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: 60, gap: 20 }}>
+            <ScrollView ref={reviewScroll.scrollRef} onContentSizeChange={reviewScroll.onContentSizeChange} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 36, gap: 14 }}>
+              <Text selectable style={styles.modalReference}>Reference: {selected.id}</Text>
+
               {(() => {
                 const sc = STATUS_CONFIG[selected.status] ?? STATUS_CONFIG.pending;
                 const StatusIcon = sc.icon;
@@ -1144,209 +1140,6 @@ export default function CatererBookings() {
                   </View>
                 );
               })()}
-
-              {['paid', 'ongoing', 'completed'].includes(selected.status) && (
-                <View style={styles.receiptViewerBox}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <ShieldCheck size={18} color="#15803D" />
-                    <Text style={styles.receiptViewerTitle}>Verified Downpayment E-Receipt</Text>
-                  </View>
-                  
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptLabel}>Payment Channel:</Text>
-                    <Text style={styles.receiptVal}>{displayXenditPaymentMethod(selected.payment_method)}</Text>
-                  </View>
-
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptLabel}>Verified Downpayment:</Text>
-                    <Text style={[styles.receiptVal, { color: '#15803D', fontWeight: '900' }]}>
-                      ₱{Number(selected.downpayment_amount).toLocaleString()} · {displayXenditPaymentMethod(selected.payment_method)} via Xendit
-                    </Text>
-                  </View>
-
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptLabel}>Payment Status:</Text>
-                    <Text style={[styles.receiptVal, { color: '#15803D', fontWeight: '900' }]}>
-                      SECURED & VERIFIED ✓
-                    </Text>
-                  </View>
-
-                  {selected.payment_verified_at && (
-                    <View style={styles.receiptDetailRow}>
-                      <Text style={styles.receiptLabel}>Verified Timestamp:</Text>
-                      <Text style={styles.receiptVal}>
-                        {new Date(selected.payment_verified_at).toLocaleString('en-US', {
-                          month: 'short', day: 'numeric', year: 'numeric',
-                          hour: 'numeric', minute: '2-digit', hour12: true
-                        })}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={[styles.receiptRefContainer, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#BBF7D0' }]}>
-                    <Text style={styles.receiptLabel}>Transaction Reference:</Text>
-                    <Text 
-                      style={[
-                        styles.receiptVal, 
-                        { 
-                          fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', 
-                          fontSize: 11, 
-                          textAlign: 'left', 
-                          marginTop: 4, 
-                          flexWrap: 'wrap' 
-                        }
-                      ]}
-                    >
-                      {selected.payment_receipt_url || `XENDIT-BK-${selected.id.slice(0, 8).toUpperCase()}`}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {selected.status === 'cancelled' && (
-                <View style={styles.alertBox}>
-                  <Ban size={16} color="#4B5563" />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.alertBoxTitle}>Booking Cancelled</Text>
-                    <Text style={styles.alertBoxText}>
-                      Initiated by: {selected.cancelled_by === 'caterer' ? 'You (Caterer)' : 'Customer'}
-                    </Text>
-                    {selected.cancellation_reason && (
-                      <Text style={styles.alertBoxText}>Reason: {selected.cancellation_reason}</Text>
-                    )}
-                    
-                    {selected.refund_status && selected.refund_status !== 'none' && (
-                      <View style={{ marginTop: 8, padding: 10, backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                        <Text style={{ fontSize: 12, fontWeight: '800', color: Colors.black, marginBottom: 4 }}>
-                          Refund Status: 
-                          <Text style={{ color: selected.refund_status === 'processed' ? '#15803D' : '#D97706' }}> {selected.refund_status.toUpperCase()}</Text>
-                        </Text>
-                        <Text style={{ fontSize: 12, color: Colors.textSecondary }}>
-                          Amount: ₱{Number(selected.refund_amount).toLocaleString()}
-                        </Text>
-                        {getRefundDeadlineLabel(selected) && (
-                          <Text style={{ fontSize: 12, fontWeight: '800', color: getRefundDeadlineLabel(selected)?.startsWith('OVERDUE') ? '#B91C1C' : '#B45309', marginTop: 5 }}>
-                            Refund deadline: {getRefundDeadlineLabel(selected)}
-                          </Text>
-                        )}
-                        {selected.refund_account_details ? (
-                          <Text style={{ fontSize: 11, color: Colors.textSecondary, marginTop: 4 }} selectable>
-                            Customer refund destination: {formatRefundDestination(selected.refund_account_details)}
-                          </Text>
-                        ) : ['pending', 'overdue'].includes(selected.refund_status) ? (
-                          <Text style={{ fontSize: 11, color: Colors.textSecondary, marginTop: 4 }}>
-                            Awaiting the Customer’s refund destination details.
-                          </Text>
-                        ) : null}
-                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>
-                          {selected.refund_status === 'processed' 
-                            ? 'Refund completed after Customer confirmation. Keep your transfer receipt for your records.'
-                            : 'You are responsible for transferring the refund. Platform Staff monitors progress and flags reported issues.'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              )}
-
-              {selected.status === 'cancelled' && ['pending', 'overdue', 'awaiting_customer_confirmation'].includes(selected.refund_status) &&
-                Number(selected.refund_amount) > 0 && (
-                <View style={styles.modalSection}>
-                  <Text style={styles.sectionHeaderLabel}>REFUND TRANSFER & PROOF</Text>
-                  <View style={styles.modalCard}>
-                    <Text style={styles.refundTitle}>
-                      Refund due: ₱{Number(selected.refund_amount).toLocaleString('en-PH')}
-                    </Text>
-                    <Text style={styles.refundHint}>
-                      Transfer the money to the Customer using their selected account. Submit proof after the actual transfer. Platform Staff monitors the progress; the Customer confirms receiving the funds.
-                    </Text>
-                    {selected.refund_account_details ? (
-                      <View style={styles.refundDestinationBox}>
-                        <Text style={styles.fieldLabel}>Customer refund destination</Text>
-                        <Text selectable style={styles.refundDestinationText}>
-                          {formatRefundDestination(selected.refund_account_details)}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.refundWaiting}>
-                        Waiting for the Customer to provide a refund account. Do not transfer money until the destination is confirmed.
-                      </Text>
-                    )}
-                    {refundSubmissions[selected.id] ? (
-                      <View style={styles.refundDestinationBox}>
-                        <Text style={styles.fieldLabel}>
-                          Transfer proof: {refundSubmissions[selected.id].status.toUpperCase()}
-                        </Text>
-                        <Text style={styles.refundDestinationText}>
-                          Reference: {refundSubmissions[selected.id].transfer_reference}
-                        </Text>
-                        <Text style={styles.refundHint}>
-                          Submitted {new Date(refundSubmissions[selected.id].submitted_at).toLocaleString('en-PH')}
-                          {refundSubmissions[selected.id].submitted_late ? ' · LATE' : ''}
-                        </Text>
-                        {refundSubmissions[selected.id].review_note && (
-                          <Text style={styles.refundHint}>
-                            Staff note: {refundSubmissions[selected.id].review_note}
-                          </Text>
-                        )}
-                        <Text style={styles.refundHint}>
-                          {refundSubmissions[selected.id].status === 'rejected'
-                            ? 'An issue was flagged with this evidence. Contact Platform Staff about corrections.'
-                            : 'Evidence is on record. The refund remains pending until the Customer confirms receiving the money.'}
-                        </Text>
-                      </View>
-                    ) : selected.refund_account_details && ['pending', 'overdue'].includes(selected.refund_status) ? (
-                      <View style={{ gap: 10, marginTop: 12 }}>
-                        <Text style={styles.fieldLabel}>Transfer reference number *</Text>
-                        <TextInput
-                          style={styles.fieldInput}
-                          placeholder="Enter bank or wallet transaction reference"
-                          placeholderTextColor={Colors.textMuted}
-                          value={refundReference}
-                          onChangeText={setRefundReference}
-                          autoCapitalize="characters"
-                          maxLength={120}
-                        />
-                        <TouchableOpacity
-                          style={styles.refundProofButton}
-                          onPress={pickRefundProof}
-                          disabled={submittingRefund}
-                        >
-                          <FileText size={17} color="#1D4ED8" />
-                          <Text style={styles.refundProofButtonText}>
-                            {refundProof ? 'Change receipt image' : 'Choose transfer receipt image *'}
-                          </Text>
-                        </TouchableOpacity>
-                        {refundProof && (
-                          <Image source={{ uri: refundProof.uri }} style={styles.refundProofPreview} resizeMode="contain" />
-                        )}
-                        <TouchableOpacity
-                          style={[styles.actionBtn, styles.actionBtnConfirm]}
-                          disabled={submittingRefund}
-                          onPress={() => submitRefundTransfer(selected)}
-                        >
-                          {submittingRefund
-                            ? <ActivityIndicator color="#FFFFFF" />
-                            : <Text style={styles.actionBtnText}>Submit Transfer Proof for Verification</Text>}
-                        </TouchableOpacity>
-                        <Text style={styles.refundHint}>
-                          Submitting proof does not automatically mark the refund as processed.
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              )}
-
-              {selected.status === 'rejected' && selected.rejection_reason && (
-                <View style={[styles.alertBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}>
-                  <XCircle size={16} color="#B91C1C" />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.alertBoxTitle, { color: '#991B1B' }]}>Rejection Reason</Text>
-                    <Text style={[styles.alertBoxText, { color: '#B91C1C' }]}>{selected.rejection_reason}</Text>
-                  </View>
-                </View>
-              )}
 
               <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>CUSTOMER DETAILS</Text>
@@ -1381,6 +1174,10 @@ export default function CatererBookings() {
                     <Text style={styles.modalRowValue}>{selected.packages?.name ?? 'Custom Setup'}</Text>
                   </View>
                   <View style={styles.modalRow}>
+                    <Text style={styles.modalRowLabel}>Package Tier</Text>
+                    <Text style={styles.modalRowValue}>{selected.packages?.tier ?? 'Not specified'}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
                     <Text style={styles.modalRowLabel}>Event Date & Time</Text>
                     <Text style={styles.modalRowValue}>{formatDate(selected.event_date)} @ {formatTime(selected.event_time)}</Text>
                   </View>
@@ -1394,8 +1191,8 @@ export default function CatererBookings() {
                   </View>
 
                   {selected.venue && (
-                    <TouchableOpacity 
-                      style={styles.mapPinCard} 
+                    <TouchableOpacity
+                      style={styles.mapPinCard}
                       onPress={() => openMapPin(selected.venue!)}
                       activeOpacity={0.85}
                     >
@@ -1422,64 +1219,116 @@ export default function CatererBookings() {
               </View>
 
               <View style={styles.modalSection}>
-                <Text style={styles.sectionHeaderLabel}>CATERER NOTES</Text>
+                <Text style={styles.sectionHeaderLabel}>SELECTED MENU & CUSTOMIZATIONS</Text>
                 <View style={styles.modalCard}>
-                  <Text style={styles.catererNotesHint}>Notes for managing this booking, such as setup reminders, staffing, event timing, or other operational details.</Text>
-                  <TextInput
-                    accessibilityLabel="Caterer booking notes"
-                    value={catererNotes}
-                    onChangeText={setCatererNotes}
-                    placeholder="Write notes about this booking..."
-                    placeholderTextColor={Colors.textMuted}
-                    multiline
-                    textAlignVertical="top"
-                    maxLength={5000}
-                    editable={!savingCatererNotes}
-                    style={styles.catererNotesInput}
-                  />
-                  <Text style={styles.catererNotesCounter}>{catererNotes.length.toLocaleString()} / 5,000</Text>
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    onPress={() => void saveCatererNotes()}
-                    disabled={savingCatererNotes || catererNotes === (selected.caterer_notes ?? '')}
-                    style={[styles.catererNotesSave, (savingCatererNotes || catererNotes === (selected.caterer_notes ?? '')) && styles.catererNotesSaveDisabled]}
-                  >
-                    {savingCatererNotes
-                      ? <ActivityIndicator color={Colors.white} />
-                      : <Text style={styles.catererNotesSaveText}>Save Notes</Text>}
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionHeaderLabel}>FINANCIAL BREAKDOWN</Text>
-                <View style={styles.modalCard}>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Total Cost</Text>
-                    <Text style={[styles.modalRowValue, { color: Colors.orange, fontSize: 16 }]}>
-                      ₱{Number(selected.total_cost).toLocaleString()}
-                    </Text>
-                  </View>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Required Downpayment</Text>
-                    <Text style={styles.modalRowValue}>₱{Number(selected.downpayment_amount).toLocaleString()}</Text>
-                  </View>
-                  {selected.downpayment_deadline && (
-                    <View style={styles.modalRow}>
-                      <Text style={styles.modalRowLabel}>Payment Deadline</Text>
-                      <Text style={[styles.modalRowValue, { color: Colors.error }]}>
-                        {formatDate(selected.downpayment_deadline)}
-                      </Text>
+                  {selected.customized_items?.length ? selected.customized_items.map((item, index) => (
+                    <View key={item.menu_item_id ?? index} style={styles.modalRow}>
+                      <Text style={styles.modalRowLabel}>{item.name ?? 'Selected item'} (x{item.quantity ?? 1})</Text>
+                      <Text style={styles.modalRowValue}>{item.price_per_guest == null ? 'Charge not recorded' : `PHP ${Number(item.price_per_guest).toLocaleString('en-PH')} / guest`}</Text>
                     </View>
-                  )}
+                  )) : <Text style={styles.modalCustomerSub}>No additional menu items or customizations selected.</Text>}
                 </View>
               </View>
 
-              {selected.reviews && selected.reviews.length > 0 && (
+              <BookingPaymentSummary booking={selected} methodLabel={displayXenditPaymentMethod(selected.payment_method)} />
+
+              {selected.status === 'cancelled' && <BookingRefundSummary booking={selected} />}
+
+              {selected.status === 'cancelled' && ['pending', 'overdue', 'awaiting_customer_confirmation', 'processed'].includes(selected.refund_status) &&
+                Number(selected.refund_amount) > 0 && (
                 <View style={styles.modalSection}>
+                  <Text style={styles.sectionHeaderLabel}>REFUND TRANSFER & PROOF</Text>
+                  <View style={styles.modalCard}>
+                    <Text style={styles.refundTitle}>
+                      Refund amount: ₱{Number(selected.refund_amount).toLocaleString('en-PH')}
+                    </Text>
+                    <Text style={styles.refundHint}>
+                      {selected.refund_status === 'processed' ? 'Processed. The Customer confirmed receipt; keep the transfer evidence for your records.' : selected.refund_status === 'awaiting_customer_confirmation' ? 'Awaiting Customer confirmation. Evidence is submitted; only the Customer can confirm actual receipt.' : 'Transfer to the saved destination first, then submit the transfer reference and proof. Only the Customer confirms receipt.'}
+                    </Text>
+                    {refundSubmissions[selected.id] ? (
+                      <View style={styles.refundDestinationBox}>
+                        <Text style={styles.fieldLabel}>
+                          Transfer proof: {refundSubmissions[selected.id].status.toUpperCase()}
+                        </Text>
+                        <Text style={styles.refundDestinationText}>
+                          Reference: {refundSubmissions[selected.id].transfer_reference}
+                        </Text>
+
+                        <Text style={styles.refundHint}>
+                          Submitted {new Date(refundSubmissions[selected.id].submitted_at).toLocaleString('en-PH')}
+                          {refundSubmissions[selected.id].submitted_late ? ' · LATE' : ''}
+                        </Text>
+                        {refundSubmissions[selected.id].review_note && (
+                          <Text style={styles.refundHint}>
+                            Staff note: {refundSubmissions[selected.id].review_note}
+                          </Text>
+                        )}
+                        <Text style={styles.refundHint}>
+                          {refundSubmissions[selected.id].status === 'rejected'
+                            ? 'An issue was flagged with this evidence. Contact Platform Staff about corrections.'
+                            : 'Evidence is on record. The refund remains pending until the Customer confirms receiving the money.'}
+                        </Text>
+                      </View>
+                    ) : selected.refund_account_details && ['pending', 'overdue'].includes(selected.refund_status) ? (
+                      <View style={{ gap: 10, marginTop: 12 }}>
+                        <Text style={styles.fieldLabel}>Transfer reference number *</Text>
+                        <TextInput
+                          style={styles.fieldInput}
+                          placeholder="Enter bank or wallet transaction reference"
+                          placeholderTextColor={Colors.textMuted}
+                          value={refundReference}
+                          onChangeText={setRefundReference}
+                          autoCapitalize="characters"
+                          maxLength={120}
+                        />
+                        <TouchableOpacity
+                          style={styles.refundProofButton}
+                          onPress={pickRefundProof}
+                          disabled={(submittingRefund)}
+                        >
+                          <FileText size={17} color="#1D4ED8" />
+                          <Text style={styles.refundProofButtonText}>
+                            {refundProof ? 'Change receipt image' : 'Choose transfer receipt image *'}
+                          </Text>
+                        </TouchableOpacity>
+                        {refundProof && (
+                          <Image source={{ uri: refundProof.uri }} style={styles.refundProofPreview} resizeMode="contain" />
+                        )}
+                        <TouchableOpacity
+                          style={[styles.actionBtn, styles.actionBtnConfirm]}
+                          disabled={(submittingRefund)}
+                          onPress={() => submitRefundTransfer(selected)}
+                        >
+                          {submittingRefund
+                            ? <ActivityIndicator color="#FFFFFF" />
+                            : <Text style={styles.actionBtnText}>Submit Transfer Proof for Verification</Text>}
+                        </TouchableOpacity>
+                        <Text style={styles.refundHint}>
+                          Submitting proof does not automatically mark the refund as processed.
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              )}
+
+              {selected.status === 'rejected' && selected.rejection_reason && (
+                <View style={[styles.alertBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}>
+                  <XCircle size={16} color="#B91C1C" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.alertBoxTitle, { color: '#991B1B' }]}>Rejection Reason</Text>
+                    <Text style={[styles.alertBoxText, { color: '#B91C1C' }]}>{selected.rejection_reason}</Text>
+                  </View>
+                </View>
+              )}
+
+              {(selected.status === 'completed' || !!selected.reviews?.length) && (
+                <View onLayout={reviewScroll.onReviewLayout} style={styles.modalSection}>
                   <Text style={styles.sectionHeaderLabel}>CUSTOMER REVIEW</Text>
-                  {selected.reviews.map(rev => (
+                  {!selected.reviews?.length && <Text style={styles.modalCustomerSub}>No customer review has been submitted yet.</Text>}
+                  {(selected.reviews ?? []).map(rev => (
                     <View key={rev.id} style={styles.modalCard}>
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 10 }}>{selected.profiles?.full_name ?? 'Customer'} · {rev.overall}/5</Text>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <View style={{ flexDirection: 'row', gap: 2 }}>
                           {[1, 2, 3, 4, 5].map(i => (
@@ -1491,13 +1340,13 @@ export default function CatererBookings() {
                             />
                           ))}
                         </View>
-                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>
+                        <Text style={{ fontSize: 13, color: Colors.textSecondary }}>
                           {formatDate(rev.created_at)}
                         </Text>
                       </View>
 
                       {rev.comment && (
-                        <Text style={{ fontSize: 14, color: Colors.black, fontStyle: 'italic', marginBottom: 12 }}>
+                        <Text style={{ fontSize: 14, lineHeight: 22, color: Colors.textPrimary, marginBottom: 12 }}>
                           "{rev.comment}"
                         </Text>
                       )}
@@ -1506,7 +1355,7 @@ export default function CatererBookings() {
                         <View style={styles.catererReply}>
                           <View style={styles.catererReplyHeader}>
                             <MessageSquareText size={14} color="#2563EB" />
-                            <Text style={styles.catererReplyLabel}>Your Response</Text>
+                            <Text style={styles.catererReplyLabel}>Your Reply</Text>
                           </View>
                           <Text style={styles.catererReplyText}>{rev.caterer_reply}</Text>
                         </View>
@@ -1515,7 +1364,7 @@ export default function CatererBookings() {
                           {replyingId === rev.id ? (
                             <View style={{ gap: 8 }}>
                               <TextInput
-                                style={styles.fieldInput}
+                                style={[styles.fieldInput, { minHeight: 88, maxHeight: 180, lineHeight: 22 }]}
                                 placeholder="Write a professional reply..."
                                 placeholderTextColor={Colors.textMuted}
                                 value={replyText[rev.id] || ''}
@@ -1528,7 +1377,7 @@ export default function CatererBookings() {
                                 <TouchableOpacity
                                   style={[styles.actionBtn, styles.actionBtnConfirm, { flex: 1, paddingVertical: 12 }]}
                                   onPress={() => handleReplyReview(rev.id)}
-                                  disabled={updating}
+                                  disabled={(updating)}
                                 >
                                   {updating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.actionBtnText}>Send Reply</Text>}
                                 </TouchableOpacity>
@@ -1559,6 +1408,56 @@ export default function CatererBookings() {
               )}
 
               <View style={styles.modalSection}>
+                <View style={styles.modalCard}>
+                  <View style={styles.catererNotesHeader}>
+                    <View style={styles.catererNotesHeading}>
+                      <FileText size={18} color={Colors.orange} />
+                      <Text accessibilityRole="header" style={styles.catererNotesTitle}>Internal Notes</Text>
+                    </View>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Load Latest Saved Note"
+                      accessibilityState={{ disabled: internalNotes.loading || internalNotes.saving, busy: internalNotes.loading }}
+                      onPress={internalNotes.reload} disabled={(internalNotes.loading || internalNotes.saving)}
+                      style={[styles.catererNotesRefresh, (internalNotes.loading || internalNotes.saving) && styles.catererNotesSaveDisabled]}>
+                      <NotesRefreshIcon loading={internalNotes.loading} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.catererNotesHint}>{'Private notes are only accessible to the assigned Caterer.'}</Text>
+                  <TextInput
+                    accessibilityLabel="Private booking notes"
+                    value={internalNotes.note}
+                    onChangeText={internalNotes.setNote}
+                    placeholder="Write private notes about this booking..."
+                    placeholderTextColor={Colors.textMuted}
+                    multiline
+                    textAlignVertical="top"
+                    editable={(internalNotes.ready && !internalNotes.saving)}
+                    style={styles.catererNotesInput}
+                  />
+                  <Text style={styles.catererNotesCounter}>{internalNotes.count.toLocaleString()} / 5,000 characters</Text>
+                  {internalNotes.loading && <View accessibilityLiveRegion="polite"><ActivityIndicator color={Colors.orange} /><Text>Loading private notes...</Text></View>}
+                  {!!internalNotes.error && <Text accessibilityRole="alert" style={styles.catererNotesHint}>{internalNotes.error}</Text>}
+                  {!!internalNotes.message && <Text accessibilityLiveRegion="polite" style={styles.catererNotesHint}>{internalNotes.message}</Text>}
+                  {internalNotes.review && <View>
+                    <Text style={styles.catererNotesHint}>Latest saved note — compare with your draft above:</Text>
+                    <Text selectable style={styles.catererNotesHint}>{internalNotes.savedNote || '(Empty note)'}</Text>
+                    <TouchableOpacity accessibilityRole="button" disabled={(internalNotes.saving)} onPress={internalNotes.useSavedNote}>
+                      <Text style={styles.catererNotesHint}>Use saved note instead</Text>
+                    </TouchableOpacity>
+                  </View>}
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() => void internalNotes.save()}
+                    disabled={(!internalNotes.canSave)}
+                    style={[styles.catererNotesSave, !internalNotes.canSave && styles.catererNotesSaveDisabled]}
+                  >
+                    {internalNotes.saving
+                      ? <ActivityIndicator color={Colors.white} />
+                      : <Text style={styles.catererNotesSaveText}>Save Note</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.modalSection}>
                 <Text style={styles.sectionHeaderLabel}>MANAGEMENT ACTIONS</Text>
 
                 {selected.status === 'pending' && !showRejectModal && (
@@ -1566,7 +1465,7 @@ export default function CatererBookings() {
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnConfirm]}
                       onPress={() => handleAction('confirm', selected)}
-                      disabled={updating}
+                      disabled={(updating)}
                       activeOpacity={0.85}
                     >
                       {updating ? <ActivityIndicator color="#FFF" /> : (
@@ -1580,7 +1479,7 @@ export default function CatererBookings() {
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnReject]}
                       onPress={() => setShowRejectModal(true)}
-                      disabled={updating}
+                      disabled={(updating)}
                       activeOpacity={0.85}
                     >
                       <View style={styles.btnRow}>
@@ -1607,11 +1506,11 @@ export default function CatererBookings() {
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnReject, { marginTop: 10 }]}
                       onPress={() => handleAction('reject', selected)}
-                      disabled={updating}
+                      disabled={(updating)}
                     >
                       {updating ? <ActivityIndicator color={Colors.error} /> : <Text style={[styles.actionBtnText, { color: Colors.error }]}>Submit Rejection</Text>}
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowRejectModal(false)} style={{ marginTop: 8, alignItems: 'center' }}>
+                    <TouchableOpacity  onPress={() => setShowRejectModal(false)} style={{ marginTop: 8, alignItems: 'center' }}>
                       <Text style={{ color: Colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
@@ -1621,7 +1520,7 @@ export default function CatererBookings() {
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: '#D97706' }]}
                     onPress={() => handleAction('mark_ongoing', selected)}
-                    disabled={updating}
+                    disabled={(updating)}
                   >
                     <Text style={styles.actionBtnText}>Mark Event as Ongoing</Text>
                   </TouchableOpacity>
@@ -1631,30 +1530,50 @@ export default function CatererBookings() {
                   <TouchableOpacity
                     style={[styles.actionBtn, styles.actionBtnConfirm]}
                     onPress={() => handleAction('complete', selected)}
-                    disabled={updating}
+                    disabled={(updating)}
                   >
                     <Text style={styles.actionBtnText}>Mark Event as Completed</Text>
                   </TouchableOpacity>
                 )}
 
                 {['confirmed', 'paid'].includes(selected.status) && !showCancelModal && (
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FCA5A5', marginTop: 10 }]}
-                    onPress={() => setShowCancelModal(true)}
-                    disabled={updating}
-                    activeOpacity={0.85}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Emergency Cancellation form"
+                    accessibilityHint="Choose an emergency cancellation reason before confirming"
+                    testID="caterer-emergency-cancel-open"
+                    onPress={() => {
+                      // Opening the reason form is always safe, even if another
+                      // booking action is finishing. Only submitting a change
+                      // is guarded by `updating` in handleAction.
+                      setSelectedReason('');
+                      setCustomReason('');
+                      setShowCancelModal(true);
+                    }}
+                    android_ripple={{ color: '#FECDD3' }}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      {
+                        backgroundColor: pressed ? '#FFE4E6' : '#FEF2F2',
+                        borderWidth: 1,
+                        borderColor: '#FCA5A5',
+                        marginTop: 10,
+                        minHeight: 56,
+                      },
+                    ]}
                   >
-                    <View style={styles.btnRow}>
+                    <View pointerEvents="none" style={styles.btnRow}>
                       <AlertTriangle size={18} color="#B91C1C" />
                       <Text style={[styles.actionBtnText, { color: '#B91C1C' }]}>Emergency Cancellation</Text>
                     </View>
-                  </TouchableOpacity>
+                  </Pressable>
                 )}
+
 
                 {showCancelModal && (
                   <View style={[styles.rejectContainer, { marginTop: 10, borderColor: '#FCA5A5' }]}>
                     <Text style={styles.fieldLabel}>Emergency Reason for Cancellation *</Text>
-                    
+
                     <Text style={{ fontSize: 13, color: '#B91C1C', fontWeight: '600', marginBottom: 12, padding: 10, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' }}>
                       {getCancelWarningMessage(selected)}
                     </Text>
@@ -1676,7 +1595,7 @@ export default function CatererBookings() {
                       <TouchableOpacity
                         key={reason}
                         style={[
-                          styles.reasonRow, 
+                          styles.reasonRow,
                           selectedReason === reason && styles.reasonRowSelected
                         ]}
                         onPress={() => setSelectedReason(reason)}
@@ -1706,11 +1625,11 @@ export default function CatererBookings() {
                     <TouchableOpacity
                       style={[styles.actionBtn, { backgroundColor: '#DC2626', marginTop: 10 }]}
                       onPress={() => handleAction('caterer_cancel', selected)}
-                      disabled={updating}
+                      disabled={(updating)}
                     >
                       {updating ? <ActivityIndicator color="#FFF" /> : <Text style={styles.actionBtnText}>Confirm Cancel & Notify Client</Text>}
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowCancelModal(false)} style={{ marginTop: 12, alignItems: 'center' }}>
+                    <TouchableOpacity  onPress={() => setShowCancelModal(false)} style={{ marginTop: 12, alignItems: 'center' }}>
                       <Text style={{ color: Colors.textSecondary, fontWeight: '600' }}>Back</Text>
                     </TouchableOpacity>
                   </View>
@@ -1728,7 +1647,7 @@ export default function CatererBookings() {
                 )}
               </View>
             </ScrollView>
-          </View>
+          </SafeAreaView>
         )}
       </Modal>
 
@@ -1749,7 +1668,8 @@ export default function CatererBookings() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F8FAFC' },
+  modalReference: { fontSize: 13, lineHeight: 20, color: Colors.textSecondary },
+  root: { flex: 1, backgroundColor: Colors.bg },
   disputeToggleWrap: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: '#FFFFFF' },
   disputeToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 13, borderRadius: 12, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
   disputeToggleActive: { backgroundColor: '#B91C1C', borderColor: '#B91C1C' },
@@ -1777,9 +1697,9 @@ const styles = StyleSheet.create({
   disputeResponseInput: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, minHeight: 125, padding: 12, backgroundColor: '#F8FAFC', color: '#0F172A', fontSize: 14 },
 
   refundTitle: { fontSize: 16, fontWeight: '900', color: '#14532D', marginBottom: 8 },
-  refundHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18, marginTop: 6 },
+  refundHint: { fontSize: 14, color: Colors.textSecondary, lineHeight: 21, marginTop: 8 },
   refundDestinationBox: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, marginTop: 12, borderWidth: 1, borderColor: '#E2E8F0' },
-  refundDestinationText: { fontSize: 13, fontWeight: '700', color: Colors.black, lineHeight: 20 },
+  refundDestinationText: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary, lineHeight: 21 },
   refundWaiting: { fontSize: 13, color: '#B45309', marginTop: 12, lineHeight: 20 },
   refundProofButton: { flexDirection: 'row', gap: 8, alignItems: 'center', padding: 14, backgroundColor: '#EFF6FF', borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE' },
   refundProofButtonText: { color: '#1D4ED8', fontWeight: '800', fontSize: 13 },
@@ -1793,9 +1713,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
   },
-  pageTitle: { fontSize: 26, fontWeight: '900', color: Colors.black, letterSpacing: -0.5 },
+  pageTitle: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.5 },
   pageSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
-  refreshBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  refreshBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.bg, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   debtBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, marginHorizontal: 16, marginTop: 12, borderRadius: 16, borderWidth: 1 },
   debtBannerWarning: { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
   debtBannerDanger: { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' },
@@ -1818,15 +1738,15 @@ const styles = StyleSheet.create({
   receiptRefContainer: { paddingVertical: 4 },
   filterOuterWrap: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginTop: 12 },
   filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, justifyContent: 'center', borderRadius: 12, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border },
   filterChipActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
   filterText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   filterTextActive: { color: Colors.white, fontWeight: '800' },
   list: { flex: 1 },
-  bookingCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 12, elevation: 2 },
+  bookingCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 12, elevation: 2 },
   cardStripe: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
-  cardStripeLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  cardStripeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+  cardStripeLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  cardStripeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1 },
   cardStripeTime: { fontSize: 11, fontWeight: '600', opacity: 0.8 },
   cardBody: { padding: 16 },
   cardCustomerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
@@ -1838,20 +1758,20 @@ const styles = StyleSheet.create({
   cardAmount: { alignItems: 'flex-end' },
   cardAmountValue: { fontSize: 17, fontWeight: '900', color: Colors.orange },
   cardAmountSub: { fontSize: 10, color: Colors.textMuted, fontWeight: '600' },
-  cardMetaGrid: { flexDirection: 'row', gap: 16, marginBottom: 10, backgroundColor: '#F8FAFC', padding: 10, borderRadius: 12 },
+  cardMetaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12, backgroundColor: Colors.bg, padding: 12, borderRadius: 12 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
+  metaText: { fontSize: 14, lineHeight: 21, color: Colors.textSecondary, fontWeight: '600', flexShrink: 1 },
   venueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  venueText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
+  venueText: { fontSize: 14, lineHeight: 21, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
   pkgTag: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F8FAFC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
-  pkgTagText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '700' },
+  pkgTagText: { fontSize: 13, lineHeight: 20, color: Colors.textSecondary, fontWeight: '600', flexShrink: 1 },
   quickActions: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 },
   quickBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, borderRadius: 12, paddingVertical: 12 },
   quickBtnConfirm: { backgroundColor: Colors.orange },
   quickBtnText: { color: Colors.white, fontWeight: '800', fontSize: 13 },
   modal: { flex: 1, backgroundColor: '#F8FAFC' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingTop: Platform.OS === 'ios' ? 60 : 16 },
-  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  modalCloseBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   modalTitle: { fontSize: 17, fontWeight: '900', color: Colors.black },
   statusBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 16 },
   statusBannerText: { fontSize: 14, fontWeight: '900' },
@@ -1859,12 +1779,16 @@ const styles = StyleSheet.create({
   alertBoxTitle: { fontSize: 13, fontWeight: '900', color: '#374151', marginBottom: 2 },
   alertBoxText: { fontSize: 12, fontWeight: '600', color: '#4B5563', lineHeight: 16 },
   modalSection: { gap: 8 },
-  sectionHeaderLabel: { fontSize: 11, fontWeight: '900', color: Colors.textMuted, letterSpacing: 1, marginLeft: 4 },
-  modalCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#F1F5F9' },
+  sectionHeaderLabel: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.3 },
+  modalCard: { backgroundColor: Colors.white, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },
   catererNotesHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18, marginBottom: 10 },
-  catererNotesInput: { minHeight: 130, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, color: Colors.black, fontSize: 14, lineHeight: 21 },
-  catererNotesCounter: { fontSize: 11, color: Colors.textMuted, textAlign: 'right', marginTop: 6 },
-  catererNotesSave: { minHeight: 46, backgroundColor: Colors.orange, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 12 },
+  catererNotesInput: { height: 88, minHeight: 88, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, color: Colors.black, fontSize: 14, lineHeight: 21 },
+  catererNotesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
+  catererNotesHeading: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  catererNotesTitle: { flexShrink: 1, fontSize: 15, fontWeight: '800', color: Colors.black },
+  catererNotesRefresh: { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
+  catererNotesCounter: { fontSize: 11, color: Colors.textMuted, textAlign: 'left', marginTop: 6 },
+  catererNotesSave: { alignSelf: 'flex-end', minHeight: 46, backgroundColor: Colors.orange, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 12 },
   catererNotesSaveDisabled: { opacity: 0.45 },
   catererNotesSaveText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
   modalCustomerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -1874,9 +1798,9 @@ const styles = StyleSheet.create({
   modalCustomerName: { fontSize: 16, fontWeight: '900', color: Colors.black, marginBottom: 2 },
   modalCustomerSub: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
   phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  modalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
-  modalRowLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
-  modalRowValue: { fontSize: 13, fontWeight: '800', color: Colors.black, flex: 1, textAlign: 'right' },
+  modalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  modalRowLabel: { fontSize: 14, lineHeight: 21, color: Colors.textSecondary, fontWeight: '500', flex: 1 },
+  modalRowValue: { fontSize: 14, lineHeight: 21, fontWeight: '600', color: Colors.textPrimary, flex: 1.2, textAlign: 'right' },
   mapPinCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FFEDD5', borderRadius: 14, padding: 12, marginTop: 12 },
   mapPinIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
   mapPinTitle: { fontSize: 11, fontWeight: '800', color: Colors.orange, marginBottom: 2, letterSpacing: 0.5 },
@@ -1898,8 +1822,8 @@ const styles = StyleSheet.create({
   emptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontSize: 18, fontWeight: '900', color: Colors.black, marginBottom: 6 },
   emptySub: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  catererReply: { backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, marginTop: 8, borderWidth: 1, borderColor: '#BFDBFE' },
+  catererReply: { backgroundColor: Colors.orangeLight, borderRadius: 12, padding: 14, marginTop: 8 },
   catererReplyHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  catererReplyLabel: { fontSize: 12, fontWeight: '900', color: '#1D4ED8' },
-  catererReplyText:  { fontSize: 13, color: '#1E3A8A', lineHeight: 18 },
+  catererReplyLabel: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  catererReplyText:  { fontSize: 14, color: Colors.textPrimary, lineHeight: 22 },
 });

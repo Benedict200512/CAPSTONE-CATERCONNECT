@@ -473,6 +473,19 @@ export default function CatererEditProfile() {
       return 'Please select at least one accepted payment method.';
     }
 
+    // Match the Web validation and the proposed server-side submission rule.
+    // Payment details are ordinary receiving instructions; never request or save
+    // customers' card numbers, CVV, PINs or OTPs here.
+    const missingPaymentDetails = acceptedMethods.filter(
+      (method) => !paymentDetails[method]?.trim()
+    );
+    if (missingPaymentDetails.length > 0) {
+      const labels = missingPaymentDetails.map(
+        (method) => PAYMENT_OPTIONS.find((option) => option.key === method)?.label ?? method
+      );
+      return `Please provide payment account details for: ${labels.join(', ')}. For cards, use only a secure gateway description, never card credentials.`;
+    }
+
     const missingDocuments = REQUIRED_DOCS.filter((required) => {
       return !documentRows.some(
         (doc) =>
@@ -1056,9 +1069,12 @@ export default function CatererEditProfile() {
         <View style={styles.card}>
           {REQUIRED_DOCS.map((document, index) => {
             const uploaded = docs.find(
-              (doc) => doc.document_type === document.type
+              (doc) => doc.document_type === document.type && Boolean(doc.file_url)
             );
 
+            // Overall business approval does not update individual document records.
+            const acceptedWithBusiness =
+              catererData?.verification_status === 'approved' && uploaded?.status === 'pending';
             const isUploading = uploadingDoc === document.type;
             const DocumentIcon = document.icon;
 
@@ -1093,7 +1109,7 @@ export default function CatererEditProfile() {
                             styles.docStatusDot,
                             {
                               backgroundColor:
-                                uploaded.status === 'approved'
+                                uploaded.status === 'approved' || acceptedWithBusiness
                                   ? Colors.success
                                   : uploaded.status === 'rejected'
                                     ? Colors.error
@@ -1107,7 +1123,7 @@ export default function CatererEditProfile() {
                             styles.docStatusText,
                             {
                               color:
-                                uploaded.status === 'approved'
+                                uploaded.status === 'approved' || acceptedWithBusiness
                                   ? Colors.success
                                   : uploaded.status === 'rejected'
                                     ? Colors.error
@@ -1115,11 +1131,13 @@ export default function CatererEditProfile() {
                             },
                           ]}
                         >
-                          {uploaded.status === 'approved'
-                            ? 'Approved'
-                            : uploaded.status === 'rejected'
-                              ? 'Rejected'
-                              : 'Pending review'}
+                          {acceptedWithBusiness
+                            ? 'Accepted with business approval'
+                            : uploaded.status === 'approved'
+                              ? 'Approved'
+                              : uploaded.status === 'rejected'
+                                ? 'Rejected'
+                                : 'Pending review'}
                         </Text>
                       </View>
                     ) : (
@@ -1552,6 +1570,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   docStatusText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
   },

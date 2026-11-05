@@ -1,8 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, AlertTriangle, Calendar, CheckCircle2, ShieldCheck, History, Loader2, ArrowRight, Banknote } from 'lucide-react';
+import { Clock, AlertTriangle, Calendar, CheckCircle2, ShieldCheck, History, Loader2, ArrowRight, Banknote, Bell, CheckCheck, RefreshCw, Store, UserRound, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+
+type StaffNotification = {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: string;
+  booking_id: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
+const STAFF_NOTIFICATION_TYPES = [
+  'new_caterer_verification',
+  'new_complaint',
+  'new_account_appeal',
+];
+
+const STAFF_NOTIFICATION_DESTINATIONS: Record<string, string> = {
+  new_caterer_verification: '/staff/verification',
+  new_complaint: '/staff/complaints',
+  new_account_appeal: '/staff/account-monitoring',
+};
+
+function sortStaffNotifications(items: StaffNotification[]) {
+  return [...items].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  ).slice(0, 50);
+}
 
 export default function StaffDashboard() {
   const { profile } = useAuth();
@@ -10,6 +39,145 @@ export default function StaffDashboard() {
   const [stats, setStats] = useState({ pending: 0, complaints: 0, bookings: 0, approved: 0, rejected: 0, refunds: 0, pendingBookings: 0 });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<StaffNotification[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState('');
+
+  const staffUserId = profile?.role === 'staff' ? profile.id : null;
+  const unreadNotificationCount = notifications.filter((item) => !item.is_read).length;
+
+  const loadNotifications = useCallback(async (userId: string, showLoading = true) => {
+    if (showLoading) setNotificationsLoading(true);
+    setNotificationsError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id, user_id, title, message, type, booking_id, is_read, created_at')
+        .eq('user_id', userId)
+        .in('type', STAFF_NOTIFICATION_TYPES)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const fetched = (data ?? []) as StaffNotification[];
+      setNotifications((current) => {
+        const byId = new Map(fetched.map((item) => [item.id, item]));
+        // Keep Realtime changes that arrived while the initial query was in flight.
+        current.forEach((item) => byId.set(item.id, item));
+        return sortStaffNotifications(Array.from(byId.values()));
+      });
+    } catch (error) {
+      setNotificationsError(error instanceof Error ? error.message : 'Unable to load notifications. Please try again.');
+    } finally {
+      if (showLoading) setNotificationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!staffUserId) {
+      setNotifications([]);
+      setNotificationsLoading(false);
+      return;
+    }
+
+    let active = true;
+    void loadNotifications(staffUserId);
+
+    const channel = supabase
+      .channel(`staff-notifications-${staffUserId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${staffUserId}`,
+      }, (payload) => {
+        if (!active) return;
+        const incoming = payload.new as StaffNotification;
+        if (!STAFF_NOTIFICATION_TYPES.includes(incoming.type)) return;
+        setNotifications((current) => sortStaffNotifications([
+          incoming,
+          ...current.filter((item) => item.id !== incoming.id),
+        ]));
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${staffUserId}`,
+      }, (payload) => {
+        if (!active) return;
+        const updated = payload.new as StaffNotification;
+        setNotifications((current) => {
+          if (!STAFF_NOTIFICATION_TYPES.includes(updated.type)) {
+            return current.filter((item) => item.id !== updated.id);
+          }
+          return sortStaffNotifications([
+            updated,
+            ...current.filter((item) => item.id !== updated.id),
+          ]);
+        });
+      })
+      .subscribe((status) => {
+        if (active && (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')) {
+          setNotificationsError('Live notification updates are unavailable. Use refresh to check again.');
+        }
+      });
+
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [loadNotifications, staffUserId]);
+
+  const markNotificationAsRead = async (notification: StaffNotification) => {
+    if (!staffUserId || notification.is_read) return true;
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notification.id)
+      .eq('user_id', staffUserId);
+
+    if (error) {
+      setNotificationsError(error.message || 'Unable to mark the notification as read.');
+      return false;
+    }
+
+    setNotifications((current) => current.map((item) =>
+      item.id === notification.id ? { ...item, is_read: true } : item
+    ));
+    return true;
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!staffUserId || unreadNotificationCount === 0) return;
+
+    setNotificationsError('');
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', staffUserId)
+      .in('type', STAFF_NOTIFICATION_TYPES)
+      .eq('is_read', false);
+
+    if (error) {
+      setNotificationsError(error.message || 'Unable to mark notifications as read.');
+      return;
+    }
+
+    setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
+  };
+
+  const openStaffNotification = async (notification: StaffNotification) => {
+    const destination = STAFF_NOTIFICATION_DESTINATIONS[notification.type];
+    if (!destination) return;
+    if (!(await markNotificationAsRead(notification))) return;
+    setNotificationsOpen(false);
+    navigate(destination);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -83,9 +251,172 @@ export default function StaffDashboard() {
             Here is your live operations and queue overview for today.
           </p>
         </div>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 999, padding: '8px 20px', fontSize: 13, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <Calendar size={16} color="#F97316" />
-          {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 999, padding: '8px 20px', fontSize: 13, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+            <Calendar size={16} color="#F97316" />
+            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
+
+          <div className="staff-notification-anchor">
+            <button
+              type="button"
+              aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`}
+              aria-expanded={notificationsOpen}
+              onClick={() => {
+                setNotificationsOpen((open) => !open);
+                if (staffUserId) void loadNotifications(staffUserId);
+              }}
+              style={{
+                position: 'relative', width: 44, minWidth: 44, height: 44,
+                border: '1px solid #E8E4DE', borderRadius: '50%', padding: 0,
+                background: notificationsOpen ? '#FFF7ED' : '#FFFFFF', color: '#EA580C',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                transition: 'background 0.2s ease',
+              }}
+            >
+              <Bell size={20} />
+              {unreadNotificationCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: -5, right: -5, minWidth: 19, height: 19,
+                  padding: '0 4px', border: '2px solid #FFFFFF', borderRadius: 20,
+                  background: '#EA580C', color: '#FFFFFF', fontSize: 10, fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </span>
+              )}
+            </button>
+
+            {notificationsOpen && (
+              <>
+                <button
+                  type="button"
+                  className="staff-notification-dismiss"
+                  aria-label="Close notifications"
+                  onClick={() => setNotificationsOpen(false)}
+                />
+
+                <section className="staff-notification-panel" aria-label="Staff notifications">
+                  <div className="staff-notification-panel-header">
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>
+                        Notifications
+                        {unreadNotificationCount > 0 && (
+                          <span style={{ marginLeft: 8, padding: '3px 7px', borderRadius: 20, background: '#FFEDD5', color: '#C2410C', fontSize: 11 }}>
+                            {unreadNotificationCount} new
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 5 }}>Staff activity</div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        aria-label="Refresh notifications"
+                        title="Refresh notifications"
+                        disabled={notificationsLoading || !staffUserId}
+                        onClick={() => staffUserId && void loadNotifications(staffUserId)}
+                        style={{ border: '1px solid #E8E4DE', borderRadius: 9, padding: 7, background: '#FFFFFF', color: '#EA580C', cursor: notificationsLoading || !staffUserId ? 'not-allowed' : 'pointer', display: 'flex', opacity: notificationsLoading ? 0.6 : 1 }}
+                      >
+                        {notificationsLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Close notifications"
+                        onClick={() => setNotificationsOpen(false)}
+                        style={{ border: 0, background: 'transparent', color: '#9CA3AF', cursor: 'pointer', display: 'flex', padding: 5 }}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {unreadNotificationCount > 0 && (
+                    <div style={{ padding: '9px 18px', borderBottom: '1px solid #F3F4F6' }}>
+                      <button
+                        type="button"
+                        onClick={() => void markAllNotificationsAsRead()}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, padding: 0, background: 'transparent', color: '#EA580C', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        <CheckCheck size={15} /> Mark all as read
+                      </button>
+                    </div>
+                  )}
+
+                  {notificationsError && (
+                    <div className="staff-notification-error" role="alert">
+                      <strong>Could not load notifications.</strong>
+                      <div>{notificationsError}</div>
+                    </div>
+                  )}
+
+                  {notificationsLoading && notifications.length === 0 ? (
+                    <div style={{ padding: 30, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, color: '#9CA3AF', fontSize: 13 }}>
+                      <Loader2 size={18} className="animate-spin" color="#EA580C" /> Loading notifications...
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div style={{ padding: '30px 22px', textAlign: 'center' }}>
+                      <div style={{ width: 52, height: 52, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#FFF7ED', color: '#EA580C' }}>
+                        <Bell size={23} />
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>No notifications yet</div>
+                      <p style={{ fontSize: 12, lineHeight: 1.6, color: '#9CA3AF', margin: '7px 0 0' }}>
+                        New verification requests, complaints, and account appeals will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="staff-notification-list">
+                      {notifications.map((notification) => {
+                        const NotificationIcon = notification.type === 'new_caterer_verification'
+                          ? Store
+                          : notification.type === 'new_complaint'
+                            ? AlertTriangle
+                            : UserRound;
+                        const iconColor = notification.type === 'new_caterer_verification'
+                          ? '#7C3AED'
+                          : '#EA580C';
+                        const iconBackground = notification.type === 'new_caterer_verification'
+                          ? '#F5F3FF'
+                          : '#FFF7ED';
+                        const destinationLabel = notification.type === 'new_caterer_verification'
+                          ? 'View verification queue'
+                          : notification.type === 'new_complaint'
+                            ? 'View complaints'
+                            : 'View account monitoring';
+
+                        return (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            aria-label={`${notification.is_read ? 'Read' : 'Unread'} notification: ${notification.title}`}
+                            onClick={() => void openStaffNotification(notification)}
+                            className={`staff-notification-item${notification.is_read ? '' : ' unread'}`}
+                          >
+                            <span className="staff-notification-icon" style={{ color: iconColor, background: iconBackground }}>
+                              <NotificationIcon size={17} />
+                            </span>
+                            <span className="staff-notification-copy">
+                              <span className="staff-notification-title-row">
+                                <strong>{notification.title}</strong>
+                                {!notification.is_read && <i aria-label="Unread" />}
+                              </span>
+                              <span className="staff-notification-message">{notification.message}</span>
+                              <time dateTime={notification.created_at}>
+                                {new Date(notification.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </time>
+                              <span className="staff-notification-destination">{destinationLabel} →</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+          </div>
         </div>
       </div>
       {/* Primary KPI Row */}
@@ -204,6 +535,29 @@ export default function StaffDashboard() {
           </div>
         </div>
       </div>
+      <style>{`
+        .staff-notification-anchor { position: relative; z-index: 50; }
+        .staff-notification-dismiss { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; cursor: default; z-index: -1; }
+        .staff-notification-panel { position: absolute; top: 52px; right: 0; width: 360px; max-width: calc(100vw - 32px); max-height: min(560px, calc(100dvh - 84px)); display: flex; flex-direction: column; background: #FFF; border: 1px solid #E8E4DE; border-radius: 16px; box-shadow: 0 12px 35px rgba(0,0,0,.12); overflow: hidden; z-index: 60; color: #111827; font-family: Inter, system-ui, sans-serif; }
+        .staff-notification-panel-header { flex: 0 0 auto; padding: 16px 18px; border-bottom: 1px solid #F3F4F6; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .staff-notification-error { margin: 12px; padding: 12px; border-radius: 10px; background: #FEF2F2; color: #B91C1C; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+        .staff-notification-list { min-height: 0; max-height: min(360px, calc(100dvh - 200px)); overflow-y: auto; overscroll-behavior: contain; }
+        .staff-notification-item { width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; border: 0; border-bottom: 1px solid #F3F4F6; text-align: left; background: #FFF; cursor: pointer; transition: background .15s ease; }
+        .staff-notification-item.unread { background: #FFFCF8; }
+        .staff-notification-item:hover { background: #FFF7ED; }
+        .staff-notification-icon { width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+        .staff-notification-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .staff-notification-title-row { display: flex; align-items: center; gap: 6px; color: #1F2937; font-size: 13px; font-weight: 700; }
+        .staff-notification-title-row strong { min-width: 0; overflow-wrap: anywhere; }
+        .staff-notification-title-row i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #EA580C; }
+        .staff-notification-message { margin-top: 4px; color: #6B7280; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+        .staff-notification-copy time { display: block; margin-top: 6px; color: #9CA3AF; font-size: 11px; line-height: 1.3; }
+        .staff-notification-destination { display: block; margin-top: 5px; color: #EA580C; font-size: 11px; font-weight: 700; }
+        @media (max-width: 540px) {
+          .staff-notification-panel { position: fixed; top: 68px; right: 12px; width: 360px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 82px); }
+          .staff-notification-list { max-height: calc(100dvh - 205px); }
+        }
+      `}</style>
     </div>
   );
 }

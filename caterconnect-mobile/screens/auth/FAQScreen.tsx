@@ -88,6 +88,24 @@ const CUSTOMER_FAQS: FAQ[] = [
     'Platform Staff monitors refund transactions but does not directly process refunds.',
 },
   {
+    id: 'account-appeal',
+    category: 'Account & Security',
+    question: 'How can I appeal a suspended account?',
+    answer: 'If your account has been suspended, log in to CaterConnect and follow the appeal instructions displayed on the suspension notice. Explain why you believe the suspension should be reviewed and submit your appeal to Platform Staff. If your appeal is rejected, you can review the explanation, edit your appeal, and resubmit it. If Platform Staff approves your appeal, it will be forwarded to the System Administrator for the final account reinstatement process.',
+  },
+  {
+    id: 'forgot-password',
+    category: 'Account & Security',
+    question: 'What should I do if I forget my password?',
+    answer: 'On the login screen, select Forgot Password and enter the email address registered to your CaterConnect account. Follow the password reset instructions sent to your email.',
+  },
+  {
+    id: 'reset-password',
+    category: 'Account & Security',
+    question: 'How can I reset my password?',
+    answer: 'If you cannot log in, select Forgot Password on the login screen and enter your registered email address. Follow the instructions sent to your email to create a new password. If you can still access your account, use the password-changing option in your account settings if available.',
+  },
+  {
     id: 'complaint',
     category: 'Support',
     question: 'What if I have a problem with a caterer?',
@@ -325,7 +343,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: '900', color: Colors.black },
   subtitle: { marginTop: 4, fontSize: 13, color: Colors.textSecondary },
-  content: { padding: 20, paddingBottom: 48 },
+  content: { width: '100%', maxWidth: 1000, alignSelf: 'center', padding: 20, paddingBottom: 48 },
   intro: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 18, borderRadius: 18, backgroundColor: '#FFF7ED', marginBottom: 18,

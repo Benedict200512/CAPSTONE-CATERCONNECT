@@ -60,3 +60,28 @@ export async function signIn(email: string, password: string) {
 export async function signOut() {
   await supabase.auth.signOut();
 }
+
+export async function sendPasswordResetEmail(email: string) {
+  const cleanEmail = email.trim().toLowerCase();
+
+  if (!cleanEmail) {
+    throw new Error('Please enter your email address.');
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+
+  if (error) throw error;
+}
+
+export async function updateUserPassword(password: string) {
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+
+  const { data, error } = await supabase.auth.updateUser({ password });
+
+  if (error) throw error;
+  return data;
+}

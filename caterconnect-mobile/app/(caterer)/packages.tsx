@@ -318,7 +318,7 @@ export default function PackagesScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 20, gap: 20 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ width: '100%', maxWidth: 1100, alignSelf: 'center', padding: 20, gap: 20 }} showsVerticalScrollIndicator={false}>
           {visiblePackages.map((pkg) => {
             const tierColor = TIER_COLORS[pkg.tier] ?? Colors.orange;
             const isPublished = pkg.publication_status === 'published';
@@ -457,7 +457,7 @@ export default function PackagesScreen() {
 
         <ScrollView
           style={{ flex: 1, backgroundColor: '#F8FAFC' }}
-          contentContainerStyle={{ padding: 20, paddingBottom: 60, gap: 24 }}
+          contentContainerStyle={{ width: '100%', maxWidth: 1100, alignSelf: 'center', padding: 20, paddingBottom: 60, gap: 24 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

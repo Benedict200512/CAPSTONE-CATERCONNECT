@@ -6,10 +6,10 @@ export function useRequireVerified() {
   const navigation = useNavigation<any>()
 
   useEffect(() => {
-    isEmailVerified().then((verified) => {
-      if (!verified) {
-        navigation.navigate('VerifyEmail')
-      }
-    })
-  }, [])
+    const verified = isEmailVerified()
+
+    if (!verified) {
+      navigation.navigate('VerifyEmail')
+    }
+  }, [navigation])
 }

@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, Platform,
+  ActivityIndicator, Alert, Image, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
   Plus, Edit3, Trash2, Check,
   ChevronDown, UtensilsCrossed, Soup, CakeSlice,
-  CupSoda, Scale,
+  CupSoda, Scale, ImagePlus,
 } from 'lucide-react-native';
 
 type MenuItem = {
@@ -21,6 +22,7 @@ type MenuItem = {
   price_per_guest: number;
   serving_size: number | null;
   serving_unit: string | null;
+  image_url: string | null;
 };
 
 const CATEGORIES = [
@@ -54,6 +56,7 @@ const EMPTY_FORM = {
   price_per_guest: '',
   serving_size: '',
   serving_unit: 'per person',
+  image_url: '',
 };
 
 export default function MenuScreen() {
@@ -63,6 +66,7 @@ export default function MenuScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [activeCategory, setActiveCategory] = useState('main_course');
   const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -76,7 +80,7 @@ export default function MenuScreen() {
 
     const { data, error } = await supabase
       .from('menu_items')
-      .select('id, name, category, description, price_per_guest, serving_size, serving_unit')
+      .select('id, name, category, description, price_per_guest, serving_size, serving_unit, image_url')
       .eq('caterer_id', catererData.id)
       .order('category')
       .order('name');
@@ -104,7 +108,7 @@ export default function MenuScreen() {
 
       const { data, error } = await supabase
         .from('menu_items')
-        .select('id, name, category, description, price_per_guest, serving_size, serving_unit')
+        .select('id, name, category, description, price_per_guest, serving_size, serving_unit, image_url')
         .eq('caterer_id', catererData.id)
         .order('category')
         .order('name');
@@ -139,11 +143,50 @@ export default function MenuScreen() {
       price_per_guest: String(item.price_per_guest),
       serving_size: item.serving_size ? String(item.serving_size) : '',
       serving_unit: item.serving_unit ?? 'per person',
+      image_url: item.image_url ?? '',
     });
     setShowForm(true);
   };
 
+  // Matches the existing Mobile Packages image-picker + Supabase Storage flow.
+  const handlePickImage = async () => {
+    if (!catererData?.id) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo access to upload a menu image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      Alert.alert('Upload failed', 'Could not read the selected image.');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const contentType = asset.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
+      const extension = contentType === 'image/png' ? 'png' : 'jpg';
+      const path = `${catererData.id}/menu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${extension}`;
+      const characters = atob(asset.base64);
+      const bytes = new Uint8Array(characters.length);
+      for (let i = 0; i < characters.length; i++) bytes[i] = characters.charCodeAt(i);
+      const { error } = await supabase.storage.from('caterer-media')
+        .upload(path, bytes, { contentType, upsert: false });
+      if (error) throw error;
+      const { data } = supabase.storage.from('caterer-media').getPublicUrl(path);
+      setForm(current => ({ ...current, image_url: data.publicUrl }));
+    } catch (error: any) {
+      Alert.alert('Upload failed', error?.message ?? 'Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (uploadingImage || saving) return;
     if (!form.name.trim()) {
       Alert.alert('Required', 'Item name is required.');
       return;
@@ -177,6 +220,7 @@ export default function MenuScreen() {
       price_per_guest: price,
       serving_size: servingSize,
       serving_unit: form.serving_unit || null,
+      image_url: form.image_url || null,
     };
 
     if (editing) {
@@ -372,6 +416,11 @@ export default function MenuScreen() {
               <View key={item.id} style={styles.itemCard}>
                 <View style={[styles.itemColorBar, { backgroundColor: itemColor }]} />
 
+                {item.image_url ? (
+                  <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="cover" />
+                ) : (
+                  <View style={styles.itemImagePlaceholder}><ImagePlus size={23} color={Colors.textMuted} /></View>
+                )}
                 <View style={styles.itemBody}>
                   <View style={styles.itemTop}>
                     <View style={{ flex: 1, paddingRight: 12 }}>
@@ -450,7 +499,7 @@ export default function MenuScreen() {
 
             <TouchableOpacity
               onPress={handleSave}
-              disabled={saving}
+              disabled={saving || uploadingImage}
               style={styles.modalHeaderBtn}
             >
               {saving ? (
@@ -531,6 +580,24 @@ export default function MenuScreen() {
                   textAlignVertical="top"
                 />
               </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>FOOD PHOTO (OPTIONAL)</Text>
+              {form.image_url ? (
+                <Image source={{ uri: form.image_url }} style={styles.imagePreview} resizeMode="cover" />
+              ) : <View style={styles.imagePlaceholder}><ImagePlus size={30} color={Colors.textMuted} /></View>}
+              <View style={styles.imageActions}>
+                <TouchableOpacity style={styles.imageButton} onPress={handlePickImage} disabled={uploadingImage || saving}>
+                  {uploadingImage ? <ActivityIndicator color={Colors.white} size="small" /> : <ImagePlus color={Colors.white} size={18} />}
+                  <Text style={styles.imageButtonText}>{uploadingImage ? 'Uploading...' : form.image_url ? 'Replace Image' : 'Upload Image'}</Text>
+                </TouchableOpacity>
+                {!!form.image_url && <TouchableOpacity style={styles.removeImageButton}
+                  disabled={uploadingImage || saving} onPress={() => setForm(current => ({ ...current, image_url: '' }))}>
+                  <Text style={styles.removeImageText}>Remove</Text>
+                </TouchableOpacity>}
+              </View>
+              <Text style={styles.formHint}>Square food photo recommended. Optional.</Text>
             </View>
 
             <View style={styles.formSection}>
@@ -777,7 +844,7 @@ const styles = StyleSheet.create({
   catTabCountActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
   catTabCountText: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary },
   catTabCountTextActive: { color: Colors.white },
-  list: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
+  list: { flex: 1, width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20 },
   itemCard: {
     flexDirection: 'row',
     backgroundColor: Colors.white,
@@ -792,6 +859,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   itemColorBar: { width: 6 },
+  itemImage: { width: 82, height: 100, alignSelf: 'center', marginLeft: 8, borderRadius: 10 },
+  itemImagePlaceholder: { width: 82, height: 100, marginLeft: 8, alignSelf: 'center', borderRadius: 10, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  imagePreview: { width: 180, height: 180, borderRadius: 12, backgroundColor: '#F8FAFC' },
+  imagePlaceholder: { width: 180, height: 150, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  imageActions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10 },
+  imageButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 10, backgroundColor: Colors.orange },
+  imageButtonText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
+  removeImageButton: { padding: 10 },
+  removeImageText: { color: Colors.error, fontWeight: '700' },
   itemBody: { flex: 1, padding: 16 },
   itemTop: {
     flexDirection: 'row',

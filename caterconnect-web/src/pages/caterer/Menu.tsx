@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus, Search, Pencil, Trash2, X, LoaderCircle, UtensilsCrossed,
-  Soup, CakeSlice, CupSoda, Scale, AlertCircle, CheckCircle2, RefreshCw,
+  Soup, CakeSlice, CupSoda, Scale, AlertCircle, CheckCircle2, RefreshCw, ImagePlus,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import CatererPageHeader from '../../components/CatererPageHeader';
@@ -18,6 +18,7 @@ type MenuItem = {
   price_per_guest: number;
   serving_size: number | null;
   serving_unit: string | null;
+  image_url: string | null;
 };
 
 type MenuForm = {
@@ -27,6 +28,7 @@ type MenuForm = {
   price_per_guest: string;
   serving_size: string;
   serving_unit: string;
+  image_url: string;
 };
 
 type Category = {
@@ -55,6 +57,7 @@ const EMPTY_FORM: MenuForm = {
   price_per_guest: '',
   serving_size: '',
   serving_unit: 'per person',
+  image_url: '',
 };
 
 function getErrorMessage(error: unknown): string {
@@ -98,6 +101,7 @@ export default function CatererMenu() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('main_course');
@@ -120,7 +124,7 @@ export default function CatererMenu() {
     try {
       const { data, error: queryError } = await supabase
         .from('menu_items')
-        .select('id, caterer_id, name, category, description, price_per_guest, serving_size, serving_unit')
+        .select('id, caterer_id, name, category, description, price_per_guest, serving_size, serving_unit, image_url')
         .eq('caterer_id', catererId)
         .order('category')
         .order('name');
@@ -182,6 +186,7 @@ export default function CatererMenu() {
       price_per_guest: String(item.price_per_guest),
       serving_size: item.serving_size != null ? String(item.serving_size) : '',
       serving_unit: item.serving_unit ?? 'per person',
+      image_url: item.image_url ?? '',
     });
     setError('');
     setSuccess('');
@@ -189,11 +194,39 @@ export default function CatererMenu() {
   };
 
   const closeModal = () => {
-    if (saving) return;
+    if (saving || uploadingImage) return;
     setModalOpen(false);
     setEditing(null);
     setForm(EMPTY_FORM);
     setError('');
+  };
+
+  // Same public Storage bucket and caterer-owned path as Package images.
+  const uploadMenuImage = async (file: File) => {
+    if (!catererId || !userId) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPG, PNG, or WEBP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must not exceed 5 MB.');
+      return;
+    }
+    setUploadingImage(true);
+    setError('');
+    try {
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const path = `${catererId}/menu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from('caterer-media')
+        .upload(path, file, { contentType: file.type, cacheControl: '3600', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('caterer-media').getPublicUrl(path);
+      updateForm('image_url', data.publicUrl);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const saveItem = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -225,6 +258,7 @@ export default function CatererMenu() {
       return;
     }
 
+    if (uploadingImage) return;
     setSaving(true);
     setError('');
     setSuccess('');
@@ -237,6 +271,7 @@ export default function CatererMenu() {
       price_per_guest: price,
       serving_size: servingSize,
       serving_unit: form.serving_unit || null,
+      image_url: form.image_url || null,
     };
 
     try {
@@ -374,10 +409,32 @@ export default function CatererMenu() {
         .menu-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 17px;color:#64748B;font-size:12px}
         .menu-summary strong{color:#334155}
         .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px}
+        /* Menu skeleton: same grid, card proportions and internal layout as real items. */
+        .menu-skeleton-grid{width:100%}
+        .menu-skeleton-card{pointer-events:none;transform:none!important;box-shadow:none!important}
+        .menu-skeleton-accent{background:#E2E8F0}
+        .menu-skeleton-card .caterer-skeleton-block{display:block;border-radius:7px;background:#E9EEF5;position:relative;overflow:hidden;max-width:100%;flex-shrink:0}
+        .menu-skeleton-card .caterer-skeleton-block::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.66) 50%,transparent 100%);transform:translateX(-100%);animation:menu-skeleton-shimmer 1.5s ease-in-out infinite}
+        .menu-skeleton-image{width:100%;height:138px;margin-bottom:12px;border-radius:9px!important}
+        .menu-skeleton-copy{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+        .menu-skeleton-category{width:84px;height:11px}
+        .menu-skeleton-title{width:75%;height:19px}
+        .menu-skeleton-description{width:95%;height:29px}
+        .menu-skeleton-action{width:34px;height:34px;border-radius:8px!important}
+        .menu-skeleton-price{width:105px;height:33px;border-radius:8px!important}
+        .menu-skeleton-serving{width:86px;height:33px;border-radius:8px!important}
+        @keyframes menu-skeleton-shimmer{to{transform:translateX(100%)}}
+        @media(prefers-reduced-motion:reduce){.menu-skeleton-card .caterer-skeleton-block::after{animation:none}}
         .menu-card{display:flex;background:white;border:1px solid #E8EDF3;border-radius:12px;overflow:hidden;min-width:0;transition:box-shadow .2s,transform .2s}
         .menu-card:hover{box-shadow:0 7px 22px rgba(15,23,42,.07);transform:translateY(-2px)}
         .menu-card-bar{width:5px;flex-shrink:0}
         .menu-card-content{padding:16px;min-width:0;flex:1}
+        .menu-card-image{width:100%;height:138px;object-fit:cover;border-radius:9px;margin-bottom:12px;background:#F8FAFC}
+        .menu-card-image-empty{width:100%;height:92px;border-radius:9px;margin-bottom:12px;background:#F8FAFC;display:flex;align-items:center;justify-content:center;color:#94A3B8}
+        .menu-image-preview{width:100%;max-width:320px;aspect-ratio:1/1;object-fit:cover;border-radius:10px;border:1px solid #E2E8F0;margin:10px 0}
+        .menu-image-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+        .menu-image-upload{display:inline-flex;align-items:center;gap:8px;border:1px solid #FDBA74;color:#C2410C;background:#FFF7ED;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:13px;font-weight:700}
+        .menu-image-upload input{display:none}
         .menu-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
         .menu-card-title{min-width:0;flex:1}
         .menu-card-title h3{font-size:15px;font-weight:750;color:#1E293B;margin:0 0 6px;overflow-wrap:anywhere}
@@ -537,6 +594,11 @@ export default function CatererMenu() {
                   style={{ background: category.color }}
                 />
                 <div className="menu-card-content">
+                  {item.image_url ? (
+                    <img className="menu-card-image" src={item.image_url} alt={item.name} loading="lazy" />
+                  ) : (
+                    <div className="menu-card-image-empty"><ImagePlus size={26} /></div>
+                  )}
                   <div className="menu-card-top">
                     <div className="menu-card-title">
                       <div
@@ -631,7 +693,7 @@ export default function CatererMenu() {
                 type="button"
                 className="menu-close"
                 onClick={closeModal}
-                disabled={saving}
+                disabled={saving || uploadingImage}
                 aria-label="Close"
               >
                 <X size={18} />
@@ -702,6 +764,21 @@ export default function CatererMenu() {
               </section>
 
               <section className="menu-form-section">
+                <h3>Food Photo (optional)</h3>
+                <div className="menu-image-actions">
+                  <label className="menu-image-upload" aria-label="Choose menu item photo">
+                    <ImagePlus size={17} /> {uploadingImage ? 'Uploading...' : form.image_url ? 'Replace Image' : 'Upload Image'}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage || saving}
+                      onChange={e => { const file = e.target.files?.[0]; if (file) void uploadMenuImage(file); e.target.value = ''; }} />
+                  </label>
+                  {form.image_url && <button type="button" className="menu-secondary" disabled={uploadingImage || saving}
+                    onClick={() => updateForm('image_url', '')}>Remove Image</button>}
+                </div>
+                {form.image_url && <img src={form.image_url} alt="Menu item preview" className="menu-image-preview" />}
+                <p style={{ color: '#64748B', fontSize: 12 }}>JPG, PNG, or WEBP, maximum 5 MB. Image is optional.</p>
+              </section>
+
+              <section className="menu-form-section">
                 <h3>Pricing and Serving</h3>
                 <div className="menu-form-grid">
                   <div className="menu-field full">
@@ -760,14 +837,14 @@ export default function CatererMenu() {
                   type="button"
                   className="menu-secondary"
                   onClick={closeModal}
-                  disabled={saving}
+                  disabled={saving || uploadingImage}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="menu-primary"
-                  disabled={saving}
+                  disabled={saving || uploadingImage}
                 >
                   {saving ? (
                     <>

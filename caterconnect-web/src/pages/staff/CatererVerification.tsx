@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { notifyAdminsOfStaffAction } from '../../lib/adminNotifications';
 import {
   ShieldCheck, FileText, CheckCircle2, XCircle, Clock,
   ExternalLink, Eye, X, Loader2, AlertCircle, Building2,
@@ -250,6 +251,7 @@ export default function CatererVerification() {
     id: string,
     status: 'approved' | 'rejected'
   ) => {
+    if (updating) return;
     if (status === 'rejected' && !rejectionReason.trim()) {
       alert('Please provide a rejection reason before rejecting.');
       return;
@@ -258,7 +260,7 @@ export default function CatererVerification() {
     setUpdating(true);
 
     try {
-      const { error } = await supabase
+      const { data: changed, error } = await supabase
         .from('caterers')
         .update({
           verification_status: status,
@@ -268,11 +270,30 @@ export default function CatererVerification() {
           reviewed_at: new Date().toISOString(),
           reviewed_by: profile?.id ?? null,
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('verification_status', 'pending')
+        .select('id')
+        .maybeSingle();
 
       if (error) {
         throw error;
       }
+
+      if (!changed) {
+        await load();
+        throw new Error('This application was already reviewed. Refresh before retrying.');
+      }
+
+      const changedCaterer = caterers.find((caterer) => caterer.id === id);
+      const statusChanged = changedCaterer?.verification_status !== status;
+
+      const adminNotified = statusChanged
+        ? await notifyAdminsOfStaffAction({
+            title: 'Caterer Verification Updated',
+            message: `Staff ${status} the verification documents for ${changedCaterer?.business_name || 'a caterer'}.`,
+            type: 'caterer_verification_decision',
+          })
+        : true;
 
       setSelected(null);
       setRejectionReason('');
@@ -281,10 +302,11 @@ export default function CatererVerification() {
 
       await load();
 
+      const actionLabel = status === 'approved' ? 'approved' : 'rejected';
       alert(
-        status === 'approved'
-          ? 'Caterer application approved successfully.'
-          : 'Caterer application rejected successfully.'
+        `Caterer application ${actionLabel} successfully.${
+          adminNotified ? '' : ' Admin notifications could not be sent; please check the notification permissions.'
+        }`
       );
     } catch (error: any) {
       console.error('Status update error:', error);

@@ -236,8 +236,13 @@ export default function CatererNotifications() {
       navigate(`/caterer/messages${search ? `?${search}` : ''}`);
     } else if (notification.type === 'subscription') {
       navigate('/caterer/profile');
-    } else if (notification.booking_id || notification.type === 'new_review') {
-      navigate('/caterer/bookings');
+    } else if (notification.type === 'new_review') {
+      if (!notification.booking_id) { setError('This review notification has no booking reference.'); return; }
+      const params = new URLSearchParams({ bookingId: notification.booking_id, section: 'review', notificationId: notification.id });
+      navigate(`/caterer/bookings?${params.toString()}`);
+    } else if (notification.booking_id) {
+      const params = new URLSearchParams({ bookingId: notification.booking_id, notificationId: notification.id });
+      navigate(`/caterer/bookings?${params.toString()}`);
     }
   }
 

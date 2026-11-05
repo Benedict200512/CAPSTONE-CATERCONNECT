@@ -48,10 +48,17 @@ function SkeletonContent({ variant, calendarCellCount = 42 }: { variant: Caterer
           {Array.from({ length: 4 }, (_, i) => <Card key={i} className="is-stat"><Block className="is-icon" /><Block className="is-line is-medium" /><Block className="is-line is-value" /><Block className="is-line is-short" /></Card>)}
         </div>
         <div className="dashboard-main-grid">
+          <div className="dashboard-left-stack">
           <Card className="is-dashboard-subscription dashboard-combined-subscription">
             <div className="caterer-skeleton-plan"><Block className="is-line is-short" /><div><Block className="is-icon" /><Block className="is-line is-medium" /></div><Block className="is-line is-short" /></div>
-            <div className="caterer-skeleton-quota"><div><Block className="is-line is-medium" /><Block className="is-icon is-small-icon" /></div><Block className="is-line is-short" /><Block className="is-progress" /><Block className="is-line is-tiny" /></div>
+            <div className="caterer-skeleton-quota"><div><div className="caterer-skeleton-quota-heading"><Block className="is-line is-short" /><Block className="is-line is-medium" /></div><Block className="is-icon is-small-icon" /></div><div className="caterer-skeleton-usage-counts"><Block className="is-line is-short" /><Block className="is-line is-short" /></div><Block className="is-progress" /><Block className="is-line is-tiny" /></div>
           </Card>
+          <Card className="dashboard-trends-panel">
+            <div className="caterer-skeleton-calendar-heading"><div><Block className="is-line is-short" /><Block className="is-line is-medium" /><Block className="is-line is-long" /></div><Block className="is-icon" /></div>
+            <div className="caterer-skeleton-trend">{Array.from({ length: 5 }, (_, i) => <div className="caterer-skeleton-trend-column" key={i}><Block className="is-line is-small" /><Block className="is-trend-bar" /><Block className="is-line is-short" /></div>)}</div>
+            <Block className="is-line is-short" /><Block className="is-control is-wide" />
+          </Card>
+          </div>
           <Card className="is-dashboard-calendar dashboard-availability-card">
             <div className="caterer-skeleton-calendar-heading"><div><Block className="is-line is-short" /><Block className="is-line is-medium" /><Block className="is-line is-long" /></div><Block className="is-control is-wide" /></div>
             <div className="caterer-skeleton-month"><Block className="is-icon is-small-icon" /><Block className="is-line is-medium" /><Block className="is-icon is-small-icon" /></div>
@@ -59,17 +66,12 @@ function SkeletonContent({ variant, calendarCellCount = 42 }: { variant: Caterer
             <div className="caterer-skeleton-calendar">{Array.from({ length: calendarCellCount }, (_, i) => <Block key={i} />)}</div>
             <div className="caterer-skeleton-calendar-footer"><Block className="is-line is-medium" /><Block className="is-line is-long" /></div>
           </Card>
-          <Card className="dashboard-trends-panel">
-            <div className="caterer-skeleton-panel-heading"><Block className="is-line is-medium" /><Block className="is-line is-short" /></div>
-            <div className="caterer-skeleton-trend">{Array.from({ length: 5 }, (_, i) => <div className="caterer-skeleton-trend-column" key={i}><Block className="is-line is-small" /><Block className="is-trend-bar" /><Block className="is-line is-short" /></div>)}</div>
-            <Block className="is-line is-short" /><Block className="is-control is-wide" />
-          </Card>
+        </div>
           <Card className="dashboard-recent-bookings">
             <div className="caterer-skeleton-panel-heading"><Block className="is-line is-medium" /><Block className="is-control is-small-control" /></div>
             <div className="caterer-skeleton-recent-header">{Array.from({ length: 5 }, (_, i) => <Block className="is-line is-short" key={i} />)}</div>
             {Array.from({ length: 3 }, (_, row) => <div className="caterer-skeleton-recent-row" key={row}>{Array.from({ length: 5 }, (_, column) => <div key={column}><Block className="is-line is-medium" /><Block className="is-line is-short" /></div>)}</div>)}
           </Card>
-        </div>
       </>;
     case 'dashboard-calendar':
       return <><div className="caterer-skeleton-weekdays">{Array.from({ length: 7 }, (_, i) => <Block key={i} />)}</div><div className="caterer-skeleton-calendar">{Array.from({ length: calendarCellCount }, (_, i) => <Block key={i} />)}</div><div className="caterer-skeleton-calendar-footer"><Block className="is-line is-medium" /><Block className="is-line is-long" /></div></>;
@@ -86,7 +88,36 @@ function SkeletonContent({ variant, calendarCellCount = 42 }: { variant: Caterer
     case 'packages':
       return <div className="caterer-skeleton-package-grid">{Array.from({ length: 3 }, (_, i) => <Card key={i} className="is-package"><Block className="is-image" /><div><Block className="is-line is-tiny" /><Block className="is-line is-medium" /><Block className="is-line is-long" /><Block className="is-line is-long" /><Block className="is-line is-price" /><Block className="is-control" /></div></Card>)}</div>;
     case 'menu':
-      return <div className="caterer-skeleton-menu-grid">{Array.from({ length: 6 }, (_, i) => <Card className="is-menu-item" key={i}><Block className="is-menu-accent" /><div><div className="caterer-skeleton-menu-top"><div><Block className="is-line is-tiny" /><Block className="is-line is-medium" /><Block className="is-line is-long" /></div><Block className="is-actions" /></div><div className="caterer-skeleton-menu-bottom"><Block className="is-chip" /><Block className="is-chip is-small-chip" /></div></div></Card>)}</div>;
+      // Match the actual Caterer Menu cards: image, category/title/actions,
+      // optional description, divider, price and serving unit.
+      // Menu.tsx supplies the corresponding scoped skeleton styles.
+      return (
+        <div className="menu-grid menu-skeleton-grid">
+          {Array.from({ length: 6 }, (_, i) => (
+            <article className="menu-card menu-skeleton-card" key={i} aria-hidden="true">
+              <div className="menu-card-bar menu-skeleton-accent" />
+              <div className="menu-card-content">
+                <Block className="menu-skeleton-image" />
+                <div className="menu-card-top">
+                  <div className="menu-card-title menu-skeleton-copy">
+                    <Block className="menu-skeleton-category" />
+                    <Block className="menu-skeleton-title" />
+                    <Block className="menu-skeleton-description" />
+                  </div>
+                  <div className="menu-actions">
+                    <Block className="menu-skeleton-action" />
+                    <Block className="menu-skeleton-action" />
+                  </div>
+                </div>
+                <div className="menu-card-bottom">
+                  <Block className="menu-skeleton-price" />
+                  <Block className="menu-skeleton-serving" />
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      );
     case 'profile':
       return <><div className="caterer-skeleton-page-heading"><Block className="is-icon" /><div><Block className="is-line is-title" /><Block className="is-line is-long" /></div><Block className="is-chip" /></div>
         <Card className="is-profile-appearance"><div><Block className="is-line is-medium" /><Block className="is-line is-long" /></div><Block className="is-cover" /><div className="caterer-skeleton-logo"><Block className="is-image is-logo" /><div><Block className="is-line is-medium" /><Block className="is-line is-long" /><Block className="is-control" /></div></div></Card>

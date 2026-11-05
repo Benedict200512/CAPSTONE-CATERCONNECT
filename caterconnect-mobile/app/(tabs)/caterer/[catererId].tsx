@@ -60,6 +60,7 @@ type MenuItem = {
   price_per_guest: number;
   serving_size: number | null;
   serving_unit: string | null;
+  image_url: string | null;
 };
 
 type Review = {
@@ -218,7 +219,7 @@ export default function CatererDetailScreen() {
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 1200, alignSelf: 'center', paddingBottom: 140 }}>
 
         {/* ── COVER PHOTO ── */}
         <View style={s.coverWrap}>
@@ -528,9 +529,13 @@ export default function CatererDetailScreen() {
                       const ItemIcon = itemCfg.icon;
                       return (
                         <View key={item.id} style={s.menuItemCard}>
-                          <View style={[s.menuItemIconWrap, { backgroundColor: itemCfg.color + '15' }]}>
-                            <ItemIcon size={24} color={itemCfg.color} />
-                          </View>
+                          {item.image_url ? (
+                            <Image source={{ uri: item.image_url }} style={s.menuItemImage} resizeMode="cover" />
+                          ) : (
+                            <View style={[s.menuItemIconWrap, { backgroundColor: itemCfg.color + '15' }]}>
+                              <ItemIcon size={24} color={itemCfg.color} />
+                            </View>
+                          )}
                           <View style={s.menuItemInfo}>
                             <View style={s.menuItemHeader}>
                               <Text style={s.menuItemName} numberOfLines={1}>{item.name}</Text>
@@ -825,6 +830,7 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02, shadowRadius: 8, elevation: 1,
   },
+  menuItemImage: { width: 62, height: 62, borderRadius: 12, backgroundColor: '#F8FAFC' },
   menuItemIconWrap: {
     width: 48, height: 48, borderRadius: 16,
     justifyContent: 'center', alignItems: 'center', flexShrink: 0,

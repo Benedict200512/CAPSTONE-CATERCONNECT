@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoaderCircle } from 'lucide-react';
 
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // Staff
 import StaffLayout from './pages/staff/StaffLayout';
@@ -133,6 +135,8 @@ export default function App() {
         <Routes>
           {/* LOGIN */}
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* ROOT REDIRECT */}
           <Route path="/" element={<RootRedirect />} />

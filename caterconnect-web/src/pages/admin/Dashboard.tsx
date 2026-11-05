@@ -13,6 +13,7 @@ import {
   ArrowRight,
   ShieldAlert,
   Store,
+  AlertTriangle,
   Loader2,
   Sparkles,
   Zap,
@@ -26,20 +27,28 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
-type RegistrationNotification = {
+type AdminNotification = {
   id: string;
   user_id: string;
   title: string;
   message: string;
-  type: 'new_customer_registration' | 'new_caterer_registration';
+  type:
+    | 'new_customer_registration'
+    | 'new_caterer_registration'
+    | 'new_caterer_verification'
+    | 'caterer_verification_decision'
+    | 'complaint_handled';
   booking_id: string | null;
   is_read: boolean;
   created_at: string;
 };
 
-const REGISTRATION_TYPES = [
+const ADMIN_NOTIFICATION_TYPES = [
   'new_customer_registration',
   'new_caterer_registration',
+  'new_caterer_verification',
+  'caterer_verification_decision',
+  'complaint_handled',
 ];
 
 export default function AdminDashboard() {
@@ -64,7 +73,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [notifications, setNotifications] = useState<
-    RegistrationNotification[]
+    AdminNotification[]
   >([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -208,7 +217,7 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Load saved registration notifications for the current admin.
+  // Load saved notifications for the current admin.
   const loadNotifications = async (userId: string) => {
     setNotificationsLoading(true);
     setNotificationsError('');
@@ -220,7 +229,7 @@ export default function AdminDashboard() {
           'id, user_id, title, message, type, booking_id, is_read, created_at'
         )
         .eq('user_id', userId)
-        .in('type', REGISTRATION_TYPES)
+        .in('type', ADMIN_NOTIFICATION_TYPES)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -230,7 +239,7 @@ export default function AdminDashboard() {
         return;
       }
 
-      setNotifications((data ?? []) as RegistrationNotification[]);
+      setNotifications((data ?? []) as AdminNotification[]);
     } catch (error) {
       console.error('Unexpected notification error:', error);
       setNotificationsError(
@@ -241,14 +250,14 @@ export default function AdminDashboard() {
     }
   };
 
-  // Load saved notifications and listen for new registration alerts.
+  // Load saved notifications and listen for new Admin alerts.
   useEffect(() => {
     if (!adminId) return;
 
     void loadNotifications(adminId);
 
     const channel = supabase
-      .channel(`admin-registration-notifications-${adminId}`)
+      .channel(`admin-notifications-${adminId}`)
       .on(
         'postgres_changes',
         {
@@ -258,10 +267,9 @@ export default function AdminDashboard() {
           filter: `user_id=eq.${adminId}`,
         },
         (payload) => {
-          const incoming = payload.new as RegistrationNotification;
+          const incoming = payload.new as AdminNotification;
 
-          // Only show customer and caterer registration alerts.
-          if (!REGISTRATION_TYPES.includes(incoming.type)) return;
+          if (!ADMIN_NOTIFICATION_TYPES.includes(incoming.type)) return;
 
           setNotifications((previous) => {
             const withoutDuplicate = previous.filter(
@@ -316,7 +324,7 @@ export default function AdminDashboard() {
     return true;
   };
 
-  // Mark every registration notification as read.
+  // Mark every Admin notification as read.
   const markAllNotificationsAsRead = async () => {
     if (!adminId || unreadCount === 0) return;
 
@@ -326,7 +334,7 @@ export default function AdminDashboard() {
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', adminId)
-      .in('type', REGISTRATION_TYPES)
+      .in('type', ADMIN_NOTIFICATION_TYPES)
       .eq('is_read', false);
 
     if (error) {
@@ -348,7 +356,7 @@ export default function AdminDashboard() {
 
   // Mark as read and navigate to the appropriate page.
   const handleNotificationNavigation = async (
-  notification: RegistrationNotification
+    notification: AdminNotification
 ) => {
   setNotificationsError('');
 
@@ -360,7 +368,13 @@ export default function AdminDashboard() {
   }
 
   setNotificationsOpen(false);
-  navigate('/admin/users');
+  const destination =
+    (notification.type === 'caterer_verification_decision' || notification.type === 'new_caterer_verification')
+      ? '/staff/verification'
+      : notification.type === 'complaint_handled'
+        ? '/staff/complaints'
+        : '/admin/users';
+  navigate(destination);
 };
 
   const roleColor: Record<string, string> = {
@@ -591,7 +605,7 @@ export default function AdminDashboard() {
                           marginTop: 5,
                         }}
                       >
-                        Registration activity
+                        Platform activity
                       </div>
                     </div>
 
@@ -767,8 +781,7 @@ export default function AdminDashboard() {
                           margin: '7px 0 0',
                         }}
                       >
-                        New customer and caterer registrations will
-                        appear here.
+                        New registrations and Staff activity will appear here.
                       </p>
                     </div>
                   ) : (
@@ -820,23 +833,29 @@ export default function AdminDashboard() {
                               flexShrink: 0,
                               borderRadius: 12,
                               background:
-                                notification.type ===
-                                'new_caterer_registration'
+                                notification.type === 'new_caterer_registration' ||
+                                notification.type === 'caterer_verification_decision'
                                   ? '#F5F3FF'
-                                  : '#FFF7ED',
+                                  : notification.type === 'complaint_handled'
+                                    ? '#FEF2F2'
+                                    : '#FFF7ED',
                               color:
-                                notification.type ===
-                                'new_caterer_registration'
+                                notification.type === 'new_caterer_registration' ||
+                                notification.type === 'caterer_verification_decision'
                                   ? '#7C3AED'
-                                  : '#EA580C',
+                                  : notification.type === 'complaint_handled'
+                                    ? '#DC2626'
+                                    : '#EA580C',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                             }}
                           >
-                            {notification.type ===
-                            'new_caterer_registration' ? (
+                            {notification.type === 'caterer_verification_decision' ||
+                            notification.type === 'new_caterer_registration' ? (
                               <Store size={18} />
+                            ) : notification.type === 'complaint_handled' ? (
+                              <AlertTriangle size={18} />
                             ) : (
                               <Users size={18} />
                             )}

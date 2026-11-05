@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 16, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
   back: { padding: 8, borderRadius: 12, backgroundColor: Colors.orangeLight },
   title: { fontSize: 22, fontWeight: '800', color: Colors.textPrimary },
-  content: { padding: 20, paddingTop: 8, paddingBottom: 40 },
+  content: { width: '100%', maxWidth: 900, alignSelf: 'center', padding: 20, paddingTop: 8, paddingBottom: 40 },
   card: { padding: 18, backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, marginBottom: 18 },
   catererRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   catererText: { flex: 1, gap: 5 },

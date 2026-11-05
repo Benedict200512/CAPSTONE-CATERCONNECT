@@ -582,10 +582,11 @@ export default function CatererDashboard() {
         <div className="caterer-stat-card"><span className="stat-icon yellow"><Clock3 size={21} /></span><p>Pending Bookings</p><h2>{pendingBookings}</h2><span className="stat-caption">Awaiting your response</span></div>
         <div className="caterer-stat-card"><span className="stat-icon green"><CheckCircle2 size={21} /></span><p>Confirmed Bookings</p><h2>{confirmedBookings}</h2><span className="stat-caption">Bookings on your calendar</span></div>
         <div className="caterer-stat-card"><span className="stat-icon orange"><Package size={21} /></span><p>Active Packages</p><h2>{activePackages}</h2><span className="stat-caption">Published packages</span></div>
-        <div className="caterer-stat-card"><span className="stat-icon purple"><Star size={21} /></span><p>Customer Rating</p><h2 className="plan-name">{catererData.avg_rating == null ? 'N/A' : Number(catererData.avg_rating).toFixed(1)}</h2><span className="stat-caption">{catererData.review_count ?? 0} reviews</span></div>
+        <div className="caterer-stat-card"><span className="stat-icon purple"><Star size={21} /></span><p>Customer Rating</p><h2>{catererData.avg_rating == null ? 'N/A' : Number(catererData.avg_rating).toFixed(1)}</h2><span className="stat-caption">{catererData.review_count ?? 0} reviews</span></div>
       </section>
 
       <div className="dashboard-main-grid">
+        <div className="dashboard-left-stack">
           {/* SUBSCRIPTION AND MONTHLY BOOKING USAGE */}
           <section
             className="caterer-dashboard-subscription dashboard-combined-subscription"
@@ -646,6 +647,52 @@ export default function CatererDashboard() {
             )}
           </div>
           </section>
+
+        <section className="caterer-panel dashboard-trends-panel" aria-label="Monthly booking trends">
+          <div className="caterer-panel-header">
+            <div>
+              <span className="dashboard-section-eyebrow">BOOKING PERFORMANCE</span>
+              <h2>Monthly Booking Trends</h2>
+              <p>Bookings by creation month across all statuses; this is activity, not a success count.</p>
+            </div>
+            <span className="dashboard-trends-icon" aria-hidden="true"><TrendingUp size={19} /></span>
+          </div>
+
+          {bookingTrendsLoading ? (
+            <CatererSkeleton variant="trend-chart" label="Loading monthly booking trends" />
+          ) : bookingTrendsError ? (
+            <div className="dashboard-trends-feedback error" role="alert">
+              <span>{bookingTrendsError}</span>
+              <button type="button" onClick={() => setBookingTrendsRefreshKey((key) => key + 1)}>Try again</button>
+            </div>
+          ) : (
+            <>
+              <div className="dashboard-trends-chart" role="img" aria-label={`Monthly booking trend for five months ending ${calendarMonthLabel(today.slice(0, 7))}`}>
+                {bookingTrendBars.map((item) => (
+                  <div className="dashboard-trend-column" key={item.month}>
+                    <strong>{item.count}</strong>
+                    <div className="dashboard-trend-track">
+                      <span style={{ height: `${item.count ? Math.max(7, (item.count / maxBookingTrend) * 100) : 0}%` }} />
+                    </div>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="dashboard-trends-legend"><i /> Bookings</div>
+              {bookingTrendBars.every((item) => item.count === 0) && (
+                <p className="dashboard-trends-empty">No bookings were placed this month.</p>
+              )}
+              <button
+                type="button"
+                className="dashboard-view-report-button"
+                onClick={() => navigate('/caterer/reports')}
+              >
+                View Report &amp; Analytics <ChevronRight size={16} />
+              </button>
+            </>
+          )}
+        </section>
+        </div>
 
       {/* MONTHLY AVAILABILITY OVERVIEW */}
       <section className="dashboard-availability-card" aria-label="Monthly availability calendar">
@@ -835,50 +882,6 @@ export default function CatererDashboard() {
           )}
       </section>
 
-        <section className="caterer-panel dashboard-trends-panel" aria-label="Monthly booking trends">
-          <div className="caterer-panel-header">
-            <div>
-              <span className="dashboard-section-eyebrow">BOOKING PERFORMANCE</span>
-              <h2>Monthly Booking Trends</h2>
-              <p>Bookings by creation month across all statuses; this is activity, not a success count.</p>
-            </div>
-            <span className="dashboard-trends-icon" aria-hidden="true"><TrendingUp size={19} /></span>
-          </div>
-
-          {bookingTrendsLoading ? (
-            <CatererSkeleton variant="trend-chart" label="Loading monthly booking trends" />
-          ) : bookingTrendsError ? (
-            <div className="dashboard-trends-feedback error" role="alert">
-              <span>{bookingTrendsError}</span>
-              <button type="button" onClick={() => setBookingTrendsRefreshKey((key) => key + 1)}>Try again</button>
-            </div>
-          ) : (
-            <>
-              <div className="dashboard-trends-chart" role="img" aria-label={`Monthly booking trend for five months ending ${calendarMonthLabel(today.slice(0, 7))}`}>
-                {bookingTrendBars.map((item) => (
-                  <div className="dashboard-trend-column" key={item.month}>
-                    <strong>{item.count}</strong>
-                    <div className="dashboard-trend-track">
-                      <span style={{ height: `${item.count ? Math.max(7, (item.count / maxBookingTrend) * 100) : 0}%` }} />
-                    </div>
-                    <span>{item.label}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="dashboard-trends-legend"><i /> Bookings</div>
-              {bookingTrendBars.every((item) => item.count === 0) && (
-                <p className="dashboard-trends-empty">No bookings were placed this month.</p>
-              )}
-              <button
-                type="button"
-                className="dashboard-view-report-button"
-                onClick={() => navigate('/caterer/reports')}
-              >
-                View Report &amp; Analytics <ChevronRight size={16} />
-              </button>
-            </>
-          )}
-        </section>
       </div>
       </>}
     </div>

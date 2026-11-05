@@ -1,159 +1,268 @@
-
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
-  Search, Calendar, ChevronDown, ChevronUp, Loader2, X,
-  Users, Store, MapPin, Tag, Wallet, ShieldCheck, Clock,
-  Layers, CheckCircle2, XCircle, Activity
+  CreditCard, Search, Clock,
+  AlertCircle, CheckCircle2, Building2,
+  X, Loader2, DollarSign, RefreshCw, Send, Settings2
 } from 'lucide-react';
 
-const STATUS_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
-  all:              { label: 'All', icon: Layers, color: '#2563EB' },
-  pending:          { label: 'Pending', icon: Clock, color: '#D97706' },
-  confirmed:        { label: 'Confirmed', icon: CheckCircle2, color: '#16A34A' },
-  awaiting_payment: { label: 'Awaiting Payment', icon: Wallet, color: '#0284C7' },
-  paid:             { label: 'Paid', icon: ShieldCheck, color: '#059669' },
-  ongoing:          { label: 'Ongoing', icon: Activity, color: '#7C3AED' },
-  completed:        { label: 'Completed', icon: CheckCircle2, color: '#15803D' },
-  cancelled:        { label: 'Cancelled', icon: XCircle, color: '#6B7280' },
-  rejected:         { label: 'Rejected', icon: XCircle, color: '#DC2626' },
+type Payment = {
+  id: string;
+  amount: number;
+  plan_id: string;
+  payment_method: string | null;
+  payment_reference: string | null;
+  status: string;
+  created_at: string;
+  confirmed_at: string | null;
+  caterers: { id: string; business_name: string; subscription_plan: string; logo_url: string | null } | null;
 };
 
-const STATUS_FILTERS = Object.keys(STATUS_CONFIG);
-
-const STATUS_BADGE: Record<string, string> = {
-  pending:          'badge-pending',
-  confirmed:        'badge-approved',
-  awaiting_payment: 'badge-review',
-  paid:             'badge-paid',
-  ongoing:          'badge-ongoing',
-  completed:        'badge-completed',
-  cancelled:        'badge-cancelled',
-  rejected:         'badge-rejected',
+type Caterer = {
+  id: string;
+  user_id: string;
+  business_name: string;
+  city: string | null;
+  logo_url: string | null;
+  subscription_plan: string;
+  subscription_expires_at: string | null;
+  monthly_booking_count: number | null;
+  profiles: { full_name: string; email: string } | null;
 };
 
-export default function BookingMonitor() {
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [selected, setSelected] = useState<any>(null);
+const PLANS = [
+  { id: 'free',     label: 'Free',     price: 0,   color: '#6B7280', bg: '#F3F4F6' },
+  { id: 'basic',    label: 'Basic',    price: 299, color: '#2563EB', bg: '#DBEAFE' },
+  { id: 'standard', label: 'Standard', price: 499, color: '#D97706', bg: '#FEF3C7' },
+  { id: 'premium',  label: 'Premium',  price: 999, color: '#7C3AED', bg: '#F5F3FF' },
+];
+
+export default function SubscriptionManager() {
+  const [payments, setPayments]    = useState<Payment[]>([]);
+  const [caterers, setCaterers]    = useState<Caterer[]>([]);
+  const [loading, setLoading]      = useState(true);
+  const [tab, setTab]              = useState<'caterers' | 'expiring' | 'payments'>('caterers');
+  const [search, setSearch]        = useState('');
+  const [planFilter, setPlanFilter] = useState('all');
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
+
+  const loadPayments = async () => {
+    const { data, error } = await supabase
+      .from('subscription_payments')
+      .select('*, caterers(id, business_name, subscription_plan, logo_url)')
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) console.error('loadPayments error:', error);
+    setPayments((data as any) ?? []);
+  };
+
+  const loadCaterers = async () => {
+    const { data: caterersData, error: caterersError } = await supabase
+      .from('caterers')
+      .select('*')
+      .eq('verification_status', 'approved')
+      .order('subscription_plan', { ascending: false });
+
+    if (caterersError) {
+      console.error('loadCaterers error:', caterersError);
+      setCaterers([]);
+      return;
+    }
+
+    const userIds = (caterersData ?? [])
+      .map((c: any) => c.user_id)
+      .filter(Boolean);
+
+    let profilesById: Record<string, { full_name: string; email: string }> = {};
+
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.error('loadProfiles error:', profilesError);
+      } else {
+        profilesById = Object.fromEntries(
+          (profilesData ?? []).map((p: any) => [p.id, { full_name: p.full_name, email: p.email }])
+        );
+      }
+    }
+
+    const merged = (caterersData ?? []).map((c: any) => ({
+      ...c,
+      profiles: profilesById[c.user_id] ?? null,
+    }));
+
+    setCaterers(merged as any);
+  };
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       setLoading(true);
-
-      let query = supabase
-        .from('bookings')
-        .select('id, event_date, guest_count, total_cost, downpayment_amount, status, created_at, event_type, venue, profiles(full_name, email, avatar_url), caterers(business_name, logo_url)')
-        .order('created_at', { ascending: false })
-        .limit(150);
-
-      if (filter !== 'all') query = query.eq('status', filter);
-
-      const { data } = await query;
-      setBookings(data ?? []);
-
-      const statuses = [
-        'pending', 'confirmed', 'awaiting_payment', 'paid',
-        'ongoing', 'completed', 'cancelled', 'rejected'
-      ];
-
-      const countRes = await Promise.all(
-        statuses.map(s =>
-          supabase
-            .from('bookings')
-            .select('id', { count: 'exact', head: true })
-            .eq('status', s)
-        )
-      );
-
-      const c: Record<string, number> = {};
-
-      statuses.forEach((s, i) => {
-        c[s] = countRes[i].count ?? 0;
-      });
-
-      c.all = Object.values(c).reduce((a, b) => a + b, 0);
-      setCounts(c);
+      await Promise.all([loadPayments(), loadCaterers()]);
       setLoading(false);
-    };
+    })();
+  }, []);
 
-    load();
-  }, [filter]);
+  const handleNotifyCaterer = async (caterer: Caterer & { daysLeft: number }) => {
+    setNotifyingId(caterer.id);
+    try {
+      const { error } = await supabase.rpc('staff_send_subscription_reminder', { p_caterer_id: caterer.id });
+      if (error) throw error;
+      alert(`Reminder sent to ${caterer.business_name}.`);
+    } catch (err: any) {
+      alert(`Reminder not sent: ${err?.message ?? 'Unknown error'}. Secure staff RPC required.`);
+    } finally { setNotifyingId(null); }
+  };
 
-  const filtered = bookings.filter(b => {
-    if (!search) return true;
+  const [editing, setEditing] = useState<Caterer | null>(null);
+  const [newPlan, setNewPlan] = useState('basic');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
 
-    const q = search.toLowerCase();
+  const correctPlan = async () => {
+    if (!editing || saving) return;
+    if (!paymentRef.trim() || reason.trim().length < 10) {
+      alert('Enter a confirmed payment reference and a reason of at least 10 characters.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc('staff_correct_subscription_plan', {
+        p_caterer_id: editing.id, p_plan_id: newPlan,
+        p_payment_reference: paymentRef.trim(), p_reason: reason.trim(),
+      });
+      if (error) throw error;
+      setEditing(null);
+      await Promise.all([loadCaterers(), loadPayments()]);
+      alert('Plan correction recorded.');
+    } catch (err: any) {
+      alert(`Plan not changed: ${err?.message ?? 'Unknown error'}. Secure payment-verifying RPC required.`);
+    } finally { setSaving(false); }
+  };
 
-    return (
-      (b.profiles as any)?.full_name?.toLowerCase().includes(q) ||
-      (b.caterers as any)?.business_name?.toLowerCase().includes(q)
-    );
+  const planStyle = (planId: string) => PLANS.find((p) => p.id === planId) ?? PLANS[0];
+
+  const now = Date.now();
+  const expiringCaterers = caterers
+    .filter(c => c.subscription_plan !== 'free' && c.subscription_expires_at)
+    .map(c => ({
+      ...c,
+      daysLeft: Math.ceil((new Date(c.subscription_expires_at!).getTime() - now) / 86400000),
+    }))
+    .filter(c => c.daysLeft <= 7)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+
+  const expiredCount = expiringCaterers.filter(c => c.daysLeft < 0).length;
+  const expiringSoonCount = expiringCaterers.filter(c => c.daysLeft >= 0).length;
+
+  const totalRevenue = payments.reduce((s, p) => s + Number(p.amount), 0);
+  const thisMonthRevenue = payments
+    .filter(p => p.confirmed_at && new Date(p.confirmed_at) > new Date(now - 30 * 86400000))
+    .reduce((s, p) => s + Number(p.amount), 0);
+
+  const filteredCaterers = caterers.filter(c => {
+    const matchesPlan = planFilter === 'all' || c.subscription_plan === planFilter;
+    const matchesSearch = !search ||
+      c.business_name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.profiles as any)?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      (c.profiles as any)?.email?.toLowerCase().includes(search.toLowerCase());
+    return matchesPlan && matchesSearch;
   });
 
-  const totalAmount = filtered.reduce(
-    (s, b) => s + Number(b.total_cost ?? 0),
-    0
-  );
-
   return (
-    <div className="booking-monitor-page">
-
-      {/* Responsive Header */}
-      <div className="booking-header">
-        <div className="booking-heading">
-          <h1>Booking Monitor</h1>
-          <p>Track all bookings across the platform in real time</p>
+    <div style={{ paddingBottom: 40 }}>
+      {/* Header Section */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Subscription Management</h1>
+          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>Payments are auto-confirmed via Xendit. Monitor caterer plans and renewals here.</p>
         </div>
+      </div>
 
-        <div className="booking-header-stats">
-          <div className="booking-stat-pill">
-            <span className="booking-stat-number orange">
-              {counts.all ?? '—'}
-            </span>
-            <span className="booking-stat-label">Total Bookings</span>
+      {/* Plan Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+        {PLANS.map((plan) => {
+          const count = caterers.filter((c) => c.subscription_plan === plan.id).length;
+          const isActive = planFilter === plan.id;
+          return (
+            <button
+              key={plan.id}
+              onClick={() => { setPlanFilter(isActive ? 'all' : plan.id); setTab('caterers'); }}
+              style={{
+                background: plan.bg,
+                borderColor: isActive ? plan.color : '#E5E7EB',
+                borderWidth: isActive ? '2px' : '1px',
+                borderStyle: 'solid',
+                borderRadius: 20, padding: '20px 24px',
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+                cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left',
+                boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.05)' : 'none'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: plan.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{plan.label} Plan</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', background: 'rgba(255,255,255,0.6)', padding: '2px 8px', borderRadius: 10 }}>
+                  {plan.price === 0 ? 'Free' : `₱${plan.price}/mo`}
+                </span>
+              </div>
+              <span style={{ fontSize: 32, fontWeight: 900, color: '#111', lineHeight: 1 }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Revenue Mini Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <DollarSign size={24} />
           </div>
-
-          <div className="booking-stat-pill">
-            <span className="booking-stat-number green">
-              ₱{totalAmount.toLocaleString()}
-            </span>
-            <span className="booking-stat-label">Total Value Shown</span>
+          <div>
+            <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Revenue (30 Days)</span>
+            <span style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>₱{thisMonthRevenue.toLocaleString()}</span>
+          </div>
+        </div>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CreditCard size={24} />
+          </div>
+          <div>
+            <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Total Platform Revenue</span>
+            <span style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>₱{totalRevenue.toLocaleString()}</span>
           </div>
         </div>
       </div>
 
-      {/* Status Filters */}
-      <div className="booking-status-filters">
-        {STATUS_FILTERS.map(sf => {
-          const config = STATUS_CONFIG[sf] || {
-            label: sf,
-            icon: Layers,
-            color: '#6B7280'
-          };
-
-          const IconComponent = config.icon;
-          const isActive = filter === sf;
-
+      {/* Consistent Segmented Filter Navigation Tabs with Icons */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, background: '#F3F4F6', padding: 6, borderRadius: 14, border: '1px solid #E5E7EB', width: 'fit-content', flexWrap: 'wrap' }}>
+        {[
+          { key: 'caterers', icon: Building2, label: 'Caterer Plans', color: '#2563EB' },
+          { key: 'expiring', icon: Clock, label: 'Renewals', color: '#D97706', count: expiringCaterers.length },
+          { key: 'payments', icon: CreditCard, label: 'Payment History', color: '#16A34A' },
+        ].map((tabItem) => {
+          const TabIcon = tabItem.icon;
+          const isActive = tab === tabItem.key;
           return (
             <button
-              key={sf}
-              className={`booking-tab-btn ${isActive ? 'active' : ''}`}
-              onClick={() => setFilter(sf)}
+              key={tabItem.key}
+              onClick={() => setTab(tabItem.key as any)}
+              style={{
+                padding: '10px 20px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s',
+                background: isActive ? '#FFFFFF' : 'transparent',
+                color: isActive ? '#111' : '#6B7280',
+                boxShadow: isActive ? '0 2px 4px rgba(0,0,0,0.04)' : 'none'
+              }}
             >
-              <IconComponent
-                size={14}
-                color={isActive ? '#FFFFFF' : config.color}
-              />
-
-              <span>{config.label}</span>
-
-              {counts[sf] !== undefined && (
-                <span className="booking-tab-count">
-                  {counts[sf]}
+              <TabIcon size={16} color={isActive ? tabItem.color : '#6B7280'} />
+              {tabItem.label}
+              {tabItem.key === 'expiring' && expiringCaterers.length > 0 && (
+                <span style={{ marginLeft: 4, background: '#DC2626', color: '#FFF', borderRadius: 8, padding: '2px 6px', fontSize: 11, fontWeight: 800 }}>
+                  {expiringCaterers.length}
                 </span>
               )}
             </button>
@@ -161,1116 +270,374 @@ export default function BookingMonitor() {
         })}
       </div>
 
-      {/* Search */}
-      <div className="booking-search">
-        <Search size={18} color="#9CA3AF" />
-
-        <input
-          type="text"
-          placeholder="Search by customer or caterer name..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-
-      {/* Booking Table */}
-      <div className="booking-table-container">
-
-        {loading ? (
-          <div className="booking-empty-state">
-            <Loader2
-              size={36}
-              color="#EA580C"
-              className="animate-spin"
-            />
-            <span>Loading bookings ledger...</span>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="booking-empty-state">
-            <div className="booking-empty-icon">
-              <Calendar size={32} color="#D1D5DB" />
+      {/* Caterers Tab */}
+      {tab === 'caterers' && (
+        <div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 280, maxWidth: 400 }}>
+              <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                placeholder="Search business, owner, or email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: '100%', padding: '12px 16px 12px 44px', borderRadius: 14, border: '1px solid #E5E7EB', outline: 'none', fontSize: 14, background: '#FFF' }}
+              />
             </div>
-
-            <div>
-              <div className="booking-empty-title">
-                No bookings found
-              </div>
-
-              <div className="booking-empty-description">
-                {filter !== 'all'
-                  ? 'No bookings match this status filter.'
-                  : 'Bookings will appear here once customers start booking.'}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="booking-table-scroll">
-            <table className="booking-table">
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Caterer</th>
-                  <th>Event Date</th>
-                  <th className="center">Guests</th>
-                  <th>Total</th>
-                  <th>Downpayment</th>
-                  <th>Status</th>
-                  <th>Booked On</th>
-                  <th></th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filtered.map((b) => (
-                  <tr
-                    key={b.id}
-                    className="booking-table-row"
-                    onClick={() =>
-                      setSelected(selected?.id === b.id ? null : b)
-                    }
-                  >
-                    {/* Customer */}
-                    <td>
-                      <div className="booking-person-cell">
-                        {(b.profiles as any)?.avatar_url ? (
-                          <img
-                            src={(b.profiles as any).avatar_url}
-                            alt=""
-                            className="booking-customer-avatar"
-                          />
-                        ) : (
-                          <div className="booking-customer-avatar-fallback">
-                            {((b.profiles as any)?.full_name ?? 'C')
-                              .charAt(0)
-                              .toUpperCase()}
-                          </div>
-                        )}
-
-                        <div className="booking-person-info">
-                          <div className="booking-person-name">
-                            {(b.profiles as any)?.full_name ?? '—'}
-                          </div>
-                          <div className="booking-person-email">
-                            {(b.profiles as any)?.email ?? ''}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Caterer */}
-                    <td>
-                      <div className="booking-person-cell">
-                        {(b.caterers as any)?.logo_url ? (
-                          <img
-                            src={(b.caterers as any).logo_url}
-                            alt=""
-                            className="booking-caterer-avatar"
-                          />
-                        ) : (
-                          <div className="booking-caterer-avatar-fallback">
-                            {((b.caterers as any)?.business_name ?? 'C')
-                              .charAt(0)
-                              .toUpperCase()}
-                          </div>
-                        )}
-
-                        <span className="booking-caterer-name">
-                          {(b.caterers as any)?.business_name ?? '—'}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Event Date */}
-                    <td className="booking-date-cell">
-                      {b.event_date
-                        ? new Date(b.event_date).toLocaleDateString(
-                            'en-PH',
-                            {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            }
-                          )
-                        : '—'}
-                    </td>
-
-                    {/* Guests */}
-                    <td className="booking-guests-cell">
-                      {b.guest_count ?? '—'}
-                    </td>
-
-                    {/* Total */}
-                    <td className="booking-total-cell">
-                      ₱{Number(b.total_cost ?? 0).toLocaleString()}
-                    </td>
-
-                    {/* Downpayment */}
-                    <td className="booking-downpayment-cell">
-                      ₱{Number(b.downpayment_amount ?? 0).toLocaleString()}
-                    </td>
-
-                    {/* Status */}
-                    <td>
-                      <span
-                        className={`badge ${
-                          STATUS_BADGE[b.status] ?? 'badge-pending'
-                        }`}
-                      >
-                        {b.status.replace('_', ' ')}
-                      </span>
-                    </td>
-
-                    {/* Booked On */}
-                    <td className="booking-created-cell">
-                      {new Date(b.created_at).toLocaleDateString(
-                        'en-PH',
-                        {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        }
-                      )}
-                    </td>
-
-                    {/* Expand */}
-                    <td className="booking-expand-cell">
-                      <button
-                        className="booking-expand-btn"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setSelected(selected?.id === b.id ? null : b);
-                        }}
-                      >
-                        {selected?.id === b.id ? (
-                          <ChevronUp size={16} color="#4B5563" />
-                        ) : (
-                          <ChevronDown size={16} color="#4B5563" />
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Expanded Booking Details */}
-      {selected && (
-        <div className="booking-detail-panel">
-
-          <div className="booking-detail-header">
-            <div className="booking-detail-heading">
-              <h2>Booking Detail Overview</h2>
-              <span>ID: {selected.id}</span>
-            </div>
-
-            <button
-              className="booking-close-btn"
-              onClick={() => setSelected(null)}
+            <select
+              value={planFilter}
+              onChange={(e) => setPlanFilter(e.target.value)}
+              style={{ padding: '12px 16px', borderRadius: 14, border: '1px solid #E5E7EB', fontSize: 14, fontWeight: 700, background: '#FFF', outline: 'none', cursor: 'pointer' }}
             >
-              <X size={14} />
-              Close View
-            </button>
+              <option value="all">All Plans</option>
+              {PLANS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label} Plan</option>
+              ))}
+            </select>
+            {(planFilter !== 'all' || search) && (
+              <button
+                onClick={() => { setPlanFilter('all'); setSearch(''); }}
+                style={{ padding: '12px 18px', borderRadius: 14, border: '1px solid #E5E7EB', background: '#F9FAFB', color: '#4B5563', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <X size={14} /> Clear
+              </button>
+            )}
           </div>
 
-          <div className="booking-detail-grid">
-
-            {/* Customer */}
-            <div className="booking-detail-card">
-              {(selected.profiles as any)?.avatar_url ? (
-                <img
-                  src={(selected.profiles as any).avatar_url}
-                  alt=""
-                  className="booking-detail-avatar"
-                />
-              ) : (
-                <div className="booking-detail-avatar-fallback blue">
-                  {((selected.profiles as any)?.full_name ?? 'C')
-                    .charAt(0)
-                    .toUpperCase()}
+          <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
+            {loading ? (
+              <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                <Loader2 size={36} color="#F97316" className="animate-spin" />
+                <span style={{ fontSize: 15, fontWeight: 600 }}>Loading active caterer ledger...</span>
+              </div>
+            ) : filteredCaterers.length === 0 ? (
+              <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E5E7EB' }}>
+                  <Building2 size={32} color="#D1D5DB" />
                 </div>
-              )}
-
-              <div className="booking-detail-info">
-                <div className="booking-detail-label">
-                  <Users size={12} />
-                  Customer
-                </div>
-
-                <div className="booking-detail-value">
-                  {(selected.profiles as any)?.full_name ?? '—'}
-                </div>
-
-                <div className="booking-detail-subtext">
-                  {(selected.profiles as any)?.email ?? ''}
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4 }}>No caterers found</div>
+                  <div style={{ fontSize: 14 }}>Try modifying your active filter parameters.</div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Business Name</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Owner Details</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Current Plan</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Expiration Date</th>
+                      <th style={{ padding: '16px 20px', fontSize: 12, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Bookings</th><th style={{ padding: '16px 20px' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCaterers.map((c, i) => {
+                      const ps = planStyle(c.subscription_plan);
+                      const expires = c.subscription_expires_at
+                        ? new Date(c.subscription_expires_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : '—';
+                      return (
+                        <tr key={c.id} style={{ borderBottom: i === filteredCaterers.length - 1 ? 'none' : '1px solid #F3F4F6', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
 
-            {/* Caterer */}
-            <div className="booking-detail-card">
-              {(selected.caterers as any)?.logo_url ? (
-                <img
-                  src={(selected.caterers as any).logo_url}
-                  alt=""
-                  className="booking-detail-avatar square"
-                />
-              ) : (
-                <div className="booking-detail-avatar-fallback purple">
-                  {((selected.caterers as any)?.business_name ?? 'C')
-                    .charAt(0)
-                    .toUpperCase()}
-                </div>
-              )}
+                          <td style={{ padding: '18px 20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              {c.logo_url ? (
+                                <img src={c.logo_url} alt="" style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
+                              ) : (
+                                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEF3E8', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>
+                                  {c.business_name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>{c.business_name}</div>
+                                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{c.city ?? ''}</div>
+                              </div>
+                            </div>
+                          </td>
 
-              <div className="booking-detail-info">
-                <div className="booking-detail-label">
-                  <Store size={12} />
-                  Caterer Partner
-                </div>
+                          <td style={{ padding: '18px 20px' }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{(c.profiles as any)?.full_name ?? '—'}</div>
+                            <div style={{ fontSize: 12, color: '#9CA3AF' }}>{(c.profiles as any)?.email ?? ''}</div>
+                          </td>
 
-                <div className="booking-detail-value">
-                  {(selected.caterers as any)?.business_name ?? '—'}
-                </div>
+                          <td style={{ padding: '18px 20px' }}>
+                            <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: ps.bg, color: ps.color }}>
+                              {ps.label}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '18px 20px', fontSize: 13, fontWeight: 600, color: '#4B5563' }}>
+                            {c.subscription_plan === 'free' ? '—' : expires}
+                          </td>
+
+                          <td style={{ padding: '18px 20px', fontWeight: 900, fontSize: 15, color: '#F97316' }}>
+                            {c.monthly_booking_count ?? 0}
+                          </td>
+                          <td style={{ padding: '18px 20px' }}>
+                            <button type="button" onClick={() => {
+                              setEditing(c); setNewPlan(c.subscription_plan === 'free' ? 'basic' : c.subscription_plan);
+                              setPaymentRef(''); setReason('');
+                            }} style={{ border: '1px solid #FED7AA', borderRadius: 10, background: '#FFF7ED', color: '#C2410C', padding: '8px 12px', cursor: 'pointer', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <Settings2 size={14} /> Manage Plan
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            {/* Event Date */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon orange-bg">
-                <Calendar size={20} color="#EA580C" />
-              </div>
-
-              <div>
-                <div className="booking-detail-label">Event Date</div>
-                <div className="booking-detail-value">
-                  {selected.event_date
-                    ? new Date(selected.event_date).toLocaleDateString(
-                        'en-PH',
-                        {
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric'
-                        }
-                      )
-                    : '—'}
-                </div>
-              </div>
-            </div>
-
-            {/* Guests */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon blue-bg">
-                <Users size={20} color="#2563EB" />
-              </div>
-
-              <div>
-                <div className="booking-detail-label">Guest Count</div>
-                <div className="booking-detail-value">
-                  {selected.guest_count ?? '—'} guests
-                </div>
-              </div>
-            </div>
-
-            {/* Event Type */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon green-bg">
-                <Tag size={20} color="#16A34A" />
-              </div>
-
-              <div>
-                <div className="booking-detail-label">Event Type</div>
-                <div className="booking-detail-value">
-                  {selected.event_type ?? '—'}
-                </div>
-              </div>
-            </div>
-
-            {/* Venue */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon red-bg">
-                <MapPin size={20} color="#DC2626" />
-              </div>
-
-              <div className="booking-detail-info">
-                <div className="booking-detail-label">Venue Location</div>
-                <div className="booking-detail-value">
-                  {selected.venue ?? '—'}
-                </div>
-              </div>
-            </div>
-
-            {/* Total Cost */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon orange-bg">
-                <Wallet size={20} color="#EA580C" />
-              </div>
-
-              <div>
-                <div className="booking-detail-label">Total Cost</div>
-                <div className="booking-detail-value orange-text">
-                  ₱{Number(selected.total_cost ?? 0).toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            {/* Downpayment */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon purple-bg">
-                <ShieldCheck size={20} color="#7C3AED" />
-              </div>
-
-              <div>
-                <div className="booking-detail-label">
-                  Downpayment Required
-                </div>
-                <div className="booking-detail-value purple-text">
-                  ₱{Number(selected.downpayment_amount ?? 0).toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            {/* Status */}
-            <div className="booking-detail-card">
-              <div className="booking-detail-icon gray-bg">
-                <Clock size={20} color="#4B5563" />
-              </div>
-
-              <div>
-                <div className="booking-detail-label">Current Status</div>
-                <div className="booking-detail-status">
-                  <span
-                    className={`badge ${
-                      STATUS_BADGE[selected.status] ?? 'badge-pending'
-                    }`}
-                  >
-                    {selected.status.replace('_', ' ')}
-                  </span>
-                </div>
-              </div>
-            </div>
-
+            )}
           </div>
         </div>
       )}
 
-      {/* Responsive Styles */}
-      <style>{`
-        .booking-monitor-page {
-          width: 100%;
-          min-width: 0;
-          padding-bottom: 40px;
-          font-family: 'Inter', system-ui, sans-serif;
-        }
-
-        .booking-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-          gap: 16px;
-          flex-wrap: wrap;
-          margin-bottom: 28px;
-        }
-
-        .booking-heading h1 {
-          font-size: 26px;
-          font-weight: 800;
-          color: #111;
-          margin: 0 0 6px;
-          letter-spacing: -0.01em;
-        }
-
-        .booking-heading p {
-          font-size: 14px;
-          color: #6B7280;
-          margin: 0;
-          line-height: 1.5;
-        }
-
-        .booking-header-stats {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-
-        .booking-stat-pill {
-          background: white;
-          border: 1px solid #E8E4DE;
-          border-radius: 16px;
-          padding: 12px 22px;
-          text-align: center;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.03);
-          min-width: 130px;
-        }
-
-        .booking-stat-number {
-          display: block;
-          font-size: 20px;
-          font-weight: 800;
-          line-height: 1.3;
-          overflow-wrap: anywhere;
-        }
-
-        .booking-stat-number.orange { color: #EA580C; }
-        .booking-stat-number.green { color: #16A34A; }
-
-        .booking-stat-label {
-          display: block;
-          font-size: 11px;
-          color: #6B7280;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-top: 3px;
-        }
-
-        .booking-status-filters {
-          display: flex;
-          gap: 6px;
-          margin-bottom: 20px;
-          flex-wrap: wrap;
-          width: 100%;
-        }
-
-        .booking-tab-btn {
-          white-space: nowrap;
-          font-size: 12.5px;
-          padding: 8px 12px;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
-          flex-shrink: 0;
-          border: 1px solid #E8E4DE;
-          border-radius: 10px;
-          background: #FFFFFF;
-          color: #4B5563;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .booking-tab-btn:hover {
-          background: #FFF7ED;
-          border-color: #FED7AA;
-        }
-
-        .booking-tab-btn.active {
-          background: #EA580C;
-          color: #FFFFFF;
-          border-color: #EA580C;
-        }
-
-        .booking-tab-count {
-          margin-left: 4px;
-          background: #F3F4F6;
-          color: #6B7280;
-          border-radius: 10px;
-          padding: 1px 6px;
-          font-size: 10.5px;
-          font-weight: 700;
-        }
-
-        .booking-tab-btn.active .booking-tab-count {
-          background: rgba(255,255,255,0.25);
-          color: #FFFFFF;
-        }
-
-        .booking-search {
-          position: relative;
-          margin-bottom: 20px;
-          width: 100%;
-          max-width: 400px;
-        }
-
-        .booking-search svg {
-          position: absolute;
-          left: 16px;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-        }
-
-        .booking-search input {
-          width: 100%;
-          box-sizing: border-box;
-          padding: 12px 16px 12px 44px;
-          border-radius: 12px;
-          border: 1px solid #E8E4DE;
-          outline: none;
-          font-size: 14px;
-          background: #FFFFFF;
-          color: #111;
-          min-height: 44px;
-        }
-
-        .booking-search input:focus {
-          border-color: #F97316;
-          box-shadow: 0 0 0 3px rgba(249,115,22,0.10);
-        }
-
-        .booking-table-container {
-          width: 100%;
-          background: #FFFFFF;
-          border-radius: 20px;
-          border: 1px solid #E8E4DE;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.04);
-          overflow: hidden;
-        }
-
-        .booking-table-scroll {
-          width: 100%;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-
-        .booking-table {
-          width: 100%;
-          min-width: 1050px;
-          border-collapse: collapse;
-          text-align: left;
-        }
-
-        .booking-table thead {
-          background: #F9FAFB;
-        }
-
-        .booking-table th {
-          padding: 16px 18px;
-          font-size: 11px;
-          font-weight: 700;
-          color: #374151;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          white-space: nowrap;
-          border-bottom: 1px solid #E8E4DE;
-        }
-
-        .booking-table th.center,
-        .booking-table td.booking-guests-cell {
-          text-align: center;
-        }
-
-        .booking-table td {
-          padding: 16px 18px;
-          border-bottom: 1px solid #E8E4DE;
-          vertical-align: middle;
-        }
-
-        .booking-table-row {
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-
-        .booking-table-row:hover {
-          background: #F9FAFB;
-        }
-
-        .booking-person-cell {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-width: 150px;
-        }
-
-        .booking-customer-avatar,
-        .booking-customer-avatar-fallback {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          flex-shrink: 0;
-          object-fit: cover;
-          border: 1.5px solid #E5E7EB;
-        }
-
-        .booking-customer-avatar-fallback,
-        .booking-caterer-avatar-fallback {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 14px;
-          background: #DBEAFE;
-          color: #2563EB;
-        }
-
-        .booking-person-info {
-          min-width: 0;
-        }
-
-        .booking-person-name {
-          font-weight: 700;
-          font-size: 13px;
-          color: #111;
-          white-space: nowrap;
-        }
-
-        .booking-person-email {
-          font-size: 11px;
-          color: #9CA3AF;
-          white-space: nowrap;
-        }
-
-        .booking-caterer-avatar,
-        .booking-caterer-avatar-fallback {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          flex-shrink: 0;
-          object-fit: cover;
-          border: 1px solid #E5E7EB;
-        }
-
-        .booking-caterer-avatar-fallback {
-          background: #F5F3FF;
-          color: #7C3AED;
-          font-size: 12px;
-        }
-
-        .booking-caterer-name {
-          font-weight: 700;
-          font-size: 13px;
-          color: #111;
-          white-space: nowrap;
-        }
-
-        .booking-date-cell {
-          white-space: nowrap;
-          font-size: 12px;
-          font-weight: 600;
-          color: #4B5563;
-        }
-
-        .booking-guests-cell {
-          font-weight: 700;
-          font-size: 13px;
-          color: #111;
-        }
-
-        .booking-total-cell {
-          font-weight: 800;
-          color: #EA580C;
-          font-size: 13px;
-          white-space: nowrap;
-        }
-
-        .booking-downpayment-cell {
-          color: #6B7280;
-          font-size: 12px;
-          font-weight: 600;
-          white-space: nowrap;
-        }
-
-        .booking-created-cell {
-          font-size: 11px;
-          color: #9CA3AF;
-          white-space: nowrap;
-        }
-
-        .booking-expand-cell {
-          text-align: right;
-        }
-
-        .booking-expand-btn {
-          background: #FAF8F5;
-          border: 1px solid #E8E4DE;
-          border-radius: 8px;
-          padding: 6px 10px;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .booking-expand-btn:hover,
-        .booking-close-btn:hover {
-          background: #FFF7ED;
-          border-color: #FED7AA;
-        }
-
-        .booking-empty-state {
-          padding: 64px 20px;
-          text-align: center;
-          color: #9CA3AF;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-
-        .booking-empty-icon {
-          width: 72px;
-          height: 72px;
-          border-radius: 50%;
-          background: #FAF8F5;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 1px solid #E8E4DE;
-        }
-
-        .booking-empty-title {
-          font-size: 17px;
-          font-weight: 800;
-          color: #111;
-          margin-bottom: 4px;
-        }
-
-        .booking-empty-description {
-          font-size: 13px;
-          color: #6B7280;
-          line-height: 1.5;
-        }
-
-        .booking-detail-panel {
-          width: 100%;
-          box-sizing: border-box;
-          background: #FFFFFF;
-          border-radius: 20px;
-          border: 1px solid #E8E4DE;
-          border-left: 4px solid #EA580C;
-          margin-top: 24px;
-          padding: 28px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.04);
-        }
-
-        .booking-detail-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 16px;
-          margin-bottom: 24px;
-          padding-bottom: 16px;
-          border-bottom: 1px solid #E8E4DE;
-        }
-
-        .booking-detail-heading {
-          min-width: 0;
-          overflow-wrap: anywhere;
-        }
-
-        .booking-detail-heading h2 {
-          font-size: 20px;
-          font-weight: 800;
-          color: #111;
-          margin: 0 0 4px;
-        }
-
-        .booking-detail-heading span {
-          font-size: 11px;
-          color: #9CA3AF;
-          font-family: monospace;
-          overflow-wrap: anywhere;
-        }
-
-        .booking-close-btn {
-          flex-shrink: 0;
-          background: #FAF8F5;
-          border: 1px solid #E8E4DE;
-          border-radius: 10px;
-          padding: 8px 14px;
-          font-size: 13px;
-          font-weight: 700;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          color: #4B5563;
-        }
-
-        .booking-detail-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
-          gap: 14px;
-        }
-
-        .booking-detail-card {
-          min-width: 0;
-          box-sizing: border-box;
-          background: #FAF8F5;
-          border-radius: 14px;
-          padding: 16px;
-          border: 1px solid #E8E4DE;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .booking-detail-avatar,
-        .booking-detail-avatar-fallback {
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 2px solid #FED7AA;
-          flex-shrink: 0;
-        }
-
-        .booking-detail-avatar.square,
-        .booking-detail-avatar-fallback.purple {
-          border-radius: 10px;
-        }
-
-        .booking-detail-avatar-fallback {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          font-weight: 800;
-        }
-
-        .booking-detail-avatar-fallback.blue {
-          background: #DBEAFE;
-          color: #2563EB;
-        }
-
-        .booking-detail-avatar-fallback.purple {
-          background: #F5F3FF;
-          color: #7C3AED;
-        }
-
-        .booking-detail-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .booking-detail-label {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 10px;
-          color: #9CA3AF;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 4px;
-        }
-
-        .booking-detail-value {
-          font-size: 13px;
-          font-weight: 800;
-          color: #111;
-          margin-top: 2px;
-          overflow-wrap: anywhere;
-        }
-
-        .booking-detail-subtext {
-          font-size: 11px;
-          color: #6B7280;
-          overflow-wrap: anywhere;
-        }
-
-        .booking-detail-icon {
-          width: 42px;
-          height: 42px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          border: 1px solid transparent;
-        }
-
-        .orange-bg { background: #FFF7ED; border-color: #FED7AA; }
-        .blue-bg { background: #EFF6FF; border-color: #BFDBFE; }
-        .green-bg { background: #F0FDF4; border-color: #BBF7D0; }
-        .red-bg { background: #FEF2F2; border-color: #FECACA; }
-        .purple-bg { background: #F5F3FF; border-color: #DDD6FE; }
-        .gray-bg { background: #F3F4F6; border-color: #E5E7EB; }
-
-        .orange-text { color: #EA580C; }
-        .purple-text { color: #7C3AED; }
-
-        .booking-detail-status {
-          margin-top: 5px;
-        }
-
-        /* Tablet */
-        @media (max-width: 1024px) {
-          .booking-header {
-            align-items: flex-start;
-          }
-
-          .booking-header-stats {
-            width: 100%;
-          }
-
-          .booking-stat-pill {
-            flex: 1;
-          }
-
-          .booking-detail-panel {
-            padding: 22px;
-          }
-
-          .booking-table {
-            min-width: 1000px;
-          }
-        }
-
-        /* Mobile and small tablet */
-        @media (max-width: 768px) {
-          .booking-monitor-page {
-            padding-bottom: 24px;
-          }
-
-          .booking-header {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 16px;
-            margin-bottom: 20px;
-          }
-
-          .booking-heading h1 {
-            font-size: 23px;
-          }
-
-          .booking-heading p {
-            font-size: 13px;
-          }
-
-          .booking-header-stats {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-          }
-
-          .booking-stat-pill {
-            min-width: 0;
-            padding: 12px 8px;
-            border-radius: 13px;
-          }
-
-          .booking-stat-number {
-            font-size: 18px;
-          }
-
-          .booking-stat-label {
-            font-size: 9px;
-          }
-
-          .booking-status-filters {
-            display: flex;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            padding-bottom: 8px;
-            scrollbar-width: thin;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .booking-tab-btn {
-            flex-shrink: 0;
-            font-size: 12px;
-            padding: 8px 11px;
-          }
-
-          .booking-search {
-            max-width: none;
-          }
-
-          .booking-table-container {
-            border-radius: 15px;
-          }
-
-          .booking-table {
-            min-width: 1000px;
-          }
-
-          .booking-table th,
-          .booking-table td {
-            padding: 13px 14px;
-          }
-
-          .booking-detail-panel {
-            margin-top: 18px;
-            padding: 18px;
-            border-radius: 16px;
-          }
-
-          .booking-detail-header {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 12px;
-          }
-
-          .booking-detail-heading h2 {
-            font-size: 18px;
-          }
-
-          .booking-close-btn {
-            justify-content: center;
-            width: 100%;
-            box-sizing: border-box;
-            min-height: 40px;
-          }
-
-          .booking-detail-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-          }
-
-          .booking-detail-card {
-            padding: 12px;
-            gap: 9px;
-          }
-
-          .booking-detail-icon,
-          .booking-detail-avatar,
-          .booking-detail-avatar-fallback {
-            width: 36px;
-            height: 36px;
-          }
-
-          .booking-detail-label {
-            font-size: 9px;
-          }
-
-          .booking-detail-value {
-            font-size: 12px;
-          }
-
-          .booking-detail-subtext {
-            font-size: 10px;
-          }
-        }
-
-        /* Small mobile */
-        @media (max-width: 480px) {
-          .booking-heading h1 {
-            font-size: 21px;
-          }
-
-          .booking-stat-number {
-            font-size: 16px;
-          }
-
-          .booking-detail-panel {
-            padding: 14px;
-          }
-
-          .booking-detail-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .booking-detail-card {
-            padding: 14px;
-          }
-
-          .booking-empty-state {
-            padding: 45px 16px;
-          }
-
-          .booking-empty-title {
-            font-size: 15px;
-          }
-
-          .booking-empty-description {
-            font-size: 12px;
-          }
-        }
-      `}</style>
+      {/* Renewals Tab */}
+      {tab === 'expiring' && (
+        <div>
+          {expiringCaterers.length > 0 && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+              {expiredCount > 0 && (
+                <div style={{ background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA', padding: '8px 16px', borderRadius: 12, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={16} /> {expiredCount} Expired Subscriptions
+                </div>
+              )}
+              {expiringSoonCount > 0 && (
+                <div style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '8px 16px', borderRadius: 12, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={16} /> {expiringSoonCount} Expiring within 7 days
+                </div>
+              )}
+            </div>
+          )}
+
+          {loading ? (
+            <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <Loader2 size={36} color="#F97316" className="animate-spin" />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Loading renewal queue...</span>
+            </div>
+          ) : expiringCaterers.length === 0 ? (
+            <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', padding: 80, textAlign: 'center', color: '#9CA3AF' }}>
+              <CheckCircle2 size={36} color="#16A34A" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4 }}>No upcoming renewals required</div>
+              <div style={{ fontSize: 14 }}>All active paid subscriptions are secure and up to date.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {expiringCaterers.map((c) => {
+                const ps = planStyle(c.subscription_plan);
+                const isExpired = c.daysLeft < 0;
+                const isNotifying = notifyingId === c.id;
+                return (
+                  <div key={c.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E5E7EB', borderLeft: `4px solid ${isExpired ? '#DC2626' : '#F59E0B'}`, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', flexWrap: 'wrap', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ padding: '8px 14px', borderRadius: 10, background: ps.bg, color: ps.color, fontWeight: 900, fontSize: 13, textAlign: 'center' }}>
+                        {ps.label}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                          {c.logo_url ? (
+                            <img src={c.logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
+                          ) : (
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3E8', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>
+                              {c.business_name.charAt(0)}
+                            </div>
+                          )}
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#111' }}>{c.business_name}</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: '#6B7280', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <span>{(c.profiles as any)?.email ?? ''}</span>
+                          <span>•</span>
+                          <span>Expires {new Date(c.subscription_expires_at!).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: isExpired ? '#FEE2E2' : '#FEF3C7', color: isExpired ? '#991B1B' : '#92400E', border: `1px solid ${isExpired ? '#FECACA' : '#FDE68A'}` }}>
+                        {isExpired ? `Expired ${Math.abs(c.daysLeft)} days ago` : c.daysLeft === 0 ? 'Expires today' : `${c.daysLeft} days left`}
+                      </span>
+                      <button
+                        onClick={() => handleNotifyCaterer(c)}
+                        disabled={isNotifying}
+                        style={{
+                          background: '#F97316', color: '#FFF', border: 'none', padding: '8px 14px', borderRadius: 10,
+                          fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                          opacity: isNotifying ? 0.7 : 1, transition: 'background 0.2s'
+                        }}
+                      >
+                        {isNotifying ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        Notify Caterer
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Payment History Tab */}
+      {tab === 'payments' && (
+        <div>
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, color: '#1D4ED8', fontSize: 14, fontWeight: 600 }}>
+            <RefreshCw size={18} /> All payments are securely processed and confirmed automatically through Xendit (GCash / Cards). This ledger serves for real-time tracking.
+          </div>
+
+          {loading ? (
+            <div style={{ padding: 80, textAlign: 'center', color: '#9CA3AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <Loader2 size={36} color="#F97316" className="animate-spin" />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Loading payment audit trails...</span>
+            </div>
+          ) : payments.length === 0 ? (
+            <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', padding: 80, textAlign: 'center', color: '#9CA3AF' }}>
+              <CreditCard size={36} color="#D1D5DB" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#111', marginBottom: 4 }}>No payment logs found</div>
+              <div style={{ fontSize: 14 }}>Successful transactions will appear here instantly.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {payments.map((p) => {
+                const ps = planStyle(p.plan_id);
+                return (
+                  <div key={p.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E5E7EB', padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ padding: '10px 16px', borderRadius: 12, background: ps.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 100 }}>
+                        <span style={{ color: ps.color, fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>{ps.label}</span>
+                        <span style={{ color: ps.color, fontSize: 16, fontWeight: 900 }}>₱{Number(p.amount).toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                          {(p.caterers as any)?.logo_url ? (
+                            <img src={(p.caterers as any).logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', border: '1px solid #E5E7EB' }} />
+                          ) : (
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FEF3E8', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>
+                              {(p.caterers as any)?.business_name?.charAt(0) ?? '—'}
+                            </div>
+                          )}
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#111' }}>{(p.caterers as any)?.business_name ?? '—'}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {p.payment_method && <span style={{ background: '#F3F4F6', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: '#4B5563', fontWeight: 700 }}>via {p.payment_method}</span>}
+                          {p.payment_reference && <span style={{ background: '#F3F4F6', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: '#4B5563', fontWeight: 700, fontFamily: 'monospace' }}>Ref: {p.payment_reference.slice(0, 16)}...</span>}
+                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>
+                            {new Date(p.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', textTransform: 'uppercase' }}>
+                        Confirmed
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Improved Modal for Correct Subscription / Manage Plan */}
+      {editing && (
+        <div role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 20 }} onMouseDown={e => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div role="dialog" aria-modal="true" aria-label="Correct subscription" style={{ background: '#FFF', borderRadius: 24, padding: 32, width: '100%', maxWidth: 500, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #E5E7EB', paddingBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FFF7ED', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Settings2 size={22} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0, color: '#111' }}>Manage Subscription</h2>
+                  <p style={{ fontSize: 13, color: '#6B7280', margin: '2px 0 0', fontWeight: 600 }}>{editing.business_name}</p>
+                </div>
+              </div>
+              <button style={{ background: 'transparent', border: '1px solid #E5E7EB', borderRadius: '50%', width: 36, height: 36, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#4B5563', transition: 'background 0.2s' }} onClick={() => setEditing(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Notice / Warning Banner */}
+            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+              <span>Requires an existing confirmed Xendit payment. Staff cannot mark payments as paid manually.</span>
+            </div>
+
+            {/* Form Fields */}
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Select Plan</label>
+                <select
+                  value={newPlan}
+                  onChange={e => setNewPlan(e.target.value)}
+                  style={{
+                    display: 'block', width: '100%', boxSizing: 'border-box', padding: '12px 14px',
+                    borderRadius: 12, border: '1px solid #D1D5DB', fontSize: 14, fontWeight: 700,
+                    backgroundColor: PLANS.find(p => p.id === newPlan)?.bg ?? '#FFF',
+                    color: PLANS.find(p => p.id === newPlan)?.color ?? '#111',
+                    outline: 'none', cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                >
+                  {PLANS.filter(p => p.id !== 'free').map(p => (
+                    <option key={p.id} value={p.id} style={{ background: '#FFF', color: '#111' }}>
+                      {p.label} Plan (₱{p.price}/mo)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Confirmed Payment Reference</label>
+                <input
+                  type="text"
+                  placeholder="Enter Xendit reference ID..."
+                  value={paymentRef}
+                  onChange={e => setPaymentRef(e.target.value)}
+                  maxLength={200}
+                  style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1px solid #D1D5DB', fontSize: 14, outline: 'none', background: '#FFF', color: '#111' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Reason for Correction</label>
+                <textarea
+                  placeholder="Provide a detailed reason (at least 10 characters)..."
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1px solid #D1D5DB', fontSize: 14, outline: 'none', background: '#FFF', color: '#111', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid #E5E7EB' }}>
+              <button
+                disabled={saving}
+                onClick={() => setEditing(null)}
+                style={{ flex: 1, padding: '12px 16px', background: '#F3F4F6', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={saving}
+                onClick={correctPlan}
+                style={{ flex: 1, padding: '12px 16px', background: '#F97316', color: '#FFF', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 12px rgba(249,115,22,0.25)', opacity: saving ? 0.7 : 1 }}
+              >
+                {saving && <Loader2 size={16} className="animate-spin" />}
+                {saving ? 'Verifying...' : 'Verify and Correct'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

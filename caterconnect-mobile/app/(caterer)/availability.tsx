@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1 },
   title: { fontSize: 20, fontWeight: '800', color: Colors.black },
   subtitle: { fontSize: 12, lineHeight: 18, color: Colors.textSecondary, marginTop: 4 },
-  content: { padding: 20, paddingTop: 8, paddingBottom: 40, gap: 16 },
+  content: { width: '100%', maxWidth: 1000, alignSelf: 'center', padding: 20, paddingTop: 8, paddingBottom: 40, gap: 16 },
   card: { backgroundColor: Colors.white, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: Colors.border, gap: 8 },
   heading: { fontSize: 17, fontWeight: '800', color: Colors.black },
   hint: { fontSize: 12, lineHeight: 19, color: Colors.textSecondary },
