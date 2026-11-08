@@ -1,3 +1,4 @@
+import './StaffUnified.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -26,7 +27,7 @@ type Account = {
   refund_disputes: number;
 };
 
-type Action = 'flag' | 'unflag' | 'suspend' | 'reactivate';
+type Action = 'flag' | 'unflag' | 'suspend';
 type AppealDecision = 'Approved' | 'Rejected';
 
 type Appeal = {
@@ -274,6 +275,8 @@ export default function AccountMonitoring() {
   // ACCOUNT ACTION
   const act = async () => {
     if (!chosen || reason.trim().length < 10 || saving) return;
+    // Staff cannot restore access. A suspended account must go through the appeal flow.
+    if (chosen.action === 'suspend' && chosen.account.suspended) return;
 
     setSaving(true);
     setError('');
@@ -330,6 +333,7 @@ export default function AccountMonitoring() {
   };
 
   const start = (account: Account, action: Action) => {
+    if (action === 'suspend' && account.suspended) return;
     setChosen({ account, action });
     setReason('');
   };
@@ -401,7 +405,7 @@ export default function AccountMonitoring() {
     );
 
   return (
-    <div className="am-page">
+    <div className="am-page cc-staff-unified">
 
       <style>{`
         .am-page {
@@ -1544,20 +1548,33 @@ export default function AccountMonitoring() {
                     {a.flagged ? 'Remove Flag' : 'Flag Account'}
                   </button>
 
-                  <button
-                    className="am-action-button"
-                    style={{
-                      background: a.suspended ? '#16A34A' : '#FEF2F2',
-                      border: `1px solid ${a.suspended ? '#16A34A' : '#FECACA'}`,
-                      color: a.suspended ? '#FFF' : '#DC2626'
-                    }}
-                    onClick={() =>
-                      start(a, a.suspended ? 'reactivate' : 'suspend')
-                    }
-                  >
-                    <Ban size={15} />
-                    {a.suspended ? 'Reactivate Access' : 'Suspend Account'}
-                  </button>
+                  {!a.suspended ? (
+                    <button
+                      className="am-action-button"
+                      style={{
+                        background: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        color: '#DC2626'
+                      }}
+                      onClick={() => start(a, 'suspend')}
+                    >
+                      <Ban size={15} />
+                      Suspend Account
+                    </button>
+                  ) : (
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px solid #FED7AA',
+                      background: '#FFF7ED',
+                      color: '#9A3412',
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      fontWeight: 700
+                    }}>
+                      Suspended — only Admin can restore access after appeal review.
+                    </div>
+                  )}
 
                   {pendingAppeal && (
                     <button
@@ -1714,7 +1731,7 @@ export default function AccountMonitoring() {
               </strong>{' '}
               ({chosen.account.role}).{' '}
               {chosen.action === 'suspend'
-                ? 'Suspension blocks new bookings and certain booking status changes; existing refunds remain accessible.'
+                ? 'Suspension prevents the account holder from accessing the platform. To request restoration, they must submit an account appeal. Staff may review the appeal, but only the System Administrator can restore access.'
                 : 'This action will be recorded in the Staff audit history.'}
             </p>
 

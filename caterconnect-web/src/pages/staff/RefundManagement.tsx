@@ -1,3 +1,4 @@
+import './StaffUnified.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -198,7 +199,7 @@ export default function RefundManagement() {
 
   const filteredSubmissions = submissions.filter(x => {
     const b = bookingMap[x.booking_id];
-    return (filter === 'all' || x.status === filter) &&
+    return x.status === 'submitted' &&
       matches([x.booking_id, x.transfer_reference, name(b), vendor(b, x.caterer_id)]);
   });
   const filteredDisputes = disputes.filter(x => {
@@ -238,11 +239,11 @@ export default function RefundManagement() {
     setReceiptUrl(null);
   };
 
-  const statusOptions = section === 'submissions'
-    ? ['all', 'submitted', 'verified', 'rejected']
-    : section === 'disputes'
-      ? ['all', 'open', 'investigating', 'resolved']
-      : ['all', 'pending', 'processed', 'failed'];
+  const statusOptions = section === 'disputes'
+    ? ['all', 'open', 'investigating', 'resolved']
+    : section === 'refunds'
+      ? ['all', 'pending', 'processed', 'failed']
+      : [];
 
   const currentBooking = selected ? bookingMap[selected.bookingId] : undefined;
   const currentSubmission = selected ? submissionMap[selected.bookingId] : undefined;
@@ -253,7 +254,7 @@ export default function RefundManagement() {
     .reduce((sum, x) => sum + Number(x.refund_amount || 0), 0);
 
   return (
-    <div style={{ fontFamily: "'Inter', system-ui, sans-serif", paddingBottom: 40, color: '#111827' }}>
+    <div className="cc-staff-unified cc-staff-refunds" style={{ fontFamily: "'Inter', system-ui, sans-serif", paddingBottom: 40, color: '#111827' }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>Refund Monitoring</h1>
@@ -269,7 +270,7 @@ export default function RefundManagement() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, background: '#F3F4F6', padding: 6, borderRadius: 14, border: '1px solid #E5E7EB', width: 'fit-content', flexWrap: 'wrap' }}>
         {([
-          ['submissions', Receipt, 'Refund Submissions', submissions.length, '#2563EB'],
+          ['submissions', Receipt, 'Submitted Evidence', submissions.filter(item => item.status === 'submitted').length, '#F97316'],
           ['disputes', MessageSquareWarning, 'Refund Disputes', disputes.length, '#D97706'],
           ['refunds', Wallet, 'Refund Tracking', bookings.length, '#16A34A']
         ] as const).map(([key, Icon, title, count, color]) => {
@@ -322,13 +323,24 @@ export default function RefundManagement() {
         </div>
       )}
 
+      {section === 'submissions' && (
+        <div style={{ ...panel, marginBottom: 20, padding: '18px 22px', background: '#FFF9F4', borderColor: '#FED7AA' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#9A3412', fontSize: 15, fontWeight: 800 }}>
+            <Eye size={18} /> View Submitted Evidence
+          </div>
+          <p style={{ ...muted, margin: '7px 0 0', lineHeight: 1.6 }}>
+            View transfer references and private refund receipts submitted by Caterers.
+            Staff access is read-only; Customers confirm whether refunds were received.
+          </p>
+        </div>
+      )}
+
+      {section !== 'submissions' && (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
         {statusOptions.map(x => {
-          const count = section === 'submissions'
-            ? submissions.filter(y => x === 'all' || y.status === x).length
-            : section === 'disputes'
-              ? disputes.filter(y => x === 'all' || y.status === x).length
-              : bookings.filter(y => x === 'all' || y.refund_status === x).length;
+          const count = section === 'disputes'
+            ? disputes.filter(y => x === 'all' || y.status === x).length
+            : bookings.filter(y => x === 'all' || y.refund_status === x).length;
           const isFilterActive = filter === x;
           return (
             <button key={x} type="button" onClick={() => { setFilter(x); setSelected(null); }}
@@ -345,6 +357,7 @@ export default function RefundManagement() {
           );
         })}
       </div>
+      )}
 
       <div style={{ position: 'relative', marginBottom: 24, maxWidth: 420 }}>
         <Search size={18} color="#9CA3AF" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
@@ -374,7 +387,7 @@ export default function RefundManagement() {
                   <p style={{ ...muted, margin: '8px 0 0', fontFamily: 'monospace' }}>Reference: {s.transfer_reference || 'Not provided'}</p>
                 </div>
                 <button type="button" style={button} onClick={() => void openDetails('submissions', s.booking_id)}>
-                  <Eye size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} /> View evidence
+                  <Eye size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} /> View Submitted Evidence
                 </button>
               </div>
             </div>
@@ -427,7 +440,7 @@ export default function RefundManagement() {
         ) && (
           <div style={{ ...panel, textAlign: 'center', padding: 60, color: '#6B7280' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 6 }}>No matching records visible</div>
-            <p style={{ ...muted, margin: 0 }}>Try selecting All, clearing the search, or refreshing the records.</p>
+            <p style={{ ...muted, margin: 0 }}>Try clearing the search or refreshing the records.</p>
           </div>
         )}
       </div>

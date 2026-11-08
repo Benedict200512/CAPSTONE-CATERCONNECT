@@ -1,3 +1,4 @@
+import './AdminUnified.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -717,24 +718,24 @@ export default function UserManagement() {
   // -------------------------------------------------------
 
   const roleColor: Record<string, string> = {
-    customer: '#2563EB',
-    caterer: '#7C3AED',
-    staff: '#16A34A',
-    admin: '#F97316',
+    customer: '#475569',
+    caterer: '#C2410C',
+    staff: '#64748B',
+    admin: '#EA580C',
   };
 
   const roleBg: Record<string, string> = {
-    customer: '#EFF6FF',
-    caterer: '#F5F3FF',
-    staff: '#F0FDF4',
-    admin: '#FFF7ED',
+    customer: '#F1F5F9',
+    caterer: '#FFF7ED',
+    staff: '#F1F5F9',
+    admin: '#FFEDD5',
   };
 
   const roleBorder: Record<string, string> = {
-    customer: '#BFDBFE',
-    caterer: '#DDD6FE',
-    staff: '#BBF7D0',
-    admin: '#FFEDD5',
+    customer: '#E2E8F0',
+    caterer: '#FED7AA',
+    staff: '#E2E8F0',
+    admin: '#FDBA74',
   };
 
   const tabs = ['all', 'customer', 'caterer', 'staff', 'admin'];

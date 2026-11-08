@@ -47,6 +47,7 @@ const SERVING_UNITS = [
   { label: 'cup', value: 'cup' },
   { label: 'bottle', value: 'bottle' },
   { label: 'gallon', value: 'gallon' },
+  { label: 'Other', value: '__other__' },
 ];
 
 const EMPTY_FORM = {
@@ -70,6 +71,8 @@ export default function MenuScreen() {
   const [activeCategory, setActiveCategory] = useState('main_course');
   const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [customServingUnit, setCustomServingUnit] = useState('');
+  const [showCustomServingUnit, setShowCustomServingUnit] = useState(false);
 
   const load = async () => {
     if (!catererData?.id) {
@@ -131,6 +134,8 @@ export default function MenuScreen() {
   const openAdd = () => {
     setEditing(null);
     setForm({ ...EMPTY_FORM, category: activeCategory });
+    setCustomServingUnit('');
+    setShowCustomServingUnit(false);
     setShowForm(true);
   };
 
@@ -145,6 +150,9 @@ export default function MenuScreen() {
       serving_unit: item.serving_unit ?? 'per person',
       image_url: item.image_url ?? '',
     });
+    const knownUnit = SERVING_UNITS.some(u => u.value === (item.serving_unit ?? 'per person') && u.value !== '__other__');
+    setShowCustomServingUnit(!knownUnit);
+    setCustomServingUnit(knownUnit ? '' : (item.serving_unit ?? ''));
     setShowForm(true);
   };
 
@@ -210,6 +218,11 @@ export default function MenuScreen() {
       return;
     }
 
+    const resolvedUnit = showCustomServingUnit ? customServingUnit.trim().replace(/\s+/g, ' ') : form.serving_unit;
+    if (showCustomServingUnit && !resolvedUnit) {
+      Alert.alert('Required', 'Enter a custom serving unit.');
+      return;
+    }
     setSaving(true);
 
     const payload = {
@@ -219,7 +232,7 @@ export default function MenuScreen() {
       description: form.description.trim() || null,
       price_per_guest: price,
       serving_size: servingSize,
-      serving_unit: form.serving_unit || null,
+      serving_unit: resolvedUnit || null,
       image_url: form.image_url || null,
     };
 
@@ -646,17 +659,27 @@ export default function MenuScreen() {
                     onPress={() => setShowUnitPicker(true)}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.unitPickerBtnText}>{form.serving_unit}</Text>
+                    <Text style={styles.unitPickerBtnText}>{showCustomServingUnit ? (customServingUnit || 'Other') : form.serving_unit}</Text>
                     <ChevronDown size={16} color={Colors.textMuted} />
                   </TouchableOpacity>
                 </View>
 
+                {showCustomServingUnit && (
+                  <TextInput
+                    style={[styles.formInput, { marginTop: 10 }]}
+                    placeholder="Enter unit (e.g. bilao)"
+                    placeholderTextColor={Colors.textMuted}
+                    value={customServingUnit}
+                    onChangeText={setCustomServingUnit}
+                    maxLength={40}
+                  />
+                )}
                 {(form.serving_size || form.serving_unit) && (
                   <View style={styles.servingPreview}>
                     <Text style={styles.servingPreviewLabel}>Preview:</Text>
                     <Text style={styles.servingPreviewValue}>
                       {form.serving_size ? `${form.serving_size} ` : ''}
-                      {form.serving_unit}
+                      {showCustomServingUnit ? (customServingUnit || 'Other') : form.serving_unit}
                     </Text>
                   </View>
                 )}
@@ -691,11 +714,11 @@ export default function MenuScreen() {
                           styles.exampleChip,
                           isActive && styles.exampleChipActive,
                         ]}
-                        onPress={() => setForm(current => ({
+                        onPress={() => { setShowCustomServingUnit(false); setForm(current => ({
                           ...current,
                           serving_size: example.size,
                           serving_unit: example.unit,
-                        }))}
+                        })); }}
                         activeOpacity={0.85}
                       >
                         <Text
@@ -734,10 +757,13 @@ export default function MenuScreen() {
                         key={unit.value}
                         style={styles.unitOption}
                         onPress={() => {
-                          setForm(current => ({
-                            ...current,
-                            serving_unit: unit.value,
-                          }));
+                          if (unit.value === '__other__') {
+                            setShowCustomServingUnit(true);
+                            setForm(current => ({ ...current, serving_unit: '__other__' }));
+                          } else {
+                            setShowCustomServingUnit(false);
+                            setForm(current => ({ ...current, serving_unit: unit.value }));
+                          }
                           setShowUnitPicker(false);
                         }}
                         activeOpacity={0.8}

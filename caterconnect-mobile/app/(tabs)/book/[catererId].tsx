@@ -178,6 +178,8 @@ export default function BookingWizard() {
 
   const [guestCount, setGuestCount]   = useState('');
   const [eventType, setEventType]     = useState('');
+  const [customEventType, setCustomEventType] = useState('');
+  const resolvedEventType = eventType === 'Other' ? customEventType.trim() : eventType;
   const [venue, setVenue]             = useState('');
   const [specialReqs, setSpecialReqs] = useState('');
 
@@ -298,6 +300,9 @@ export default function BookingWizard() {
       }
       if (!eventType) {
         Alert.alert('Event Type', 'Please select an event type.'); return false;
+      }
+      if (eventType === 'Other' && (resolvedEventType.length < 2 || resolvedEventType.length > 80)) {
+        Alert.alert('Custom Event Type', 'Please enter an event type between 2 and 80 characters.'); return false;
       }
       if (!venue.trim()) {
         Alert.alert('Venue Required', 'Please enter or pin your event venue location on the map.'); return false;
@@ -428,7 +433,7 @@ export default function BookingWizard() {
         downpayment_amount: downpayment,
         downpayment_deadline: deadline,
         status: 'pending',
-        event_type: eventType,
+        event_type: resolvedEventType,
         venue: venue.trim(),
         special_requests: specialReqs.trim() || null,
         customized_items: customItems.length > 0 ? customItems.map(c => ({
@@ -769,6 +774,22 @@ export default function BookingWizard() {
                   </TouchableOpacity>
                 ))}
               </View>
+              {eventType === 'Other' && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.fieldLabel}>Specify Event Type *</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="e.g. Christening, Graduation, Fiesta"
+                    placeholderTextColor={Colors.textMuted}
+                    value={customEventType}
+                    onChangeText={setCustomEventType}
+                    maxLength={80}
+                    autoCapitalize="words"
+                    returnKeyType="done"
+                    accessibilityLabel="Specify other event type"
+                  />
+                </View>
+              )}
             </View>
 
             {/* Venue & Map Picker */}
@@ -988,7 +1009,7 @@ export default function BookingWizard() {
                   { label: 'Date',      value: formattedDateString },
                   { label: 'Time',      value: formattedTimeString },
                   { label: 'Guests',    value: `${guests} guests` },
-                  { label: 'Event Type', value: eventType },
+                  { label: 'Event Type', value: resolvedEventType },
                   { label: 'Venue',     value: venue },
                   ...(specialReqs ? [{ label: 'Special Requests', value: specialReqs }] : []),
                 ].map(row => (

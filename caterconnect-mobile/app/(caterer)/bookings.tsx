@@ -230,6 +230,10 @@ export default function CatererBookings() {
   const [savingDisputeReply, setSavingDisputeReply] = useState(false);
   const [disputeProofUrl, setDisputeProofUrl] = useState<string | null>(null);
   const [loadingDisputeProof, setLoadingDisputeProof] = useState(false);
+  const [disputeProofError, setDisputeProofError] = useState('');
+  const [bookingProofUrl, setBookingProofUrl] = useState<string | null>(null);
+  const [bookingProofError, setBookingProofError] = useState('');
+  const [bookingProofLoading, setBookingProofLoading] = useState(false);
   const [refundReference, setRefundReference] = useState('');
   const [refundProof, setRefundProof] = useState<{ base64: string; mimeType: string; uri: string } | null>(null);
   const [submittingRefund, setSubmittingRefund] = useState(false);
@@ -407,14 +411,57 @@ export default function CatererBookings() {
     setActiveDispute(dispute);
     setDisputeReply(dispute.caterer_response ?? '');
     setDisputeProofUrl(null);
+    setDisputeProofError('');
     const submission = refundSubmissions[dispute.booking_id];
     if (!submission?.proof_path) return;
     setLoadingDisputeProof(true);
-    const { data, error } = await supabase.storage
-      .from('refund-proofs').createSignedUrl(submission.proof_path, 300);
-    if (error) console.warn('Unable to load refund proof:', error.message);
-    setDisputeProofUrl(data?.signedUrl ?? null);
-    setLoadingDisputeProof(false);
+    try {
+      const { data, error } = await supabase.storage
+        .from('refund-proofs').createSignedUrl(submission.proof_path, 300);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error('The receipt link was not returned.');
+      setDisputeProofUrl(data.signedUrl);
+    } catch (error: any) {
+      setDisputeProofError(error?.message ?? 'Could not access the private receipt.');
+    } finally {
+      setLoadingDisputeProof(false);
+    }
+  };
+
+  // Private proof links expire; request a fresh signed URL for the selected booking.
+  useEffect(() => {
+    let alive = true;
+    setBookingProofUrl(null);
+    setBookingProofError('');
+    const proofPath = selected ? refundSubmissions[selected.id]?.proof_path : null;
+    if (!proofPath) { setBookingProofLoading(false); return; }
+    setBookingProofLoading(true);
+    void (async () => {
+      try {
+        const { data, error } = await supabase.storage
+          .from('refund-proofs').createSignedUrl(proofPath, 300);
+        if (error) throw error;
+        if (!data?.signedUrl) throw new Error('The receipt link was not returned.');
+        if (alive) setBookingProofUrl(data.signedUrl);
+      } catch (error: any) {
+        if (alive) setBookingProofError(error?.message ?? 'Could not access the private receipt.');
+      } finally {
+        if (alive) setBookingProofLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [selected?.id, refundSubmissions]);
+
+  const openPrivateRefundReceipt = async (proofPath: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('refund-proofs').createSignedUrl(proofPath, 300);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error('A receipt link was not returned.');
+      await Linking.openURL(data.signedUrl);
+    } catch (error: any) {
+      Alert.alert('Receipt unavailable', error?.message ?? 'Unable to open private refund receipt.');
+    }
   };
 
   const submitDisputeReply = async () => {
@@ -1059,8 +1106,17 @@ export default function CatererBookings() {
                       <Text style={styles.disputeInfo}>Proof status: {submission.status}</Text>
                       <Text style={styles.disputeInfo}>Submitted: {new Date(submission.submitted_at).toLocaleString('en-PH')}</Text>
                       {loadingDisputeProof && <ActivityIndicator color={Colors.orange} />}
-                      {disputeProofUrl && <Image source={{ uri: disputeProofUrl }} resizeMode="contain" style={styles.disputeReceiptImage} />}
-                      {!loadingDisputeProof && !disputeProofUrl && <Text style={styles.refundHint}>Receipt image unavailable. Check your storage access policy.</Text>}
+                      {disputeProofUrl && !/\.pdf(?:\?|$)/i.test(submission.proof_path) && (
+                        <Image source={{ uri: disputeProofUrl }} resizeMode="contain" style={styles.disputeReceiptImage}
+                          onError={() => setDisputeProofError('The receipt image could not be displayed. Open the private file instead.')} />
+                      )}
+                      {disputeProofUrl && (
+                        <TouchableOpacity style={styles.refundProofButton} onPress={() => void openPrivateRefundReceipt(submission.proof_path)}>
+                          <Text style={styles.refundProofButtonText}>Open private transfer proof</Text>
+                        </TouchableOpacity>
+                      )}
+                      {!!disputeProofError && <Text style={styles.refundHint}>{disputeProofError}</Text>}
+                      {!loadingDisputeProof && !disputeProofUrl && !disputeProofError && <Text style={styles.refundHint}>No viewable receipt link is available.</Text>}
                     </>
                   ) : <Text style={styles.refundHint}>No transfer proof has been submitted yet.</Text>}
                 </View>
@@ -1263,6 +1319,19 @@ export default function CatererBookings() {
                             Staff note: {refundSubmissions[selected.id].review_note}
                           </Text>
                         )}
+                        {bookingProofLoading && <ActivityIndicator color={Colors.orange} />}
+                        {bookingProofUrl && !/\.pdf(?:\?|$)/i.test(refundSubmissions[selected.id].proof_path) && (
+                          <Image source={{ uri: bookingProofUrl }} resizeMode="contain" style={styles.refundProofPreview}
+                            onError={() => setBookingProofError('Unable to display the image. Try opening the file.')} />
+                        )}
+                        {bookingProofUrl && (
+                          <TouchableOpacity style={styles.refundProofButton}
+                            onPress={() => void openPrivateRefundReceipt(refundSubmissions[selected.id].proof_path)}>
+                            <Text style={styles.refundProofButtonText}>View private transfer proof</Text>
+                          </TouchableOpacity>
+                        )}
+                        {!!bookingProofError && <Text style={styles.refundHint}>{bookingProofError}</Text>}
+
                         <Text style={styles.refundHint}>
                           {refundSubmissions[selected.id].status === 'rejected'
                             ? 'An issue was flagged with this evidence. Contact Platform Staff about corrections.'

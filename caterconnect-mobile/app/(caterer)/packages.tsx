@@ -83,6 +83,8 @@ export default function PackagesScreen() {
   const [includes, setIncludes]       = useState<string[]>([]);
   const [customInclude, setCustomInclude] = useState('');
   const [eventTypes, setEventTypes]   = useState<string[]>([]);
+  const [customEventType, setCustomEventType] = useState('');
+  const [showCustomEventType, setShowCustomEventType] = useState(false);
   const [imageUrl, setImageUrl]       = useState<string | null>(null);
   
   // New Direct Entry Food State
@@ -158,6 +160,7 @@ export default function PackagesScreen() {
     setPrice(''); setGuestCapacity(''); setMinGuests('');
     setMaxGuests('');
     setIncludes([]); setCustomInclude(''); setEventTypes([]);
+    setCustomEventType(''); setShowCustomEventType(false);
     setFoodInclusions([]); setNewFood('');
     setImageUrl(null);
     setShowModal(true);
@@ -168,13 +171,32 @@ export default function PackagesScreen() {
     setName(pkg.name); setTier(pkg.tier); setDescription(pkg.description ?? '');
     setPrice(String(pkg.price)); setGuestCapacity(String(pkg.guest_capacity)); setMinGuests(String(pkg.min_guests ?? ''));
     setMaxGuests(String(pkg.max_guests ?? ''));
-    setIncludes(pkg.includes ?? []); setEventTypes(pkg.event_types ?? []);
+    setIncludes(pkg.includes ?? []); setEventTypes((pkg.event_types ?? []).filter(e => e !== 'Other'));
+    setCustomEventType(''); setShowCustomEventType((pkg.event_types ?? []).some(e => e === 'Other' || !ALL_EVENT_TYPES.includes(e)));
     setFoodInclusions(pkg.food_inclusions ?? []);
     setImageUrl(pkg.image_url ?? null); setCustomInclude(''); setNewFood('');
     setShowModal(true);
   };
 
-  const toggleEventType = (et: string) => setEventTypes(prev => prev.includes(et) ? prev.filter(e => e !== et) : [...prev, et]);
+  const toggleEventType = (et: string) => {
+    if (et === 'Other') {
+      setShowCustomEventType(current => !current);
+      setCustomEventType('');
+      return;
+    }
+    setEventTypes(prev => prev.includes(et) ? prev.filter(e => e !== et) : [...prev, et]);
+  };
+  const addCustomEventType = () => {
+    const value = customEventType.trim().replace(/\s+/g, ' ');
+    if (!value) return;
+    if (value.length > 60) {
+      Alert.alert('Event type too long', 'Use 60 characters or fewer.');
+      return;
+    }
+    setEventTypes(prev => prev.some(e => e.toLowerCase() === value.toLowerCase()) ? prev : [...prev, value]);
+    setCustomEventType('');
+  };
+  const removeEventType = (value: string) => setEventTypes(prev => prev.filter(e => e !== value));
   const toggleInclude = (item: string) => setIncludes(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
   
   const addCustomInclude = () => {
@@ -645,7 +667,7 @@ export default function PackagesScreen() {
             <Text style={styles.sectionTitle}>SUITABLE EVENT TYPES</Text>
             <View style={styles.eventGrid}>
               {ALL_EVENT_TYPES.map(et => {
-                const isActive = eventTypes.includes(et);
+                const isActive = et === 'Other' ? showCustomEventType : eventTypes.includes(et);
                 return (
                   <TouchableOpacity
                     key={et}
@@ -659,6 +681,38 @@ export default function PackagesScreen() {
                 );
               })}
             </View>
+            {showCustomEventType && (
+              <View style={{ marginTop: 14 }}>
+                <Text style={styles.sectionSub}>Enter another event type, such as Christening, Fiesta, or Graduation.</Text>
+                <View style={styles.customAddRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                    placeholder="Enter custom event type"
+                    placeholderTextColor={Colors.textMuted}
+                    value={customEventType}
+                    onChangeText={setCustomEventType}
+                    onSubmitEditing={addCustomEventType}
+                    returnKeyType="done"
+                    maxLength={60}
+                  />
+                  <TouchableOpacity style={styles.customAddBtn} onPress={addCustomEventType} accessibilityLabel="Add Custom Event Type">
+                    <Plus size={20} color={Colors.white} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            {eventTypes.filter(et => !ALL_EVENT_TYPES.includes(et)).length > 0 && (
+              <View style={styles.selectedPillWrap}>
+                {eventTypes.filter(et => !ALL_EVENT_TYPES.includes(et)).map(et => (
+                  <View key={et} style={styles.selectedPill}>
+                    <Text style={styles.selectedPillText}>{et}</Text>
+                    <TouchableOpacity onPress={() => removeEventType(et)} accessibilityLabel={`Remove ${et}`}>
+                      <XCircle size={16} color={Colors.orange} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
           <TouchableOpacity

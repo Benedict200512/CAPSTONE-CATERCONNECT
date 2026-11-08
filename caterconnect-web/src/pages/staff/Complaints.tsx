@@ -1,3 +1,4 @@
+import './StaffUnified.css';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -208,7 +209,7 @@ export default function Complaints() {
   const totalOpen = counts.open ?? 0;
 
   return (
-    <div className="complaints-page">
+    <div className="complaints-page cc-staff-unified">
       <style>{`
         .complaints-page {
           width: 100%;

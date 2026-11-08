@@ -1,3 +1,4 @@
+import './AdminUnified.css';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -137,10 +138,9 @@ export default function Reports() {
       icon: Calendar,
       title: 'Booking Report',
       desc: 'Export all recent event bookings containing statuses, timelines, caterer entities, and customer data.',
-      color: '#2563EB',
-      bg: '#DBEAFE',
-      accent:
-        'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: 'linear-gradient(135deg, #F97316, #FDBA74)',
       count: data.bookings.length,
       preview: data.bookings.slice(0, 3).map(
         (booking) =>
@@ -154,10 +154,9 @@ export default function Reports() {
       icon: Users,
       title: 'User Directory Report',
       desc: 'Export registered user base across all roles (Customers, Caterers, Staff, Admin) with creation logs.',
-      color: '#7C3AED',
-      bg: '#F5F3FF',
-      accent:
-        'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: 'linear-gradient(135deg, #F97316, #FDBA74)',
       count: data.users.length,
       preview: data.users.slice(0, 3).map(
         (user) =>
@@ -169,10 +168,9 @@ export default function Reports() {
       icon: CreditCard,
       title: 'Revenue Report',
       desc: 'Export confirmed subscription payments organized by tier levels, caterer entities, and total amounts.',
-      color: '#16A34A',
-      bg: '#DCFCE7',
-      accent:
-        'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: 'linear-gradient(135deg, #F97316, #FDBA74)',
       count: data.payments.length,
       preview: data.payments.slice(0, 3).map(
         (payment) =>
@@ -186,10 +184,9 @@ export default function Reports() {
       icon: AlertCircle,
       title: 'Complaint & Ticket Report',
       desc: 'Export customer and partner complaints, tracking current resolution workflows and reporting profiles.',
-      color: '#DC2626',
-      bg: '#FEE2E2',
-      accent:
-        'linear-gradient(135deg, #DC2626 0%, #F87171 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: 'linear-gradient(135deg, #F97316, #FDBA74)',
       count: data.complaints.length,
       preview: data.complaints.slice(0, 3).map(
         (complaint) =>

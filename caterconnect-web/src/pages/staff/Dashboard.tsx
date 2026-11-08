@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, AlertTriangle, Calendar, CheckCircle2, ShieldCheck, History, Loader2, ArrowRight, Banknote, Bell, CheckCheck, RefreshCw, Store, UserRound, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ShieldCheck, Loader2, ArrowRight, Banknote, Bell, CheckCheck, RefreshCw, Store, UserRound, X, Activity, FileClock, BarChart3 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import './StaffDashboard.css';
 
 type StaffNotification = {
   id: string;
@@ -33,11 +34,66 @@ function sortStaffNotifications(items: StaffNotification[]) {
   ).slice(0, 50);
 }
 
+
+type ActivityRecord = { id: string; title: string; details: string; at: string; kind: 'booking' | 'caterer' | 'complaint' };
+type QueueItem = { id: string; business_name: string; created_at: string };
+type DailyPoint = { date: string; label: string; bookings: number; applications: number; complaints: number };
+const PH_TIMEZONE = 'Asia/Manila';
+const fmt = (n: number) => n.toLocaleString('en-PH');
+const relativeTime = (timestamp: string) => new Date(timestamp).toLocaleString('en-PH', { timeZone: PH_TIMEZONE, dateStyle: 'medium', timeStyle: 'short' });
+// Day boundaries in Philippine local time. Supabase stores timestamptz in UTC.
+const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
+function lastSevenDays(): { start: string; end: string; label: string; date: string }[] {
+  const now = new Date();
+  const currentPhDate = new Date(now.getTime() + PH_OFFSET_MS).toISOString().slice(0, 10);
+  const today = Date.parse(currentPhDate + 'T00:00:00Z');
+  return Array.from({ length: 7 }, (_, index) => {
+    const localDay = today + (index - 6) * 86400000;
+    const date = new Date(localDay).toISOString().slice(0, 10);
+    return {
+      date,
+      label: new Date(localDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      start: new Date(localDay - PH_OFFSET_MS).toISOString(),
+      end: new Date(localDay + 86400000 - PH_OFFSET_MS).toISOString(),
+    };
+  });
+}
+function OperationChart({ points, loading }: { points: DailyPoint[]; loading: boolean }) {
+  const w = 610, h = 248, padL = 43, padR = 14, padT = 14, padB = 32;
+  const rows = [
+    { key: 'bookings' as const, label: 'Bookings', color: '#F97316' },
+    { key: 'applications' as const, label: 'Applications', color: '#FB923C' },
+    { key: 'complaints' as const, label: 'Complaints', color: '#FDBA74' },
+  ];
+  const maximum = Math.max(1, ...points.flatMap(p => rows.map(r => p[r.key])));
+  const yMax = maximum <= 4 ? 4 : Math.ceil(maximum / 4) * 4;
+  const x = (i: number) => padL + i * (w - padL - padR) / 6;
+  const y = (v: number) => padT + (h - padT - padB) * (1 - v / yMax);
+  const poly = (key: typeof rows[number]['key']) => points.map((p, i) => `${x(i)},${y(p[key])}`).join(' ');
+  if (loading) return <div className="cc-staff-chart-empty"><Loader2 size={21} className="animate-spin" /> Loading actual operation trends...</div>;
+  if (!points.length) return <div className="cc-staff-chart-empty">Operation trend is unavailable.</div>;
+  return <div className="cc-staff-chart-wrap">
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Daily newly recorded bookings, caterer applications and complaints during the last seven days" className="cc-staff-chart">
+      {Array.from({ length: 5 }, (_, i) => <g key={i}><line x1={padL} x2={w-padR} y1={y(yMax*i/4)} y2={y(yMax*i/4)} stroke="#EDE8E2" /><text x={padL-9} y={y(yMax*i/4)+4} textAnchor="end" fill="#94A3B8" fontSize="11">{fmt(yMax*i/4)}</text></g>)}
+      {points.map((p,i) => <text key={p.date} x={x(i)} y={h-6} textAnchor="middle" fill="#94A3B8" fontSize="11">{p.label}</text>)}
+      <defs><linearGradient id="ccStaffChartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#F97316" stopOpacity=".19"/><stop offset="1" stopColor="#F97316" stopOpacity="0"/></linearGradient></defs>
+      <polygon points={`${x(0)},${y(0)} ${poly('bookings')} ${x(6)},${y(0)}`} fill="url(#ccStaffChartFill)"/>
+      {rows.map(r => <g key={r.key}><polyline points={poly(r.key)} fill="none" stroke={r.color} strokeWidth={r.key==='bookings'?3:2.3} strokeLinejoin="round" strokeLinecap="round"/>{points.map((p,i)=><circle key={p.date} cx={x(i)} cy={y(p[r.key])} r="3.5" stroke="white" strokeWidth="1.5" fill={r.color}><title>{p.label}: {p[r.key]} {r.label.toLowerCase()}</title></circle>)}</g>)}
+    </svg>
+    <div className="cc-staff-chart-legend">{rows.map(r=><span key={r.key}><i style={{background:r.color}}/>{r.label}</span>)}</div>
+  </div>;
+}
+
 export default function StaffDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ pending: 0, complaints: 0, bookings: 0, approved: 0, rejected: 0, refunds: 0, pendingBookings: 0 });
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityRecord[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [complaintCounts, setComplaintCounts] = useState({ open: 0, in_review: 0, resolved: 0 });
+  const [disputeCounts, setDisputeCounts] = useState({ open: 0, investigating: 0, resolved: 0 });
+  const [dailyCounts, setDailyCounts] = useState<DailyPoint[]>([]);
+  const [dashboardError, setDashboardError] = useState('');
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<StaffNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -179,84 +235,81 @@ export default function StaffDashboard() {
     navigate(destination);
   };
 
-  useEffect(() => {
-    const load = async () => {
-      const [pendingRes, complaintRes, bookingRes, approvedRes, rejectedRes, refundRes, pendingBookingsRes, recentBookings] = await Promise.all([
-        supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-        supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+
+  // Independent read-only dashboard analytics. Staff module actions and notifications are unchanged.
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setDashboardError('');
+    try {
+      const days = lastSevenDays();
+      const [pendingRes, complaintRes, bookingRes, approvedRes, rejectedRes, refundRes, pendingBookingsRes,
+        pendingQueueRes, complaintReviewRes, complaintResolvedRes, disputeOpenRes, disputeInvestigatingRes, disputeResolvedRes,
+        recentBookingsRes, recentCaterersRes, recentComplaintsRes, ...daily] = await Promise.all([
+        supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status','pending'),
+        supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status','open'),
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
-        supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'approved'),
-        supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status', 'rejected'),
-        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('refund_status', 'pending'),
-        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('bookings').select('id, status, created_at, profiles(full_name), caterers(business_name)').order('created_at', { ascending: false }).limit(3),
+        supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status','approved'),
+        supabase.from('caterers').select('id', { count: 'exact', head: true }).eq('verification_status','rejected'),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('refund_status','pending'),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status','pending'),
+        supabase.from('caterers').select('id, business_name, created_at').eq('verification_status','pending').order('created_at',{ascending:false}).limit(3),
+        supabase.from('complaints').select('id',{count:'exact',head:true}).eq('status','in_review'),
+        supabase.from('complaints').select('id',{count:'exact',head:true}).eq('status','resolved'),
+        supabase.from('refund_disputes').select('id',{count:'exact',head:true}).eq('status','open'),
+        supabase.from('refund_disputes').select('id',{count:'exact',head:true}).eq('status','investigating'),
+        supabase.from('refund_disputes').select('id',{count:'exact',head:true}).eq('status','resolved'),
+        supabase.from('bookings').select('id, status, created_at').order('created_at',{ascending:false}).limit(5),
+        supabase.from('caterers').select('id, business_name, created_at').order('created_at',{ascending:false}).limit(5),
+        supabase.from('complaints').select('id, subject, created_at').order('created_at',{ascending:false}).limit(5),
+        ...days.flatMap(day => [
+          supabase.from('bookings').select('id',{count:'exact',head:true}).gte('created_at',day.start).lt('created_at',day.end),
+          supabase.from('caterers').select('id',{count:'exact',head:true}).gte('created_at',day.start).lt('created_at',day.end),
+          supabase.from('complaints').select('id',{count:'exact',head:true}).gte('created_at',day.start).lt('created_at',day.end),
+        ]),
       ]);
-
-      setStats({
-        pending: pendingRes.count ?? 0,
-        complaints: complaintRes.count ?? 0,
-        bookings: bookingRes.count ?? 0,
-        approved: approvedRes.count ?? 0,
-        rejected: rejectedRes.count ?? 0,
-        refunds: refundRes.count ?? 0,
-        pendingBookings: pendingBookingsRes.count ?? 0,
-      });
-
-      const activity = [
-        ...(recentBookings.data ?? []).map((b: any) => ({
-          Icon: Calendar, color: '#F97316', bg: '#FFF7ED', border: '#FFEDD5',
-          text: `${(b.profiles as any)?.full_name ?? '—'} booked ${(b.caterers as any)?.business_name ?? '—'}`,
-          sub: `Status: ${b.status}`, time: b.created_at,
-        })),
-      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 3);
-
-      setRecentActivity(activity);
-      setLoading(false);
-    };
-    load();
-  }, []);
-
-  const timeAgo = (ts: string) => {
-    const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
-    if (m < 1) return 'Just now';
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
-  };
-
-  const cards = [
-    { Icon: Clock, label: 'Pending Verifications', value: stats.pending, color: '#D97706', bg: '#FEF3C7', accent: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)', path: '/staff/verification', urgent: stats.pending > 0 },
-    { Icon: AlertTriangle, label: 'Open Complaints', value: stats.complaints, color: '#DC2626', bg: '#FEE2E2', accent: 'linear-gradient(135deg, #DC2626 0%, #F87171 100%)', path: '/staff/complaints', urgent: stats.complaints > 0 },
-    { Icon: Calendar, label: 'Total Bookings', value: stats.bookings, color: '#16A34A', bg: '#DCFCE7', accent: 'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)', path: '/staff/bookings', urgent: false },
-    { Icon: Banknote, label: 'Pending Refunds', value: stats.refunds, color: '#9333EA', bg: '#F3E8FF', accent: 'linear-gradient(135deg, #9333EA 0%, #A855F7 100%)', path: '/staff/refunds', urgent: stats.refunds > 0 },
+      const sources = [pendingRes,complaintRes,bookingRes,approvedRes,rejectedRes,refundRes,pendingBookingsRes,
+        pendingQueueRes,complaintReviewRes,complaintResolvedRes,disputeOpenRes,disputeInvestigatingRes,disputeResolvedRes,
+        recentBookingsRes,recentCaterersRes,recentComplaintsRes,...daily];
+      const failure = sources.find(response => response.error);
+      if (failure?.error) throw failure.error;
+      setStats({ pending: pendingRes.count??0, complaints: complaintRes.count??0, bookings: bookingRes.count??0,
+        approved: approvedRes.count??0, rejected: rejectedRes.count??0, refunds: refundRes.count??0,
+        pendingBookings: pendingBookingsRes.count??0 });
+      setComplaintCounts({open:complaintRes.count??0,in_review:complaintReviewRes.count??0,resolved:complaintResolvedRes.count??0});
+      setDisputeCounts({open:disputeOpenRes.count??0, investigating:disputeInvestigatingRes.count??0, resolved:disputeResolvedRes.count??0});
+      setQueue((pendingQueueRes.data??[]) as QueueItem[]);
+      setDailyCounts(days.map((day,i) => ({ date:day.date,label:day.label,bookings:daily[i*3].count??0,applications:daily[i*3+1].count??0,complaints:daily[i*3+2].count??0 })));
+      const recent: ActivityRecord[] = [
+        ...(recentBookingsRes.data??[]).map(item=>({id:'b-'+item.id,title:'New booking recorded',details:`Current status: ${item.status ?? 'unknown'}`,at:item.created_at,kind:'booking' as const})),
+        ...(recentCaterersRes.data??[]).map(item=>({id:'c-'+item.id,title:'Caterer registered',details:item.business_name??'Unnamed catering business',at:item.created_at,kind:'caterer' as const})),
+        ...(recentComplaintsRes.data??[]).map(item=>({id:'t-'+item.id,title:'Support ticket created',details:item.subject??'New support ticket',at:item.created_at,kind:'complaint' as const})),
+      ].filter(item=>Boolean(item.at)).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,5);
+      setRecentActivity(recent);
+    } catch (cause) {
+      console.error('Staff dashboard loading failed:',cause);
+      setDashboardError(cause instanceof Error ? cause.message : 'Unable to load staff statistics.');
+    } finally { setLoading(false); }
+  },[]);
+  useEffect(() => { void loadDashboard(); }, [loadDashboard]);
+  const headline = [
+    {label:'Pending Verifications',value:stats.pending,icon:ShieldCheck,path:'/staff/verification'},
+    {label:'Open Complaints',value:stats.complaints,icon:AlertTriangle,path:'/staff/complaints'},
+    {label:'Pending Refunds',value:stats.refunds,icon:Banknote,path:'/staff/refunds'},
+    {label:'Total Bookings',value:stats.bookings,icon:Calendar,path:'/staff/bookings'},
   ];
-
-  const actions = [
-    { Icon: CheckCircle2, title: 'Review Applications', desc: 'Process pending caterer verification queues', path: '/staff/verification', color: '#D97706', bg: '#FEF3C7', count: stats.pending },
-    { Icon: AlertTriangle, title: 'Handle Complaints', desc: 'Investigate and resolve active platform disputes', path: '/staff/complaints', color: '#DC2626', bg: '#FEE2E2', count: stats.complaints },
-    { Icon: Calendar, title: 'Monitor Bookings', desc: 'Track event statuses across the marketplace', path: '/staff/bookings', color: '#16A34A', bg: '#DCFCE7', count: stats.pendingBookings },
-    { Icon: Banknote, title: 'Process Refunds', desc: 'Manage and disburse pending customer refunds', path: '/staff/refunds', color: '#9333EA', bg: '#F3E8FF', count: stats.refunds },
+  const daysTotal = dailyCounts.reduce((sum,d)=>sum+d.bookings+d.applications+d.complaints,0);
+  const countOperations = (key: 'bookings'|'applications'|'complaints') => dailyCounts.reduce((sum,day)=>sum+day[key],0);
+  const queueSummary = [
+    {label:'Account Verifications', value:stats.pending, path:'/staff/verification', icon:ShieldCheck},
+    {label:'Open Complaints', value:stats.complaints, path:'/staff/complaints', icon:AlertTriangle},
+    {label:'Refund Requests', value:stats.refunds, path:'/staff/refunds', icon:Banknote},
   ];
-
   return (
-    <div style={{ paddingBottom: 40 }}>
-      {/* Header Section */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111', marginBottom: 6, letterSpacing: '-0.5px' }}>
-            Welcome back, {profile?.full_name?.split(' ')[0] ?? 'Staff'}! 👋
-          </h1>
-          <p style={{ fontSize: 15, color: '#6B7280', margin: 0 }}>
-            Here is your live operations and queue overview for today.
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 999, padding: '8px 20px', fontSize: 13, color: '#4B5563', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-            <Calendar size={16} color="#F97316" />
-            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </div>
-
+    <div className="cc-staff-modern">
+      <header className="cc-staff-header">
+        <div><span className="cc-staff-eyebrow">CATERCONNECT / STAFF DASHBOARD</span><h1>Welcome back, {profile?.full_name?.split(' ')[0] ?? 'Staff'}! <span aria-hidden="true">👋</span></h1><p>Your operations workspace for verifications, complaints, refunds and platform support.</p></div>
+        <div className="cc-staff-header-actions">
+          <span className="cc-staff-date"><Calendar size={16} color="#EA580C"/>{new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:PH_TIMEZONE})}</span>
           <div className="staff-notification-anchor">
             <button
               type="button"
@@ -418,123 +471,21 @@ export default function StaffDashboard() {
             )}
           </div>
         </div>
+      </header>
+      {dashboardError && <div role="alert" className="cc-staff-error">Could not load dashboard data: {dashboardError} <button type="button" onClick={()=>void loadDashboard()}>Try again</button></div>}
+      <div className="cc-staff-kpis">{headline.map((item,i)=>{const Icon=item.icon;return <button className={`cc-staff-kpi ${i===0?'emphasized':''}`} key={item.label} type="button" onClick={()=>navigate(item.path)}><div className="cc-staff-kpi-top"><span className="cc-staff-icon"><Icon size={20}/></span><ArrowRight size={17} color="#CBD5E1"/></div><strong>{loading?'—':fmt(item.value)}</strong><span>{item.label}</span><small>{i===0?'Caterer applications awaiting review':i===1?'Support tickets with open status':i===2?'Bookings awaiting refund processing':'All recorded marketplace bookings'}</small></button>})}</div>
+      <div className="cc-staff-main-grid">
+        <section className="cc-staff-panel"><div className="cc-staff-panel-head"><div><h2><BarChart3 size={20}/> Operation Overview</h2><p>New bookings, caterer registrations and complaints · Last 7 days (Philippine time)</p></div><span className="cc-staff-period">Last 7 days</span></div><div className="cc-staff-operation-layout"><OperationChart points={dailyCounts} loading={loading}/><div className="cc-staff-chart-summary"><span>7-Day New Records</span><strong>{loading?'—':fmt(daysTotal)}</strong><div className="cc-staff-mini-line"><i style={{background:'#F97316'}}/>Bookings <b>{loading?'—':fmt(countOperations('bookings'))}</b></div><div className="cc-staff-mini-line"><i style={{background:'#FB923C'}}/>Applications <b>{loading?'—':fmt(countOperations('applications'))}</b></div><div className="cc-staff-mini-line"><i style={{background:'#FDBA74'}}/>Complaints <b>{loading?'—':fmt(countOperations('complaints'))}</b></div></div></div></section>
+        <section className="cc-staff-panel"><div className="cc-staff-panel-head"><div><h2><FileClock size={20}/> Queue Status</h2><p>Cases currently needing staff attention.</p></div></div><div className="cc-staff-queue-status">{queueSummary.map(item=>{const Icon=item.icon;return <button type="button" key={item.label} onClick={()=>navigate(item.path)}><span className="cc-staff-icon"><Icon size={18}/></span><span>{item.label}</span><strong>{loading?'—':fmt(item.value)}</strong><ArrowRight size={16}/></button>})}</div><div className="cc-staff-queue-footer">{loading?'Loading queue…':`${fmt(stats.pendingBookings)} booking(s) with pending status`}</div></section>
       </div>
-      {/* Primary KPI Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-        {cards.map((card, i) => {
-          const Icon = card.Icon;
-          return (
-            <div key={i} onClick={() => navigate(card.path)} style={{ position: 'relative', background: '#FFFFFF', borderRadius: 20, padding: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -2px rgba(0,0,0,0.02)', cursor: 'pointer', transition: 'all 0.2s ease', overflow: 'hidden' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 20px -3px rgba(0,0,0,0.08)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.02)'; }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: card.accent }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, marginTop: 4 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 12, background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={20} color={card.color} />
-                </div>
-                {card.urgent && card.value > 0 && (
-                  <span style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', padding: '4px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Action
-                  </span>
-                )}
-              </div>
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: '#111', letterSpacing: '-1px', marginBottom: 4 }}>
-                  {loading ? <Loader2 size={20} className="animate-spin" color="#9CA3AF" /> : card.value}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>{card.label}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {/* Main Content Split Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
-        {/* Left Column: Quick Operations Grid */}
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, letterSpacing: '-0.5px' }}>Quick Operations</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }}>
-            {actions.map((a, i) => {
-              const ActionIcon = a.Icon;
-              return (
-                <div key={i} onClick={() => navigate(a.path)} style={{ background: '#FFFFFF', borderRadius: 20, padding: 24, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.06)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.02)'; }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 14, background: a.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <ActionIcon size={22} color={a.color} />
-                      </div>
-                      {a.count > 0 && (
-                        <span style={{ background: a.bg, color: a.color, border: `1px solid ${a.color}40`, borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 900 }}>
-                          {a.count} pending
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: '#111', marginBottom: 6 }}>{a.title}</div>
-                    <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5, marginBottom: 16 }}>{a.desc}</div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: a.color, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    Access Queue <ArrowRight size={14} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <section className="cc-staff-panel cc-staff-workspace"><div className="cc-staff-panel-head"><div><h2><Activity size={20}/> Operations Workspace</h2><p>Review current queues and recent records without duplicated shortcut cards.</p></div><button className="cc-staff-refresh" type="button" onClick={()=>void loadDashboard()} disabled={loading}><RefreshCw size={15}/> Refresh data</button></div>
+        <div className="cc-staff-work-grid">
+          <div className="cc-staff-work-card"><div className="cc-staff-work-heading"><h3><ShieldCheck size={18}/> Verification Queue</h3><button type="button" onClick={()=>navigate('/staff/verification')}>View All <ArrowRight size={15}/></button></div>{loading?<p className="cc-staff-empty">Loading applications…</p>:queue.length===0?<p className="cc-staff-empty">No pending caterer applications.</p>:<div className="cc-staff-record-list">{queue.map(item=><div key={item.id}><span><b>{item.business_name||'Unnamed caterer'}</b><small>Submitted {relativeTime(item.created_at)}</small></span><span className="cc-staff-pill">Pending</span></div>)}</div>}<button type="button" className="cc-staff-work-footer" onClick={()=>navigate('/staff/verification')}>Process Verifications <ArrowRight size={16}/></button></div>
+          <div className="cc-staff-work-card"><div className="cc-staff-work-heading"><h3><AlertTriangle size={18}/> Complaint Status</h3><button type="button" onClick={()=>navigate('/staff/complaints')}>View All <ArrowRight size={15}/></button></div><div className="cc-staff-breakdown">{[{label:'Open',value:complaintCounts.open},{label:'In Review',value:complaintCounts.in_review},{label:'Resolved',value:complaintCounts.resolved}].map(row=><div key={row.label}><span>{row.label}</span><b>{loading?'—':fmt(row.value)}</b></div>)}</div></div>
+          <div className="cc-staff-work-card"><div className="cc-staff-work-heading"><h3><Banknote size={18}/> Refund Disputes</h3><button type="button" onClick={()=>navigate('/staff/refunds')}>View All <ArrowRight size={15}/></button></div><div className="cc-staff-breakdown">{[{label:'Open',value:disputeCounts.open},{label:'Investigating',value:disputeCounts.investigating},{label:'Resolved',value:disputeCounts.resolved}].map(row=><div key={row.label}><span>{row.label}</span><b>{loading?'—':fmt(row.value)}</b></div>)}</div></div>
+          <div className="cc-staff-work-card"><div className="cc-staff-work-heading"><h3><Activity size={18}/> Recent Activity</h3><span className="cc-staff-muted">Recent recorded events</span></div>{loading?<p className="cc-staff-empty">Loading activity…</p>:recentActivity.length===0?<p className="cc-staff-empty">No recent records found.</p>:<div className="cc-staff-activity-list">{recentActivity.slice(0,4).map(item=><div key={item.id}><span className="cc-staff-activity-dot"/><span><b>{item.title}</b><small>{item.details}</small></span><time>{relativeTime(item.at)}</time></div>)}</div>}</div>
         </div>
-        {/* Right Column: Verification Summary & Recent Activity */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'stretch' }}>
-          {/* Verification Breakdown Widget */}
-          <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', padding: 24 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0', letterSpacing: '-0.5px' }}>
-              <ShieldCheck size={20} color="#111" /> Verification Breakdown
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {[
-                { label: 'Pending Review', value: stats.pending, color: '#D97706', bg: '#FEF3C7', border: '#FDE68A' },
-                { label: 'Approved Vendors', value: stats.approved, color: '#16A34A', bg: '#DCFCE7', border: '#BBF7D0' },
-                { label: 'Rejected Applications', value: stats.rejected, color: '#DC2626', bg: '#FEE2E2', border: '#FECACA' },
-              ].map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: item.bg, borderRadius: 14, border: `1px solid ${item.border}` }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: item.color }}>{item.label}</span>
-                  <span style={{ fontSize: 18, fontWeight: 900, color: item.color }}>{loading ? '—' : item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Live Activity Feed */}
-          <div style={{ background: '#FFFFFF', borderRadius: 20, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', padding: 24, flex: 1 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 20px 0', letterSpacing: '-0.5px' }}>
-              <History size={20} color="#111" /> Recent Operations
-            </h3>
-            {loading ? (
-              <div style={{ fontSize: 14, color: '#9CA3AF', textAlign: 'center', padding: '40px 0' }}>Loading activity logs...</div>
-            ) : recentActivity.length === 0 ? (
-              <div style={{ fontSize: 14, color: '#9CA3AF', textAlign: 'center', padding: '40px 0' }}>No recent marketplace activity recorded.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {recentActivity.map((item, i) => {
-                  const ItemIcon = item.Icon;
-                  return (
-                    <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', paddingBottom: i === recentActivity.length - 1 ? 0 : 16, borderBottom: i === recentActivity.length - 1 ? 'none' : '1px solid #F3F4F6' }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: item.bg, border: `1px solid ${item.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <ItemIcon size={16} color={item.color} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{item.text}</div>
-                        <div style={{ fontSize: 12, color: '#6B7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{item.sub}</span>
-                          <span style={{ fontWeight: 600, color: '#9CA3AF' }}>{timeAgo(item.time)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      </section>
       <style>{`
         .staff-notification-anchor { position: relative; z-index: 50; }
         .staff-notification-dismiss { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; cursor: default; z-index: -1; }

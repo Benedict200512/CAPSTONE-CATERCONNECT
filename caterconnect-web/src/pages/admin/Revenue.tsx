@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import RevenueTrendChart from './RevenueTrendChart';
+import './Revenue.css';
 import { supabase } from '../../lib/supabase';
 import {
-  DollarSign,
+  PhilippinePeso,
   Calendar,
   Clock,
   CreditCard,
@@ -106,9 +108,9 @@ export default function Revenue() {
     basic: {
       label: 'Basic',
       price: 299,
-      color: '#2563EB',
-      bg: '#DBEAFE',
-      border: '#BFDBFE',
+      color: '#C2410C',
+      bg: '#FFF7ED',
+      border: '#FED7AA',
     },
     standard: {
       label: 'Standard',
@@ -120,9 +122,9 @@ export default function Revenue() {
     premium: {
       label: 'Premium',
       price: 999,
-      color: '#7C3AED',
-      bg: '#F5F3FF',
-      border: '#DDD6FE',
+      color: '#9A3412',
+      bg: '#FFEDD5',
+      border: '#FED7AA',
     },
   };
 
@@ -133,12 +135,12 @@ export default function Revenue() {
 
   const kpis = [
     {
-      icon: DollarSign,
+      icon: PhilippinePeso,
       label: 'Total Revenue',
       value: `₱${totalRevenue.toLocaleString()}`,
-      color: '#16A34A',
-      bg: '#DCFCE7',
-      accent: 'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: '#F97316',
     },
     {
       icon: Calendar,
@@ -146,23 +148,23 @@ export default function Revenue() {
       value: `₱${monthRevenue.toLocaleString()}`,
       color: '#F97316',
       bg: '#FFF7ED',
-      accent: 'linear-gradient(135deg, #F97316 0%, #FB923C 100%)',
+      accent: '#F97316',
     },
     {
       icon: Clock,
       label: 'This Week',
       value: `₱${weekRevenue.toLocaleString()}`,
-      color: '#2563EB',
-      bg: '#DBEAFE',
-      accent: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: '#F97316',
     },
     {
       icon: CreditCard,
       label: 'Total Payments',
       value: payments.length.toLocaleString(),
-      color: '#7C3AED',
-      bg: '#F5F3FF',
-      accent: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      accent: '#F97316',
     },
   ];
 
@@ -910,6 +912,8 @@ export default function Revenue() {
           );
         })}
       </div>
+
+      <section className="cc-revenue-page-chart" aria-label="Revenue trend"><RevenueTrendChart payments={payments} loading={loading} totalRevenue={totalRevenue}/></section>
 
       {/* Zero Commission Notice */}
       <div className="revenue-notice">

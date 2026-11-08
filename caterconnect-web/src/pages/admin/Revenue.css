@@ -1,0 +1,45 @@
+/* Additional visual-only styling; retains all Revenue.tsx queries and ledger controls. */
+.revenue-page { color:#0F172A; font-family:Inter,system-ui,sans-serif; }
+.revenue-header h1 { color:#0F172A; font-size:30px; letter-spacing:-.035em; }
+.revenue-header p { color:#64748B; }
+.revenue-kpi-card { border-radius:19px; border-color:#EBE5DE; box-shadow:0 8px 26px rgba(15,23,42,.035); }
+.revenue-kpi-accent, .revenue-plan-accent { display:none; }
+.revenue-kpi-icon { color:#EA580C!important; background:#FFF4E9!important; width:42px;height:42px;border:1px solid #FFE4CB; }
+.revenue-kpi-icon svg { color:#EA580C!important; }
+.revenue-kpi-value { font-size:clamp(30px,2.7vw,41px); letter-spacing:-.045em; color:#0F172A; }
+.revenue-plan-card { border-color:#EBE5DE;border-radius:19px; box-shadow:0 7px 22px rgba(15,23,42,.035); }
+.revenue-plan-name { color:#C2410C!important; }
+.revenue-plan-price { border-color:#FED7AA!important;background:#FFF7ED!important;color:#9A3412!important; }
+.revenue-notice { background:#FFF9F2; border-color:#FEE7D6; box-shadow:none; }
+.revenue-notice h2 { color:#9A3412; }.revenue-notice p { color:#765A48; }
+.revenue-notice-icon { box-shadow:none;background:#FFF0E0; }.revenue-notice-icon svg,.revenue-notice h2 svg { color:#EA580C!important; }
+.revenue-ledger { border-color:#EBE5DE;border-radius:19px;box-shadow:0 7px 22px rgba(15,23,42,.035); }
+.revenue-filter-button.active { color:#C2410C;background:#FFF7ED; }
+.revenue-payment-amount { color:#EA580C; }
+.revenue-page .revenue-kpi-grid { margin-bottom:22px; }
+.cc-revenue-page-chart { background:#FFF;border:1px solid #EBE5DE;border-radius:20px;padding:23px;margin-bottom:28px;box-shadow:0 7px 25px rgba(15,23,42,.035); }
+.cc-revenue-page-chart .cc-revenue-graph-head { display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:13px; }
+.cc-revenue-page-chart .cc-revenue-graph-head h2 { font-size:20px;margin:0 0 5px; }
+.cc-revenue-page-chart .cc-revenue-graph-head p { color:#64748B;font-size:12px;margin:0; }
+.cc-revenue-page-chart .cc-revenue-period { flex:none;padding:8px 12px;border:1px solid #EAE6E1;border-radius:999px;font-size:12px;font-weight:700; }
+.cc-revenue-page-chart .cc-revenue-graph-body { display:flex;gap:15px;align-items:stretch; }
+.cc-revenue-page-chart .cc-revenue-svg-wrap { flex:1;min-width:0; }
+.cc-revenue-page-chart svg { display:block;width:100%;height:auto; }
+.cc-revenue-page-chart .cc-revenue-graph-summary { width:200px;flex:none;border-left:1px solid #EAE6E1;padding:18px 0 12px 24px;display:flex;flex-direction:column;gap:8px; }
+.cc-revenue-page-chart .cc-revenue-graph-summary span { color:#64748B;font-size:12px; }
+.cc-revenue-page-chart .cc-revenue-graph-summary strong { font-size:clamp(27px,2.5vw,40px);font-weight:900;letter-spacing:-.04em;overflow-wrap:anywhere; }
+.cc-revenue-page-chart .cc-revenue-graph-summary b { font-size:21px;color:#EA580C;overflow-wrap:anywhere; }
+.cc-revenue-page-chart .cc-revenue-graph-summary small { color:#94A3B8;font-size:11px;line-height:1.6; }
+.cc-revenue-page-chart .cc-revenue-graph-divider { height:1px;background:#EAE6E1;margin:9px 0; }
+@media(max-width:750px){.cc-revenue-page-chart .cc-revenue-graph-body{flex-direction:column}.cc-revenue-page-chart .cc-revenue-graph-summary{width:100%;border:0;border-top:1px solid #EAE6E1;padding:15px 0 0}.cc-revenue-page-chart{padding:17px}}
+/* Extra specificity ensures these presentation rules win over the existing embedded CSS. */
+.revenue-page .revenue-kpi-card { border-radius:19px;border-color:#EBE5DE;box-shadow:0 8px 26px rgba(15,23,42,.035); }
+.revenue-page .revenue-kpi-accent,.revenue-page .revenue-plan-accent { display:none; }
+.revenue-page .revenue-kpi-icon { background:#FFF4E9!important; width:42px;height:42px;border:1px solid #FFE4CB; }
+.revenue-page .revenue-kpi-value { font-size:clamp(30px,2.7vw,41px);letter-spacing:-.045em;color:#0F172A; }
+.revenue-page .revenue-plan-name { color:#C2410C!important; }
+.revenue-page .revenue-plan-price { background:#FFF7ED!important;border-color:#FED7AA!important;color:#9A3412!important; }
+.revenue-page .revenue-notice { background:#FFF9F2;border-color:#FEE7D6;box-shadow:none; }
+.revenue-page .revenue-notice h2 { color:#9A3412; }
+.revenue-page .revenue-notice p { color:#765A48; }
+.revenue-page .revenue-payment-amount { color:#EA580C; }

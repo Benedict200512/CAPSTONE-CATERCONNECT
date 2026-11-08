@@ -1,9 +1,10 @@
+import './StaffUnified.css';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   CreditCard, Search, Clock,
   AlertCircle, CheckCircle2, Building2,
-  X, Loader2, DollarSign, RefreshCw, Send, Settings2
+  X, Loader2, PhilippinePeso, RefreshCw, Send, Settings2
 } from 'lucide-react';
 
 type Payment = {
@@ -175,7 +176,7 @@ export default function SubscriptionManager() {
   });
 
   return (
-    <div style={{ paddingBottom: 40 }}>
+    <div className="cc-staff-unified cc-staff-subscriptions" style={{ paddingBottom: 40 }}>
       {/* Header Section */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
         <div>
@@ -220,7 +221,7 @@ export default function SubscriptionManager() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
         <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 16, padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <DollarSign size={24} />
+            <PhilippinePeso size={24} />
           </div>
           <div>
             <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Revenue (30 Days)</span>

@@ -1208,7 +1208,7 @@ const openClientChatroom = (booking: Booking) => {
       proofWindow.location.href = data.signedUrl;
     } catch (err) {
       proofWindow.close();
-      setRefundSubmissionError(getErrorMessage(err));
+      setRefundSubmissionError(`Unable to open transfer proof: ${getErrorMessage(err)}. Check signed URL access for this booking.`);
     }
   };
 
@@ -2641,24 +2641,6 @@ const openClientChatroom = (booking: Booking) => {
                       </small>
                     </div>
                   )}
-
-                  {/* AWAITING CUSTOMER CONFIRMATION */}
-                  {selectedBooking.refund_status ===
-                    'awaiting_customer_confirmation' &&
-                    !selectedDispute && (
-                      <div className="booking-receipt-notice">
-                        <Clock size={19} />
-
-                        <div>
-                          <strong>Awaiting Customer Confirmation</strong>
-                          <p>
-                            Your refund transfer proof has been submitted.
-                            The customer must confirm whether they received
-                            the refund.
-                          </p>
-                        </div>
-                      </div>
-                    )}
 
                   {/* COMPLETED REFUND */}
                   {selectedBooking.refund_status === 'processed' && (

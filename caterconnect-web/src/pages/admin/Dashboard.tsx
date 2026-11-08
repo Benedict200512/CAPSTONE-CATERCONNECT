@@ -2,23 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
-  CheckCircle2,
   Clock,
   Calendar,
   Wallet,
   UserCog,
-  Activity,
-  CreditCard,
   TrendingUp,
   ArrowRight,
-  ShieldAlert,
   Store,
   AlertTriangle,
   Loader2,
-  Sparkles,
-  Zap,
-  Crown,
-  Building2,
   Bell,
   X,
   RefreshCw,
@@ -26,6 +18,27 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+
+import './Dashboard.css';
+import RevenueTrendChart from './RevenueTrendChart';
+
+const ORANGE = '#F97316';
+const MONEY = (value: number) => `₱${value.toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
+
+// Consistent CaterConnect role badges for the recent registrations table.
+const roleBg: Record<string, string> = {
+  customer: '#F3F4F6',
+  caterer: '#FFF7ED',
+  staff: '#F3F4F6',
+  admin: '#FFEDD5',
+};
+
+const roleColor: Record<string, string> = {
+  customer: '#475569',
+  caterer: '#C2410C',
+  staff: '#475569',
+  admin: '#9A3412',
+};
 
 type AdminNotification = {
   id: string;
@@ -70,6 +83,9 @@ export default function AdminDashboard() {
   });
 
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [revenueThisMonth, setRevenueThisMonth] = useState(0);
+  const [revenuePayments, setRevenuePayments] = useState<{amount: number|string|null; confirmed_at: string|null}[]>([]);
+  const [roleCounts, setRoleCounts] = useState<Record<string, number>>({ customer: 0, caterer: 0, staff: 0, admin: 0 });
   const [loading, setLoading] = useState(true);
 
   const [notifications, setNotifications] = useState<
@@ -111,6 +127,7 @@ export default function AdminDashboard() {
           pendingRes,
           complaintsRes,
           users,
+          profilesByRole,
         ] = await Promise.all([
           supabase
             .from('profiles')
@@ -141,7 +158,7 @@ export default function AdminDashboard() {
 
           supabase
             .from('subscription_payments')
-            .select('amount')
+            .select('amount, confirmed_at')
             .eq('status', 'confirmed'),
 
           supabase
@@ -172,6 +189,8 @@ export default function AdminDashboard() {
             )
             .order('created_at', { ascending: false })
             .limit(5),
+
+          supabase.from('profiles').select('role'),
         ]);
 
         if (!active) return;
@@ -203,6 +222,13 @@ export default function AdminDashboard() {
         });
 
         setRecentUsers(users.data ?? []);
+        setRevenueThisMonth(revenueCurrTotal);
+        setRevenuePayments((revAll.data ?? []).map(payment => ({ amount: payment.amount, confirmed_at: payment.confirmed_at })));
+        if (!profilesByRole.error) {
+          const counts: Record<string, number> = { customer: 0, caterer: 0, staff: 0, admin: 0 };
+          (profilesByRole.data ?? []).forEach(row => { if (row.role in counts) counts[row.role] += 1; });
+          setRoleCounts(counts);
+        }
       } catch (error) {
         console.error('Failed to load admin dashboard:', error);
       } finally {
@@ -377,98 +403,45 @@ export default function AdminDashboard() {
   navigate(destination);
 };
 
-  const roleColor: Record<string, string> = {
-    customer: '#2563EB',
-    caterer: '#7C3AED',
-    staff: '#16A34A',
-    admin: '#F97316',
-  };
-
-  const roleBg: Record<string, string> = {
-    customer: '#DBEAFE',
-    caterer: '#F5F3FF',
-    staff: '#DCFCE7',
-    admin: '#FEF3E8',
-  };
-
   const adminFullName = profile?.full_name ?? 'Admin';
+  const roleOrder = [
+    { key: 'customer', label: 'Customer', color: '#FED7AA' },
+    { key: 'caterer', label: 'Caterer', color: '#FDBA74' },
+    { key: 'staff', label: 'Staff', color: '#FB923C' },
+    { key: 'admin', label: 'Admin', color: '#C2410C' },
+  ];
+  const roleTotal = roleOrder.reduce((total, role) => total + (roleCounts[role.key] ?? 0), 0);
+  let roleOffset = 0;
+  const roleStops = roleOrder.map(role => {
+    const share = roleTotal ? (roleCounts[role.key] ?? 0) / roleTotal * 100 : 0;
+    const start = roleOffset; roleOffset += share;
+    return `${role.color} ${start}% ${roleOffset}%`;
+  });
+  const cardData = [
+    { label: 'Total Users', value: stats.totalUsers.toLocaleString('en-PH'), change: stats.userTrend, icon: Users, path: '/admin/users' },
+    { label: 'Registered Caterers', value: stats.caterers.toLocaleString('en-PH'), change: stats.catererTrend, icon: Store, path: '/admin/users?role=caterer' },
+    { label: 'Total Bookings', value: stats.bookings.toLocaleString('en-PH'), change: stats.bookingTrend, icon: Calendar, path: '/staff/bookings' },
+    { label: 'Total Revenue', value: MONEY(stats.revenue), change: stats.revenueTrend, icon: Wallet, path: '/admin/revenue' },
+  ];
+  const quickActions = [
+    { label: 'Caterer Verification', icon: Store, path: '/staff/verification' },
+    { label: 'Subscriptions', icon: Wallet, path: '/staff/subscriptions' },
+    { label: 'Complaints', icon: AlertTriangle, path: '/staff/complaints' },
+    { label: 'Booking Monitor', icon: Calendar, path: '/staff/bookings' },
+    { label: 'Account Monitoring', icon: Users, path: '/staff/account-monitoring' },
+    { label: 'Refund Management', icon: Wallet, path: '/staff/refunds' },
+  ];
 
   return (
-    <div
-      style={{
-        paddingBottom: 40,
-        fontFamily: "'Inter', system-ui, sans-serif",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 20,
-          flexWrap: 'wrap',
-          marginBottom: 28,
-        }}
-      >
+    <div className="cc-admin-modern">
+      <header className="cc-admin-header">
         <div>
-          <h1
-            style={{
-              fontSize: 26,
-              fontWeight: 800,
-              color: '#111',
-              marginBottom: 6,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            Welcome back, {adminFullName}! 👋
-          </h1>
-
-          <p
-            style={{
-              fontSize: 14,
-              color: '#6B7280',
-              margin: 0,
-              lineHeight: 1.4,
-            }}
-          >
-            Here is your daily snapshot of CaterConnect&apos;s platform
-            operations.
-          </p>
+          <div className="cc-admin-eyebrow">CATERCONNECT / ADMIN OVERVIEW</div>
+          <h1>Welcome back, {adminFullName}! <span aria-hidden="true">👋</span></h1>
+          <p>Monitor the people, bookings and revenue behind your catering marketplace.</p>
         </div>
-
-        {/* Date and Notification Bell */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid #E8E4DE',
-              borderRadius: 20,
-              padding: '8px 16px',
-              fontSize: 13,
-              color: '#4B5563',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <Calendar size={15} color="#EA580C" />
-            {new Date().toLocaleDateString('en-PH', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </div>
-
+        <div className="cc-admin-header-actions">
+          <div className="cc-admin-date"><Calendar size={16} color={ORANGE}/>{new Date().toLocaleDateString('en-PH', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</div>
           <div style={{ position: 'relative', zIndex: 50 }}>
             {/* Circular notification bell */}
             <button
@@ -951,680 +924,53 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Primary KPI Row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: 20,
-          marginBottom: 28,
-        }}
-      >
-        {[
-          {
-            label: 'Total Users',
-            value: stats.totalUsers,
-            icon: Users,
-            color: '#F97316',
-            bg: '#FFF7ED',
-            accent:
-              'linear-gradient(135deg, #F97316 0%, #FB923C 100%)',
-            trend: stats.userTrend,
-            path: '/admin/users',
-          },
-          {
-            label: 'Registered Caterers',
-            value: stats.caterers,
-            icon: Store,
-            color: '#16A34A',
-            bg: '#DCFCE7',
-            accent:
-              'linear-gradient(135deg, #16A34A 0%, #4ADE80 100%)',
-            trend: stats.catererTrend,
-            path: '/admin/users?role=caterer',
-          },
-          {
-            label: 'Total Bookings',
-            value: stats.bookings,
-            icon: Calendar,
-            color: '#2563EB',
-            bg: '#DBEAFE',
-            accent:
-              'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)',
-            trend: stats.bookingTrend,
-            path: '/staff/bookings',
-          },
-          {
-            label: 'Total Revenue',
-            value: `₱${stats.revenue.toLocaleString()}`,
-            icon: Wallet,
-            color: '#7C3AED',
-            bg: '#F5F3FF',
-            accent:
-              'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)',
-            trend: stats.revenueTrend,
-            path: '/admin/revenue',
-          },
-        ].map((card, i) => {
+      <section aria-label="Platform key performance indicators" className="cc-admin-kpis">
+        {cardData.map(card => {
           const Icon = card.icon;
-
-          return (
-            <div
-              key={i}
-              onClick={() => navigate(card.path)}
-              style={{
-                position: 'relative',
-                background: '#FFFFFF',
-                borderRadius: 24,
-                padding: '24px 22px',
-                border: '1px solid #E8E4DE',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.transform =
-                  'translateY(-3px)';
-                event.currentTarget.style.boxShadow =
-                  '0 14px 36px rgba(0,0,0,0.07)';
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.transform = 'translateY(0)';
-                event.currentTarget.style.boxShadow =
-                  '0 10px 30px rgba(0,0,0,0.04)';
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 4,
-                  background: card.accent,
-                }}
-              />
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: 18,
-                  marginTop: 4,
-                }}
-              >
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 14,
-                    background: card.bg,
-                    border: '1px solid #FED7AA',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icon size={22} color={card.color} />
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    background: '#DCFCE7',
-                    color: '#166534',
-                    padding: '4px 10px',
-                    borderRadius: 20,
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                  }}
-                >
-                  <TrendingUp size={13} />
-                  {card.trend}
-                </div>
-              </div>
-
-              <div>
-                <div
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 800,
-                    color: '#111',
-                    letterSpacing: '-0.01em',
-                    marginBottom: 4,
-                  }}
-                >
-                  {loading ? (
-                    <Loader2
-                      size={22}
-                      className="animate-spin"
-                      color="#9CA3AF"
-                    />
-                  ) : (
-                    card.value
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#6B7280',
-                  }}
-                >
-                  {card.label}
-                </div>
-              </div>
-            </div>
-          );
+          return <button key={card.label} type="button" className="cc-admin-kpi" onClick={() => navigate(card.path)}>
+            <div className="cc-admin-kpi-top"><div className="cc-admin-icon"><Icon size={20}/></div><ArrowRight size={17} className="cc-admin-kpi-arrow"/></div>
+            <div className="cc-admin-kpi-value">{loading ? <Loader2 size={25} className="animate-spin"/> : card.value}</div>
+            <div className="cc-admin-kpi-label">{card.label}</div>
+            <div className="cc-admin-kpi-trend"><TrendingUp size={13}/>{card.change}</div>
+          </button>;
         })}
+      </section>
+
+      <div className="cc-admin-analytics">
+        <section className="cc-admin-panel cc-admin-revenue" aria-label="Revenue overview">
+          <RevenueTrendChart payments={revenuePayments} loading={loading} totalRevenue={stats.revenue} />
+          <div className="cc-admin-chart-footer"><span>This month's confirmed revenue: <strong>{loading ? '—' : MONEY(revenueThisMonth)}</strong></span><button type="button" className="cc-admin-text-link" onClick={() => navigate('/admin/revenue')}>View Revenue <ArrowRight size={15}/></button></div>
+        </section>
+        <section className="cc-admin-panel" aria-label="Users by role">
+          <div className="cc-admin-panel-heading"><div><div className="cc-admin-section-eyebrow">PLATFORM COMMUNITY</div><h2><Users size={19}/> Users by Role</h2><p>Live breakdown of registered account roles.</p></div></div>
+          <div className="cc-admin-caterer-overview">
+            <div className="cc-admin-donut" style={{ background: roleTotal ? `conic-gradient(${roleStops.join(', ')})` : '#F1E8DE' }}><div><strong>{loading ? '—' : roleTotal}</strong><span>Total users</span></div></div>
+            <div className="cc-admin-donut-legend">
+              {roleOrder.map(role => <div key={role.key}><span className="cc-admin-legend-dot" style={{ background: role.color }}/><span>{role.label}</span><strong>{loading ? '—' : roleCounts[role.key] ?? 0}</strong></div>)}
+              <button type="button" onClick={() => navigate('/admin/users')}>View user directory <ArrowRight size={15}/></button>
+            </div>
+          </div>
+          <div className="cc-admin-panel-foot">Verified caterers: <strong>{loading ? '—' : stats.verified}</strong> <span>·</span> Pending verification: <strong>{loading ? '—' : stats.pending}</strong></div>
+        </section>
       </div>
 
-      {/* Action Center and Subscription Tiers */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: 24,
-          alignItems: 'stretch',
-          marginBottom: 24,
-        }}
-      >
-        {/* Action Center */}
-        <div
-          style={{
-            background: '#FFFFFF',
-            borderRadius: 24,
-            border: '1px solid #E8E4DE',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-            padding: 24,
-          }}
-        >
-          <h3
-            style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color: '#111',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              margin: '0 0 20px 0',
-            }}
-          >
-            <Activity size={19} color="#111" />
-            Action Center
-          </h3>
-
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-            }}
-          >
-            <div
-              onClick={() => navigate('/staff/verification')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '16px 18px',
-                background: '#FEF3C7',
-                borderRadius: 16,
-                cursor: 'pointer',
-                border: '1px solid #FDE68A',
-                transition: 'transform 0.15s',
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.transform = 'scale(1.01)';
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                }}
-              >
-                <div
-                  style={{
-                    background: '#FFFBEB',
-                    padding: 8,
-                    borderRadius: 10,
-                    border: '1px solid #FDE68A',
-                  }}
-                >
-                  <Clock size={18} color="#D97706" />
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      color: '#92400E',
-                    }}
-                  >
-                    Pending Verifications
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#B45309',
-                      marginTop: 2,
-                    }}
-                  >
-                    Caterers waiting for review
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: '#92400E',
-                  }}
-                >
-                  {loading ? '-' : stats.pending}
-                </span>
-                <ArrowRight size={16} color="#D97706" />
-              </div>
-            </div>
-
-            <div
-              onClick={() => navigate('/staff/complaints')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '16px 18px',
-                background: '#FEE2E2',
-                borderRadius: 16,
-                cursor: 'pointer',
-                border: '1px solid #FECACA',
-                transition: 'transform 0.15s',
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.transform = 'scale(1.01)';
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                }}
-              >
-                <div
-                  style={{
-                    background: '#FEF2F2',
-                    padding: 8,
-                    borderRadius: 10,
-                    border: '1px solid #FECACA',
-                  }}
-                >
-                  <ShieldAlert size={18} color="#DC2626" />
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      color: '#991B1B',
-                    }}
-                  >
-                    Open Complaints
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#B91C1C',
-                      marginTop: 2,
-                    }}
-                  >
-                    Requires immediate action
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: '#991B1B',
-                  }}
-                >
-                  {loading ? '-' : stats.complaints}
-                </span>
-                <ArrowRight size={16} color="#DC2626" />
-              </div>
-            </div>
-
-            <div
-              onClick={() => navigate('/staff/verification')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '16px 18px',
-                background: '#DCFCE7',
-                borderRadius: 16,
-                cursor: 'pointer',
-                border: '1px solid #BBF7D0',
-                transition: 'transform 0.15s',
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.transform = 'scale(1.01)';
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                }}
-              >
-                <div
-                  style={{
-                    background: '#F0FDF4',
-                    padding: 8,
-                    borderRadius: 10,
-                    border: '1px solid #BBF7D0',
-                  }}
-                >
-                  <CheckCircle2 size={18} color="#16A34A" />
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      color: '#166534',
-                    }}
-                  >
-                    Verified Caterers
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#15803D',
-                      marginTop: 2,
-                    }}
-                  >
-                    Active on the platform
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: '#166534',
-                  }}
-                >
-                  {loading ? '-' : stats.verified}
-                </span>
-                <ArrowRight size={16} color="#16A34A" />
-              </div>
-            </div>
+      <div className="cc-admin-management">
+        <section className="cc-admin-panel" aria-label="Quick staff actions">
+          <div className="cc-admin-panel-heading"><div><div className="cc-admin-section-eyebrow">WORKSPACE</div><h2><UserCog size={19}/> Quick Admin Actions</h2><p>Access the six core Staff operations directly from your Admin dashboard.</p></div></div>
+          <div className="cc-admin-quick-grid">
+            {quickActions.map(item => { const Icon = item.icon; return <button type="button" key={item.path} className="cc-admin-action" onClick={() => navigate(item.path)}><span className="cc-admin-icon"><Icon size={19}/></span><span>{item.label}</span><ArrowRight size={16} className="cc-admin-action-arrow"/></button>})}
           </div>
-        </div>
-
-        {/* Subscription Tiers */}
-        <div
-          style={{
-            background: '#FFFFFF',
-            borderRadius: 24,
-            border: '1px solid #E8E4DE',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
-            padding: 24,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 20,
-            }}
-          >
-            <h3
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                color: '#111',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                margin: 0,
-              }}
-            >
-              <CreditCard size={19} color="#111" />
-              Subscription Tiers
-            </h3>
-
-            <button
-              type="button"
-              onClick={() => navigate('/staff/subscriptions')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#EA580C',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Manage →
-            </button>
+        </section>
+        <section className="cc-admin-panel" aria-label="Operations attention center">
+          <div className="cc-admin-panel-heading"><div><div className="cc-admin-section-eyebrow">ITEMS TO TRACK</div><h2><Clock size={19}/> Action Center</h2><p>Current verification and complaint queues.</p></div></div>
+          <div className="cc-admin-queue">
+            <button onClick={() => navigate('/staff/verification')}><div className="cc-admin-icon"><Clock size={18}/></div><span><strong>Pending Verifications</strong><small>Caterers awaiting review</small></span><b>{loading ? '—' : stats.pending}</b><ArrowRight size={16}/></button>
+            <button onClick={() => navigate('/staff/complaints')}><div className="cc-admin-icon"><AlertTriangle size={18}/></div><span><strong>Open Complaints</strong><small>Cases requiring review</small></span><b>{loading ? '—' : stats.complaints}</b><ArrowRight size={16}/></button>
+            <button onClick={() => navigate('/staff/verification')}><div className="cc-admin-icon"><Store size={18}/></div><span><strong>Verified Caterers</strong><small>Approved on the platform</small></span><b>{loading ? '—' : stats.verified}</b><ArrowRight size={16}/></button>
           </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 14,
-            }}
-          >
-            {[
-              {
-                plan: 'Free Plan',
-                price: '₱0',
-                maxPkg: '3 packages',
-                maxBooking: '5 bookings/mo',
-                color: '#6B7280',
-                bg: '#F9FAFB',
-                border: '#E5E7EB',
-                icon: Sparkles,
-              },
-              {
-                plan: 'Basic Plan',
-                price: '₱299',
-                maxPkg: 'Unlimited',
-                maxBooking: '20 bookings/mo',
-                color: '#2563EB',
-                bg: '#DBEAFE',
-                border: '#93C5FD',
-                icon: Zap,
-              },
-              {
-                plan: 'Standard Plan',
-                price: '₱499',
-                maxPkg: 'Unlimited',
-                maxBooking: '50 bookings/mo',
-                color: '#D97706',
-                bg: '#FEF3C7',
-                border: '#FDE68A',
-                icon: Crown,
-              },
-              {
-                plan: 'Premium Plan',
-                price: '₱999',
-                maxPkg: 'Unlimited',
-                maxBooking: 'Unlimited',
-                color: '#7C3AED',
-                bg: '#F5F3FF',
-                border: '#C4B5FD',
-                icon: Building2,
-              },
-            ].map((p, idx) => {
-              const TierIcon = p.icon;
-
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    background: p.bg,
-                    borderRadius: 18,
-                    padding: 16,
-                    border: `1px solid ${p.border}`,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: p.color,
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.5,
-                      }}
-                    >
-                      {p.plan}
-                    </span>
-
-                    <div
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: 8,
-                        background: '#FFFFFF',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
-                      }}
-                    >
-                      <TierIcon size={14} color={p.color} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 19,
-                        fontWeight: 900,
-                        color: '#111',
-                        letterSpacing: '-0.02em',
-                        lineHeight: 1,
-                      }}
-                    >
-                      {p.price}
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: '#6B7280',
-                        }}
-                      >
-                        /mo
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 2,
-                        marginTop: 8,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          color: '#4B5563',
-                          background: 'rgba(255,255,255,0.7)',
-                          padding: '2px 6px',
-                          borderRadius: 4,
-                        }}
-                      >
-                        {p.maxPkg}
-                      </span>
-
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          color: '#4B5563',
-                          background: 'rgba(255,255,255,0.7)',
-                          padding: '2px 6px',
-                          borderRadius: 4,
-                        }}
-                      >
-                        {p.maxBooking}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        </section>
       </div>
 
       {/* Recent Registrations */}
@@ -1632,9 +978,9 @@ export default function AdminDashboard() {
         <div
           style={{
             background: '#FFFFFF',
-            borderRadius: 24,
+            borderRadius: 20,
             border: '1px solid #E8E4DE',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
+            boxShadow: '0 8px 28px rgba(15,23,42,0.035)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',

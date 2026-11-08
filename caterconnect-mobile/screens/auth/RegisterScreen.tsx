@@ -905,7 +905,7 @@ export default function RegisterScreen() {
           <Edit3 size={18} color="#166534" />
 
           <Text style={styles.profileNoteTitle}>
-            Manage Business & Documents in Dashboard
+            Manage Business Details in Dashboard
           </Text>
         </View>
 

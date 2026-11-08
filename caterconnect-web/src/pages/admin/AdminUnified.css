@@ -1,0 +1,42 @@
+/* CaterConnect Admin UI: scoped presentational styles only. No business logic changes. */
+:where(.user-management,.reports-page,.platform-settings-page,.activity-logs-page) { color:#0F172A; font-family:Inter,system-ui,sans-serif; min-width:0; }
+:where(.user-management,.reports-page,.platform-settings-page,.activity-logs-page) * { box-sizing:border-box; }
+:where(.user-management,.reports-page,.platform-settings-page,.activity-logs-page) button:focus-visible,
+:where(.user-management,.reports-page,.platform-settings-page,.activity-logs-page) input:focus-visible,
+:where(.user-management,.reports-page,.platform-settings-page,.activity-logs-page) select:focus-visible { outline:3px solid #FDBA74; outline-offset:2px; }
+:where(.user-management,.reports-page,.platform-settings-page,.activity-logs-page) button:not(:disabled) { transition:background .2s,border-color .2s,box-shadow .2s,transform .2s; }
+/* User directory: refine original inline-style sections while keeping every action/modal. */
+.user-management > div[style] { min-width:0; }
+.user-management h1 { color:#0F172A; letter-spacing:-.035em; }
+.user-management table { border-collapse:collapse; }
+.user-management table tbody tr:hover { background:#FFFBF7 !important; }
+.user-management input:focus-visible,.user-management select:focus-visible,.user-management textarea:focus-visible { border-color:#FB923C !important; }
+/* Reports: consistent restrained cards; data, previews and CSV unchanged. */
+.reports-page .reports-header h1,.reports-page .report-card-title { color:#0F172A; }
+.reports-page .reports-header h1 { font-size:clamp(25px,2.1vw,31px); letter-spacing:-.035em; }
+.reports-page .report-card { border-color:#EBE5DE; border-radius:20px; box-shadow:0 7px 25px rgba(15,23,42,.035); }
+.reports-page .report-card-accent { height:3px; background:#F97316 !important; }
+.reports-page .report-card-icon { width:43px; height:43px; background:#FFF4E9 !important; color:#EA580C; border:1px solid #FFE4CB; }
+.reports-page .report-card-icon svg { width:21px; height:21px; stroke:#EA580C; }
+.reports-page .report-preview { background:#FFFCF9; border-color:#EFE8E0; }
+.reports-page .reports-live-status { background:#FFF7ED; border-color:#FED7AA; color:#9A3412; }
+.reports-page .report-export-button { background:#F97316; border-radius:11px; }
+.reports-page .report-export-button:hover:not(:disabled) { background:#EA580C; }
+/* Platform settings: preserve staff provisioning, roles and plan limits. */
+.platform-settings-page .platform-settings-header h1 { font-size:clamp(25px,2.1vw,31px); letter-spacing:-.035em; color:#0F172A; }
+.platform-settings-page .platform-staff-card,.platform-settings-page .platform-plan-card { border-color:#EBE5DE; border-radius:19px; box-shadow:0 7px 25px rgba(15,23,42,.035); }
+.platform-settings-page .platform-staff-table thead tr { background:#FAF9F7; }
+.platform-settings-page .platform-staff-table tbody tr:hover { background:#FFFBF7; }
+.platform-settings-page .platform-plan-accent { background:#F97316 !important; height:3px; }
+.platform-settings-page .platform-plan-name { color:#C2410C !important; }
+.platform-settings-page .platform-plan-price { font-size:clamp(24px,2vw,34px); color:#0F172A; }
+.platform-settings-page .platform-add-staff-button { box-shadow:0 6px 15px rgba(249,115,22,.12); }
+/* Activity history: soften decorative colors; leave status/error indicators semantic. */
+.activity-logs-page .al-title { font-size:clamp(25px,2.1vw,31px); color:#0F172A; }
+.activity-logs-page .al-panel { border-color:#EBE5DE; border-radius:20px; box-shadow:0 7px 25px rgba(15,23,42,.035); }
+.activity-logs-page .al-category-bar,.activity-logs-page .al-count-bar { background:#FAF9F7; border-color:#EEE7DE; }
+.activity-logs-page .al-log-card { background:#FFFCF9; border-color:#EBE5DE; box-shadow:none; }
+.activity-logs-page .al-log-icon { width:40px; height:40px; box-shadow:none; }
+.activity-logs-page .al-log-icon svg { width:19px; height:19px; }
+.activity-logs-page .al-filter-grid { border-color:#EBE5DE; }
+@media(max-width:600px){.reports-page .report-card,.platform-settings-page .platform-plan-card { border-radius:16px; }}

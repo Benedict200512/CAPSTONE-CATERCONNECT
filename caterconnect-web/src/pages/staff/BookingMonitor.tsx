@@ -1,3 +1,4 @@
+import './StaffUnified.css';
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -100,7 +101,7 @@ export default function BookingMonitor() {
   );
 
   return (
-    <div className="booking-monitor-page">
+    <div className="booking-monitor-page cc-staff-unified">
 
       {/* Responsive Header */}
       <div className="booking-header">

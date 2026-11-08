@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Search,
@@ -156,6 +156,15 @@ export default function CatererPackages() {
 
   const [foodInput, setFoodInput] = useState('');
   const [customInclusion, setCustomInclusion] = useState('');
+  const [customEventType, setCustomEventType] = useState('');
+  const [showOtherEventType, setShowOtherEventType] = useState(false);
+  const packageImageRef = useRef<HTMLInputElement>(null);
+  const [selectedPackagePhoto, setSelectedPackagePhoto] = useState<File | null>(null);
+  const [packagePhotoPreview, setPackagePhotoPreview] = useState<string | null>(null);
+  useEffect(() => {
+    return () => { if (packagePhotoPreview) URL.revokeObjectURL(packagePhotoPreview); };
+  }, [packagePhotoPreview]);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -266,6 +275,10 @@ export default function CatererPackages() {
     setForm(EMPTY_FORM);
     setFoodInput('');
     setCustomInclusion('');
+    setCustomEventType('');
+    setShowOtherEventType(false);
+    setSelectedPackagePhoto(null);
+    setPackagePhotoPreview(null);
     setError('');
     setSuccess('');
     setModalOpen(true);
@@ -290,6 +303,10 @@ export default function CatererPackages() {
 
     setFoodInput('');
     setCustomInclusion('');
+    setCustomEventType('');
+    setShowOtherEventType(false);
+    setSelectedPackagePhoto(null);
+    setPackagePhotoPreview(null);
     setError('');
     setSuccess('');
     setModalOpen(true);
@@ -300,6 +317,8 @@ export default function CatererPackages() {
 
     setModalOpen(false);
     setEditing(null);
+    setSelectedPackagePhoto(null);
+    setPackagePhotoPreview(null);
     setForm(EMPTY_FORM);
     setError('');
   };
@@ -367,48 +386,46 @@ export default function CatererPackages() {
     );
   };
 
-  const uploadPackageImage = async (file: File) => {
-    if (!catererId) {
-      setError('Your caterer account is unavailable.');
+  const addCustomEventType = () => {
+    const value = customEventType.trim().replace(/\s+/g, ' ');
+    if (!value) return;
+    if (value.length > 60) {
+      setError('Custom event type must be 60 characters or fewer.');
       return;
     }
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-
-    if (!allowedTypes.includes(file.type)) {
-      setError('Please upload a JPG, PNG, or WEBP image.');
-      return;
+    if (!form.event_types.some((type) => type.toLowerCase() === value.toLowerCase())) {
+      updateForm('event_types', [...form.event_types, value]);
     }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image size must not exceed 5 MB.');
-      return;
-    }
-
-    setUploading(true);
+    setCustomEventType('');
     setError('');
+  };
 
+  const selectPackagePhoto = (file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Please choose a JPG, PNG, or WEBP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Package image must not exceed 5 MB.');
+      return;
+    }
+    setSelectedPackagePhoto(file);
+    setPackagePhotoPreview(URL.createObjectURL(file));
+    setError('');
+  };
+
+  // Upload only after Save, so opening the image picker never starts a network write.
+  const uploadPackageImage = async (file: File): Promise<string> => {
+    if (!catererId) throw new Error('Your caterer account is unavailable.');
+    setUploading(true);
     try {
-      const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const filePath = `${catererId}/package_${Date.now()}.${extension}`;
-
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const filePath = `${catererId}/package_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${extension}`;
       const { error: uploadError } = await supabase.storage
         .from(PACKAGE_BUCKET)
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: file.type,
-        });
-
+        .upload(filePath, file, { cacheControl: '3600', upsert: false, contentType: file.type });
       if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from(PACKAGE_BUCKET)
-        .getPublicUrl(filePath);
-
-      updateForm('image_url', data.publicUrl);
-    } catch (err) {
-      setError(getErrorMessage(err));
+      return supabase.storage.from(PACKAGE_BUCKET).getPublicUrl(filePath).data.publicUrl;
     } finally {
       setUploading(false);
     }
@@ -468,6 +485,9 @@ export default function CatererPackages() {
       }
 
       const limits = validateForm();
+      const uploadedImageUrl = selectedPackagePhoto
+        ? await uploadPackageImage(selectedPackagePhoto)
+        : form.image_url;
 
       const payload = {
         caterer_id: catererId,
@@ -482,7 +502,7 @@ export default function CatererPackages() {
         food_inclusions:
           form.food_inclusions.length > 0 ? form.food_inclusions : null,
         event_types: form.event_types.length > 0 ? form.event_types : null,
-        image_url: form.image_url || null,
+        image_url: uploadedImageUrl || null,
       };
 
       if (editing) {
@@ -518,6 +538,8 @@ export default function CatererPackages() {
 
       setModalOpen(false);
       setEditing(null);
+      setSelectedPackagePhoto(null);
+      setPackagePhotoPreview(null);
       setForm(EMPTY_FORM);
 
       await loadPackages();
@@ -1674,49 +1696,51 @@ export default function CatererPackages() {
                 <h3>Package Image</h3>
 
                 <div className="package-image-upload">
-                  {form.image_url ? (
+                  {(packagePhotoPreview || form.image_url) ? (
                     <>
-                      <img src={form.image_url} alt="Package preview" />
-
+                      <img src={packagePhotoPreview || form.image_url} alt="Package preview" />
                       <button
                         type="button"
                         className="package-image-remove"
-                        onClick={() => updateForm('image_url', '')}
+                        onClick={() => { setSelectedPackagePhoto(null); setPackagePhotoPreview(null); updateForm('image_url', ''); }}
+                        disabled={uploading || saving}
                         title="Remove image"
                       >
                         <Trash2 size={15} />
                       </button>
                     </>
                   ) : (
-                    <label>
-                      {uploading ? (
-                        <LoaderCircle size={27} className="animate-spin" />
-                      ) : (
-                        <ImagePlus size={27} />
-                      )}
-
-                      <strong>
-                        {uploading ? 'Uploading image...' : 'Upload package image'}
-                      </strong>
-
-                      <span>JPG, PNG, or WEBP. Maximum 5 MB.</span>
-
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        disabled={uploading}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-
-                          if (file) {
-                            uploadPackageImage(file);
-                          }
-
-                          event.target.value = '';
-                        }}
-                      />
-                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 22, color: '#C2410C' }}>
+                      {uploading ? <LoaderCircle size={27} className="animate-spin" /> : <ImagePlus size={27} />}
+                      <strong>{uploading ? 'Uploading image...' : 'Choose a package photo'}</strong>
+                      <span>JPG, PNG or WEBP, maximum 5 MB</span>
+                    </div>
                   )}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    ref={packageImageRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = '';
+                      if (file) selectPackagePhoto(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="package-secondary-button"
+                    disabled={uploading || saving}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      packageImageRef.current?.click();
+                    }}
+                  >
+                    <ImagePlus size={16} /> {packagePhotoPreview || form.image_url ? 'Replace Photo' : 'Select Photo'}
+                  </button>
                 </div>
               </section>
 
@@ -1931,15 +1955,43 @@ export default function CatererPackages() {
                     <button
                       type="button"
                       key={eventType}
-                      className={`package-chip ${
-                        form.event_types.includes(eventType) ? 'selected' : ''
-                      }`}
-                      onClick={() => toggleEventType(eventType)}
+                      className={`package-chip ${eventType === 'Other'
+                        ? showOtherEventType ? 'selected' : ''
+                        : form.event_types.includes(eventType) ? 'selected' : ''}`}
+                      onClick={() => {
+                        if (eventType === 'Other') setShowOtherEventType((value) => !value);
+                        else toggleEventType(eventType);
+                      }}
                     >
                       {eventType}
                     </button>
                   ))}
                 </div>
+                {showOtherEventType && (
+                  <div className="package-field" style={{ marginTop: 12 }}>
+                    <label htmlFor="custom-event-type">Custom Event Type</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        id="custom-event-type"
+                        value={customEventType}
+                        maxLength={60}
+                        onChange={(event) => setCustomEventType(event.target.value)}
+                        placeholder="e.g. Fiesta, Christening, Graduation"
+                      />
+                      <button type="button" className="package-secondary-button" onClick={addCustomEventType}>Add</button>
+                    </div>
+                  </div>
+                )}
+                {form.event_types.some((type) => !EVENT_TYPES.includes(type)) && (
+                  <div className="package-chips" style={{ marginTop: 10 }}>
+                    {form.event_types.filter((type) => !EVENT_TYPES.includes(type)).map((type) => (
+                      <button type="button" key={type} className="package-chip selected"
+                        onClick={() => toggleEventType(type)} title={`Remove ${type}`}>
+                        {type} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <div className="package-form-footer">

@@ -88,6 +88,25 @@ export default function Sidebar({
 
   return (
     <>
+      {/* CaterConnect shared Admin / Staff sidebar visual treatments. */}
+      <style>{`
+        .portal-sidebar .cc-sidebar-nav:not([aria-current="page"]):hover { background: #FFF8F1 !important; color: #C2410C !important; }
+        .portal-sidebar .cc-sidebar-nav:focus-visible,
+        .portal-sidebar .cc-sidebar-switch:focus-visible,
+        .portal-sidebar .cc-sidebar-logout:focus-visible,
+        .portal-sidebar .cc-sidebar-confirm:focus-visible,
+        .portal-sidebar .cc-sidebar-cancel:focus-visible {
+          outline: 3px solid #FDBA74;
+          outline-offset: 2px;
+        }
+        .portal-sidebar .cc-sidebar-switch:hover:not(:disabled) { background: #FFF7ED !important; border-color: #FED7AA !important; color: #C2410C !important; }
+        .portal-sidebar .cc-sidebar-logout:hover:not(:disabled) { background: #FFEDD5 !important; border-color: #FDBA74 !important; color: #9A3412 !important; }
+        .portal-sidebar .cc-sidebar-confirm:hover:not(:disabled) { background: #C2410C !important; }
+        .portal-sidebar .cc-sidebar-cancel:hover:not(:disabled) { background: #F8FAFC !important; }
+        .portal-sidebar button:disabled { opacity: .65; cursor: not-allowed; }
+        @media (prefers-reduced-motion: reduce) { .portal-sidebar button { transition: none !important; } }
+      `}</style>
+
       {/* Mobile Sidebar Overlay */}
       {mobileOpen && (
         <button
@@ -117,7 +136,7 @@ export default function Sidebar({
 
           <div style={s.brandTextContainer}>
             <div style={s.brandName}>
-              <span style={{ color: '#111' }}>CATER</span>
+              <span style={{ color: '#0F172A' }}>CATER</span>
               <span style={{ color: '#F97316' }}>CONNECT</span>
             </div>
 
@@ -150,7 +169,7 @@ export default function Sidebar({
               <span
                 style={{
                   ...s.roleDot,
-                  background: isAdmin ? '#F97316' : '#22C55E',
+                  background: '#F97316',
                 }}
               />
 
@@ -174,6 +193,8 @@ export default function Sidebar({
               <button
                 type="button"
                 key={item.path}
+                className="cc-sidebar-nav"
+                aria-current={active ? 'page' : undefined}
                 onClick={() => handleNavigation(item.path)}
                 style={{
                   ...s.navItem,
@@ -184,7 +205,7 @@ export default function Sidebar({
                   size={18}
                   style={{
                     flexShrink: 0,
-                    color: active ? '#EA580C' : '#6B7280',
+                    color: active ? '#EA580C' : '#64748B',
                   }}
                 />
 
@@ -202,6 +223,7 @@ export default function Sidebar({
             <button
               type="button"
               style={s.switchBtn}
+              className="cc-sidebar-switch"
               onClick={() => handleNavigation('/staff')}
             >
               <UserCog size={16} />
@@ -212,13 +234,14 @@ export default function Sidebar({
           {showLogoutConfirm ? (
             <div style={s.logoutConfirmBox}>
               <div style={s.logoutConfirmText}>
-                Sign out of account?
+                Sign out of CaterConnect?
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
                   style={s.cancelBtn}
+              className="cc-sidebar-cancel"
                   onClick={() => setShowLogoutConfirm(false)}
                   disabled={signingOut}
                 >
@@ -229,6 +252,7 @@ export default function Sidebar({
                 <button
                   type="button"
                   style={s.confirmLogoutBtn}
+              className="cc-sidebar-confirm"
                   onClick={handleLogout}
                   disabled={signingOut}
                 >
@@ -241,6 +265,7 @@ export default function Sidebar({
             <button
               type="button"
               style={s.logoutBtn}
+              className="cc-sidebar-logout"
               onClick={() => setShowLogoutConfirm(true)}
             >
               <LogOut size={16} />
@@ -324,8 +349,8 @@ const s: Record<string, React.CSSProperties> = {
     gap: 12,
     padding: '14px 16px',
     margin: '16px 12px 8px',
-    background: '#FAF8F5',
-    border: '1px solid #E8E4DE',
+    background: '#FFFDFB',
+    border: '1px solid #EBE5DE',
     borderRadius: 14,
   },
 
@@ -375,7 +400,7 @@ const s: Record<string, React.CSSProperties> = {
     padding: '16px 20px 8px',
     fontSize: 11,
     fontWeight: 800,
-    color: '#9CA3AF',
+    color: '#94A3B8',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
@@ -396,7 +421,7 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     width: '100%',
     background: 'transparent',
-    color: '#4B5563',
+    color: '#475569',
     fontSize: 13.5,
     fontWeight: 700,
     textAlign: 'left',
@@ -431,7 +456,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: 8,
-    background: '#FAF8F5',
+    background: '#FFFFFF',
   },
 
   switchBtn: {
@@ -441,11 +466,12 @@ const s: Record<string, React.CSSProperties> = {
     padding: '10px 14px',
     borderRadius: 12,
     width: '100%',
-    background: '#FFFFFF',
-    color: '#374151',
+    minHeight: 42,
+    background: '#FFFDFB',
+    color: '#334155',
     fontSize: 12.5,
-    fontWeight: 700,
-    border: '1px solid #E5E7EB',
+    fontWeight: 750,
+    border: '1px solid #E8E4DE',
     cursor: 'pointer',
     transition: 'all 0.15s',
   },
@@ -457,20 +483,22 @@ const s: Record<string, React.CSSProperties> = {
     padding: '11px 14px',
     borderRadius: 12,
     width: '100%',
-    background: '#FEF2F2',
-    color: '#DC2626',
+    justifyContent: 'center',
+    minHeight: 44,
+    background: '#FFF7ED',
+    color: '#C2410C',
     fontSize: 13,
     fontWeight: 800,
-    border: '1px solid #FECACA',
+    border: '1px solid #FED7AA',
     cursor: 'pointer',
     transition: 'all 0.15s',
   },
 
   logoutConfirmBox: {
-    background: '#FEF2F2',
-    border: '1px solid #FECACA',
+    background: '#FFF7ED',
+    border: '1px solid #FED7AA',
     borderRadius: 12,
-    padding: 12,
+    padding: 14,
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
@@ -479,7 +507,7 @@ const s: Record<string, React.CSSProperties> = {
   logoutConfirmText: {
     fontSize: 12,
     fontWeight: 800,
-    color: '#991B1B',
+    color: '#9A3412',
     textAlign: 'center',
   },
 
@@ -507,7 +535,7 @@ const s: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '8px 10px',
     borderRadius: 8,
-    background: '#DC2626',
+    background: '#EA580C',
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 800,

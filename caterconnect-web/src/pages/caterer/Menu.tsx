@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Search, Pencil, Trash2, X, LoaderCircle, UtensilsCrossed,
   Soup, CakeSlice, CupSoda, Scale, AlertCircle, CheckCircle2, RefreshCw, ImagePlus,
@@ -90,7 +90,7 @@ function formatPrice(value: number) {
 }
 
 function getCategory(category: string) {
-  return CATEGORIES.find((item) => item.key === category) ?? CATEGORIES[0];
+  return CATEGORIES.find((item) => item.key === category) ?? { key: category, label: category, icon: UtensilsCrossed, color: '#64748B' };
 }
 
 export default function CatererMenu() {
@@ -110,6 +110,15 @@ export default function CatererMenu() {
   const [form, setForm] = useState<MenuForm>(EMPTY_FORM);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const menuImageRef = useRef<HTMLInputElement>(null);
+  const [selectedMenuPhoto, setSelectedMenuPhoto] = useState<File | null>(null);
+  const [menuPhotoPreview, setMenuPhotoPreview] = useState<string | null>(null);
+  useEffect(() => {
+    return () => { if (menuPhotoPreview) URL.revokeObjectURL(menuPhotoPreview); };
+  }, [menuPhotoPreview]);
+
+  const [customServingUnit, setCustomServingUnit] = useState('');
+  const [otherUnitSelected, setOtherUnitSelected] = useState(false);
 
   const loadItems = useCallback(async () => {
     if (!catererId) {
@@ -143,14 +152,17 @@ export default function CatererMenu() {
     loadItems();
   }, [loadItems]);
 
+  // Only the four supported food categories are selectable and displayed.
+  const categoriesWithCustom = CATEGORIES;
+
   const categoryCounts = useMemo(() => {
-    return CATEGORIES.reduce<Record<string, number>>((counts, category) => {
+    return categoriesWithCustom.reduce<Record<string, number>>((counts, category) => {
       counts[category.key] = items.filter(
         (item) => item.category === category.key
       ).length;
       return counts;
     }, {});
-  }, [items]);
+  }, [items, categoriesWithCustom]);
 
   const visibleItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -172,6 +184,10 @@ export default function CatererMenu() {
   const openCreateModal = () => {
     setEditing(null);
     setForm({ ...EMPTY_FORM, category: activeCategory });
+    setSelectedMenuPhoto(null);
+    setMenuPhotoPreview(null);
+    setCustomServingUnit('');
+    setOtherUnitSelected(false);
     setError('');
     setSuccess('');
     setModalOpen(true);
@@ -179,6 +195,10 @@ export default function CatererMenu() {
 
   const openEditModal = (item: MenuItem) => {
     setEditing(item);
+    setSelectedMenuPhoto(null);
+    setMenuPhotoPreview(null);
+    setOtherUnitSelected(!!item.serving_unit && !SERVING_UNITS.includes(item.serving_unit));
+    setCustomServingUnit(item.serving_unit && !SERVING_UNITS.includes(item.serving_unit) ? item.serving_unit : '');
     setForm({
       name: item.name,
       category: item.category,
@@ -197,33 +217,37 @@ export default function CatererMenu() {
     if (saving || uploadingImage) return;
     setModalOpen(false);
     setEditing(null);
+    setSelectedMenuPhoto(null);
+    setMenuPhotoPreview(null);
     setForm(EMPTY_FORM);
     setError('');
   };
 
-  // Same public Storage bucket and caterer-owned path as Package images.
-  const uploadMenuImage = async (file: File) => {
-    if (!catererId || !userId) return;
+  const selectMenuPhoto = (file: File) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setError('Choose a JPG, PNG, or WEBP image.');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('Image must not exceed 5 MB.');
+      setError('Menu image must not exceed 5 MB.');
       return;
     }
-    setUploadingImage(true);
+    setSelectedMenuPhoto(file);
+    setMenuPhotoPreview(URL.createObjectURL(file));
     setError('');
+  };
+
+  // Upload to the existing caterer-media bucket only when the menu item is saved.
+  const uploadMenuImage = async (file: File): Promise<string> => {
+    if (!catererId || !userId) throw new Error('Your caterer account is unavailable.');
+    setUploadingImage(true);
     try {
       const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
       const path = `${catererId}/menu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${extension}`;
       const { error: uploadError } = await supabase.storage.from('caterer-media')
         .upload(path, file, { contentType: file.type, cacheControl: '3600', upsert: false });
       if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from('caterer-media').getPublicUrl(path);
-      updateForm('image_url', data.publicUrl);
-    } catch (err) {
-      setError(getErrorMessage(err));
+      return supabase.storage.from('caterer-media').getPublicUrl(path).data.publicUrl;
     } finally {
       setUploadingImage(false);
     }
@@ -238,6 +262,16 @@ export default function CatererMenu() {
     }
 
     const name = form.name.trim();
+    const selectedCategory = form.category;
+    const selectedUnit = otherUnitSelected ? customServingUnit.trim() : form.serving_unit;
+    if (!CATEGORIES.some((category) => category.key === selectedCategory)) {
+      setError('Please choose Main Course, Appetizer, Dessert, or Drink.');
+      return;
+    }
+    if (otherUnitSelected && !selectedUnit) {
+      setError('Please enter the custom serving unit.');
+      return;
+    }
     const price = Number(form.price_per_guest);
     const servingSize = form.serving_size.trim()
       ? Number(form.serving_size)
@@ -263,18 +297,20 @@ export default function CatererMenu() {
     setError('');
     setSuccess('');
 
+    // Validate fields before uploading. Images remain local until Save.
     const payload = {
       caterer_id: catererId,
       name,
-      category: form.category,
+      category: selectedCategory,
       description: form.description.trim() || null,
       price_per_guest: price,
       serving_size: servingSize,
-      serving_unit: form.serving_unit || null,
+      serving_unit: selectedUnit || null,
       image_url: form.image_url || null,
     };
 
     try {
+      if (selectedMenuPhoto) payload.image_url = await uploadMenuImage(selectedMenuPhoto);
       if (editing) {
         const { data, error: updateError } = await supabase
           .from('menu_items')
@@ -302,6 +338,8 @@ export default function CatererMenu() {
 
       setModalOpen(false);
       setEditing(null);
+      setSelectedMenuPhoto(null);
+      setMenuPhotoPreview(null);
       setForm(EMPTY_FORM);
       await loadItems();
     } catch (err) {
@@ -506,7 +544,7 @@ export default function CatererMenu() {
 
       <div className="menu-toolbar">
         <div className="menu-tabs">
-          {CATEGORIES.map((category) => {
+          {categoriesWithCustom.map((category) => {
             const Icon = category.icon;
             const active = activeCategory === category.key;
 
@@ -735,7 +773,9 @@ export default function CatererMenu() {
                             type="button"
                             key={category.key}
                             className={`menu-category-choice ${selected ? 'selected' : ''}`}
-                            onClick={() => updateForm('category', category.key)}
+                            onClick={() => {
+                              updateForm('category', category.key);
+                            }}
                           >
                             <Icon
                               size={18}
@@ -766,15 +806,26 @@ export default function CatererMenu() {
               <section className="menu-form-section">
                 <h3>Food Photo (optional)</h3>
                 <div className="menu-image-actions">
-                  <label className="menu-image-upload" aria-label="Choose menu item photo">
-                    <ImagePlus size={17} /> {uploadingImage ? 'Uploading...' : form.image_url ? 'Replace Image' : 'Upload Image'}
-                    <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage || saving}
-                      onChange={e => { const file = e.target.files?.[0]; if (file) void uploadMenuImage(file); e.target.value = ''; }} />
-                  </label>
-                  {form.image_url && <button type="button" className="menu-secondary" disabled={uploadingImage || saving}
-                    onClick={() => updateForm('image_url', '')}>Remove Image</button>}
+                  <input
+                    ref={menuImageRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = '';
+                      if (file) selectMenuPhoto(file);
+                    }}
+                  />
+                  <button type="button" className="menu-image-upload" disabled={uploadingImage || saving}
+                    onClick={(event) => { event.preventDefault(); menuImageRef.current?.click(); }}>
+                    <ImagePlus size={17} /> {uploadingImage ? 'Uploading...' : form.image_url ? 'Replace Image' : 'Select Photo'}
+                  </button>
+                  {(menuPhotoPreview || form.image_url) && <button type="button" className="menu-secondary" disabled={uploadingImage || saving}
+                    onClick={() => { setSelectedMenuPhoto(null); setMenuPhotoPreview(null); updateForm('image_url', ''); }}>Remove Image</button>}
                 </div>
-                {form.image_url && <img src={form.image_url} alt="Menu item preview" className="menu-image-preview" />}
+                {(menuPhotoPreview || form.image_url) && <img src={menuPhotoPreview || form.image_url} alt="Menu item preview" className="menu-image-preview" />}
                 <p style={{ color: '#64748B', fontSize: 12 }}>JPG, PNG, or WEBP, maximum 5 MB. Image is optional.</p>
               </section>
 
@@ -815,13 +866,27 @@ export default function CatererMenu() {
                     <label htmlFor="menu-serving-unit">Serving Unit</label>
                     <select
                       id="menu-serving-unit"
-                      value={form.serving_unit}
-                      onChange={(event) => updateForm('serving_unit', event.target.value)}
+                      value={otherUnitSelected ? '__other__' : form.serving_unit}
+                      onChange={(event) => {
+                        if (event.target.value === '__other__') {
+                          setOtherUnitSelected(true);
+                          updateForm('serving_unit', '');
+                        } else {
+                          setOtherUnitSelected(false);
+                          updateForm('serving_unit', event.target.value);
+                        }
+                      }}
                     >
                       {SERVING_UNITS.map((unit) => (
                         <option value={unit} key={unit}>{unit}</option>
                       ))}
+                      <option value="__other__">Other (type a unit)</option>
                     </select>
+                    {otherUnitSelected && (
+                      <input value={customServingUnit} maxLength={40}
+                        onChange={(event) => setCustomServingUnit(event.target.value)}
+                        placeholder="e.g. bilao, bowl, basket" aria-label="Custom serving unit" />
+                    )}
                   </div>
 
                   <div className="menu-field full">

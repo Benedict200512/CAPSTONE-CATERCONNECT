@@ -1,0 +1,93 @@
+/* CaterConnect Staff Portal — shared visual styling ONLY.
+   Safe and scoped to pages bearing .cc-staff-unified. Keep workflow status colors semantic. */
+.cc-staff-unified {
+  --staff-orange: #F97316;
+  --staff-orange-dark: #EA580C;
+  --staff-soft: #FFF7ED;
+  --staff-ink: #0F172A;
+  --staff-muted: #64748B;
+  --staff-border: #EBE5DE;
+  width: 100%; min-width: 0; padding-bottom: 40px;
+  color: var(--staff-ink); font-family: 'Inter', system-ui, sans-serif;
+}
+.cc-staff-unified, .cc-staff-unified * { box-sizing: border-box; }
+.cc-staff-unified :is(button,a,input,select,textarea):focus-visible {
+  outline: 3px solid #FDBA74; outline-offset: 3px;
+}
+.cc-staff-unified :is(h1,.am-title) {
+  color: var(--staff-ink) !important;
+  font-size: clamp(24px, 2.15vw, 31px) !important;
+  font-weight: 850 !important; letter-spacing: -.035em !important;
+  line-height: 1.2;
+}
+.cc-staff-unified :is(.verification-page-header,.complaints-header,.booking-header,.am-header) { margin-bottom: 26px; }
+.cc-staff-unified :is(.verification-page-header,.complaints-header,.booking-header,.am-header) p {
+  color: var(--staff-muted) !important; font-size: 14px;
+}
+.cc-staff-unified :is(.verification-list-panel,.verification-detail-panel,
+  .complaints-list-panel,.complaints-detail-panel,.booking-table-container,
+  .booking-detail-panel,.am-panel,.am-stat-card,.am-account-card,.am-appeal-card) {
+  background: #fff !important; border-color: var(--staff-border) !important;
+  border-radius: 18px !important; box-shadow: 0 7px 25px rgba(15,23,42,.035) !important;
+}
+.cc-staff-unified :is(.verification-list-heading,.complaints-section-title,.am-panel-title,.am-account-name,
+ .booking-empty-title,.am-metric-value) { color: var(--staff-ink) !important; }
+.cc-staff-unified :is(.am-stat-number,.am-metric-value) {
+  font-size: clamp(27px, 2.5vw, 38px) !important;
+  font-weight: 900 !important; letter-spacing: -.045em;
+}
+.cc-staff-unified :is(.verification-list-panel,.verification-detail-panel,.complaints-list-panel,
+ .complaints-detail-panel,.booking-table-container,.am-panel) { overflow: hidden; }
+.cc-staff-unified :is(.verification-filter-tabs,.complaints-tabs,.booking-status-filters,.am-filter-buttons,.am-status-filters) {
+  gap: 8px;
+}
+/* Emphasize the active selection without recoloring warning/success outcome badges. */
+.cc-staff-unified :is(.verification-refresh,.complaints-refresh,.am-refresh,.am-primary-button,
+ .verification-approve-button,.complaints-action-button) { border-radius: 11px; }
+.cc-staff-unified :is(.booking-search,.am-search) {
+  background: #fff; border-radius: 12px; border-color: var(--staff-border);
+}
+.cc-staff-unified :is(input:not([type=checkbox]):not([type=radio]),select,textarea) {
+  font-family: inherit;
+}
+.cc-staff-unified :is(.booking-table th,.booking-table thead,.am-account-heading) {
+  background: #FAF9F7; color: #64748B;
+}
+.cc-staff-unified :is(.booking-table tbody tr:hover,.am-account-card:hover) { background: #FFFCF8; }
+.cc-staff-unified :is(.verification-business-title,.complaint-list-subject,.booking-person-name) {
+  color: #0F172A; font-weight: 750;
+}
+/* Subscription cards used to have four saturated colored backgrounds. Make all neutral; preserve active selection. */
+.cc-staff-subscriptions > div:nth-child(2) > button {
+  background: white !important;
+  border-color: var(--staff-border) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 7px 25px rgba(15,23,42,.035) !important;
+}
+.cc-staff-subscriptions > div:nth-child(2) > button:hover {
+  border-color: #FDBA74 !important; transform: translateY(-2px);
+}
+.cc-staff-subscriptions > div:nth-child(2) > button:focus-visible { outline: 3px solid #FDBA74; }
+.cc-staff-subscriptions > div:nth-child(2) > button > div > span:first-child { color: #C2410C !important; }
+/* Refund and Subscription modules largely use inline styles: apply consistent panels and typography carefully. */
+.cc-staff-refunds > div:first-child h1,
+.cc-staff-subscriptions > div:first-child h1 { font-size: clamp(24px,2.15vw,31px) !important; }
+.cc-staff-refunds > div:first-child p,
+.cc-staff-subscriptions > div:first-child p { color: var(--staff-muted) !important; font-size: 14px !important; }
+.cc-staff-refunds button, .cc-staff-subscriptions button {
+  font-family: inherit; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.cc-staff-refunds button:hover:not(:disabled),.cc-staff-subscriptions button:hover:not(:disabled) {
+  box-shadow: 0 5px 16px rgba(234,88,12,.09);
+}
+.cc-staff-refunds :is(input,select,textarea),.cc-staff-subscriptions :is(input,select,textarea) {
+  border-radius: 11px; border-color: var(--staff-border);
+}
+.cc-staff-refunds > div:nth-child(2), .cc-staff-subscriptions > div:nth-child(4) {
+  border-color: var(--staff-border) !important;
+}
+@media (max-width: 768px) {
+  .cc-staff-unified :is(h1,.am-title) { font-size: 25px !important; }
+  .cc-staff-unified :is(.verification-list-panel,.verification-detail-panel,.complaints-list-panel,
+    .complaints-detail-panel,.am-panel) { border-radius: 15px !important; }
+}
