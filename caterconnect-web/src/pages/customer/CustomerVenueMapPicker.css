@@ -1,0 +1,239 @@
+.cc-venue-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgb(15 23 42 / 65%);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.cc-venue-dialog {
+  width: min(950px, 100%);
+  max-height: min(92dvh, 900px);
+  background: white;
+  border-radius: 18px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  color: #222;
+  font:
+    15px/1.5 Inter,
+    system-ui,
+    sans-serif;
+  box-shadow: 0 20px 70px #0004;
+}
+.cc-venue-dialog * {
+  box-sizing: border-box;
+}
+.cc-venue-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 22px 12px;
+}
+.cc-venue-heading h2 {
+  margin: 0 0 4px;
+  font-size: 23px;
+  font-weight: 900;
+}
+.cc-venue-heading p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+.cc-venue-dialog button {
+  cursor: pointer;
+  font: inherit;
+}
+.cc-venue-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.cc-venue-dialog :is(button, input):focus-visible {
+  outline: 3px solid #fdba74;
+  outline-offset: 2px;
+}
+.cc-venue-close {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 9px;
+}
+.cc-venue-search {
+  display: flex;
+  gap: 10px;
+  padding: 8px 22px 16px;
+}
+.cc-venue-search input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font: inherit;
+}
+.cc-venue-search button,
+.cc-venue-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: white;
+  background: #f97316;
+  border: 1px solid #f97316;
+  border-radius: 10px;
+  padding: 11px 15px;
+  font-weight: 800;
+}
+.cc-venue-search button:hover:not(:disabled),
+.cc-venue-confirm:hover:not(:disabled) {
+  background: #ea580c;
+}
+.cc-venue-map {
+  height: min(52vh, 490px);
+  min-height: 260px;
+  width: 100%;
+  background: #f3f4f6;
+}
+.cc-venue-leaflet-icon {
+  font-size: 32px;
+  line-height: 1;
+  text-shadow: 0 2px 4px #0005;
+}
+.cc-venue-footer {
+  display: grid;
+  gap: 11px;
+  padding: 14px 22px 18px;
+}
+.cc-venue-selected {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  color: #374151;
+  overflow-wrap: anywhere;
+}
+.cc-venue-selected > svg {
+  color: #f97316;
+  flex: none;
+  margin-top: 2px;
+}
+.cc-venue-actions {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+}
+.cc-venue-cancel {
+  border: 1px solid #e5e7eb;
+  background: white;
+  border-radius: 10px;
+  padding: 11px 15px;
+  font-weight: 700;
+}
+.cc-venue-footer small {
+  color: #6b7280;
+  font-size: 12px;
+}
+.cc-venue-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  padding: 10px 22px;
+  margin: 0;
+  font-size: 13px;
+}
+.cc-venue-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.cc-book-venue-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.cc-book-venue-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  border-radius: 9px;
+  padding: 7px 11px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.cc-book-venue-preview {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #fed7aa;
+  background: #fffaf5;
+  border-radius: 12px;
+  padding: 12px;
+  color: #9a3412;
+  cursor: pointer;
+  margin-top: 9px;
+  font: inherit;
+}
+.cc-book-venue-preview > svg {
+  flex: none;
+}
+.cc-book-venue-preview strong {
+  display: block;
+  color: #7c2d12;
+}
+.cc-book-venue-preview small {
+  display: block;
+  color: #92400e;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .cc-venue-overlay {
+    padding: 0;
+  }
+  .cc-venue-dialog {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+  .cc-venue-heading {
+    padding: 14px;
+  }
+  .cc-venue-heading h2 {
+    font-size: 19px;
+  }
+  .cc-venue-search {
+    padding: 7px 14px 12px;
+  }
+  .cc-venue-search button {
+    padding: 10px;
+  }
+  .cc-venue-map {
+    flex: 1;
+    min-height: 240px;
+    height: auto;
+  }
+  .cc-venue-footer {
+    padding: 12px 14px;
+  }
+  .cc-venue-actions {
+    flex-wrap: wrap;
+  }
+  .cc-venue-actions button {
+    flex: 1;
+  }
+  .cc-book-venue-heading {
+    flex-wrap: wrap;
+  }
+}

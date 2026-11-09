@@ -535,8 +535,8 @@ export default function HomeScreen() {
                       onPress={() => handleBookPress(item.id)}
                     >
                       <View style={styles.featCardImg}>
-                        {item.logo_url ? (
-                          <Image source={{ uri: item.logo_url }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                        {item.cover_photo_url ? (
+                          <Image source={{ uri: item.cover_photo_url }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                         ) : (
                           <ImageIcon size={26} color={Colors.orange} style={{ opacity: 0.5 }} />
                         )}

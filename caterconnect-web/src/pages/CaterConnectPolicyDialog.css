@@ -1,0 +1,128 @@
+/* Isolated policy modal styles; CaterConnect brand orange #F97316 */
+.cc-policy-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 22px;
+  background: rgba(14, 14, 14, 0.64);
+  backdrop-filter: blur(5px);
+}
+
+.cc-policy-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: min(88vh, 900px);
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  color: #171717;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .3);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.cc-policy-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 26px 18px;
+  border-bottom: 1px solid #e9e9e9;
+}
+
+.cc-policy-symbol {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: #f97316;
+  background: #fff1e6;
+  border-radius: 13px;
+}
+
+.cc-policy-heading-group { flex: 1; min-width: 0; }
+.cc-policy-heading-group h2 {
+  margin: 0 0 4px;
+  font-size: clamp(17px, 2.5vw, 22px);
+  font-weight: 800;
+  letter-spacing: -.5px;
+}
+.cc-policy-heading-group p { margin: 0; font-size: 12px; color: #737373; }
+
+.cc-policy-close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: #f5f5f5;
+  color: #292929;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.cc-policy-close:hover { background: #ffedd5; color: #c2410c; }
+
+.cc-policy-tabs { display: flex; gap: 9px; padding: 16px 26px; border-bottom: 1px solid #eee; }
+.cc-policy-tabs button {
+  border: 1px solid #e5e5e5;
+  background: #fff;
+  color: #505050;
+  padding: 10px 17px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cc-policy-tabs button.active { background: #f97316; color: #fff; border-color: #f97316; }
+
+.cc-policy-sections { overflow-y: auto; overscroll-behavior: contain; padding: 2px 26px 14px; }
+.cc-policy-section { padding: 19px 0; border-bottom: 1px solid #f0f0f0; }
+.cc-policy-section:last-child { border-bottom: none; }
+.cc-policy-section h3 {
+  margin: 0 0 9px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #202020;
+}
+.cc-policy-section h3 span { color: #ea580c; font-size: 12px; }
+.cc-policy-section p { margin: 0; font-size: 13px; line-height: 1.8; color: #606060; }
+
+.cc-policy-foot {
+  border-top: 1px solid #ededed;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 26px;
+}
+.cc-policy-foot p { margin: 0; font-size: 11px; color: #777; line-height: 1.5; }
+.cc-policy-foot button {
+  flex: none;
+  border: none;
+  background: #171717;
+  color: white;
+  border-radius: 9px;
+  padding: 11px 19px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cc-policy-foot button:hover { background: #f97316; }
+.cc-policy-dialog button:focus-visible { outline: 3px solid #fb923c; outline-offset: 2px; }
+
+@media (max-width: 540px) {
+  .cc-policy-backdrop { padding: 10px; }
+  .cc-policy-dialog { max-height: 94vh; border-radius: 15px; }
+  .cc-policy-head { padding: 17px 16px 13px; gap: 10px; }
+  .cc-policy-tabs { padding: 12px 16px; }
+  .cc-policy-tabs button { flex: 1; padding: 9px 10px; font-size: 12px; }
+  .cc-policy-sections { padding: 0 16px 8px; }
+  .cc-policy-foot { padding: 12px 16px; }
+}

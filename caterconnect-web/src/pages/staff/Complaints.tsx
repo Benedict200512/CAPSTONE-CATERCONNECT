@@ -216,6 +216,11 @@ export default function Complaints() {
           min-width: 0;
           padding-bottom: 40px;
           color: #111827;
+          /* Let the Staff dashboard's main content handle page scrolling.
+             Avoid a second scrollbar inside the Complaints page. */
+          height: auto;
+          min-height: 0;
+          overflow: visible;
         }
 
         .complaints-page *,
@@ -380,14 +385,13 @@ export default function Complaints() {
         }
 
         .complaints-list-panel {
-          max-height: calc(100vh - 260px);
-          overflow-y: auto;
+          /* Content contributes to the page height; no trapped nested scrollbar. */
+          overflow: visible;
         }
 
         .complaints-detail-panel {
           padding: 28px;
-          max-height: calc(100vh - 260px);
-          overflow-y: auto;
+          overflow: visible;
         }
 
         .complaints-loading,
@@ -402,11 +406,19 @@ export default function Complaints() {
         }
 
         .complaints-empty-list {
-          display: block;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 240px;
+          width: 100%;
+          gap: 8px;
         }
 
         .complaints-empty-list svg {
-          margin-bottom: 12px;
+          display: block;
+          flex-shrink: 0;
+          margin: 0 auto 8px;
         }
 
         .complaint-list-item {
@@ -728,10 +740,7 @@ export default function Complaints() {
             grid-template-columns: minmax(0, 1fr);
           }
 
-          .complaints-list-panel {
-            max-height: 420px;
-          }
-
+          .complaints-list-panel,
           .complaints-detail-panel {
             max-height: none;
           }
@@ -781,7 +790,6 @@ export default function Complaints() {
           }
 
           .complaints-list-panel {
-            max-height: 360px;
             border-radius: 16px;
           }
 

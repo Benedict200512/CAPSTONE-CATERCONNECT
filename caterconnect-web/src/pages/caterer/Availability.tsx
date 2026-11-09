@@ -22,7 +22,7 @@ import {
   saveDailyCapacity,
   setDateBlocked,
   shiftMonth,
-} from '../../lib/avalability';
+} from '../../lib/availability';
 
 import './Availability.css';
 

@@ -1,0 +1,239 @@
+.cc-appeal-page {
+  min-height: 100vh;
+  background: #faf8f5;
+  color: #172033;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  padding: 28px 16px 60px;
+}
+.cc-appeal-shell {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.cc-appeal-nav,
+.cc-appeal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cc-appeal-nav a,
+.cc-appeal-nav button,
+.cc-appeal-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: #c65000;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 9px;
+}
+.cc-appeal-heading {
+  text-align: center;
+  margin: 28px 0 25px;
+}
+.cc-appeal-heading h1 {
+  font-size: 30px;
+  margin: 10px 0 7px;
+  color: #172033;
+}
+.cc-appeal-heading p {
+  font-size: 14px;
+  color: #64748b;
+}
+.cc-appeal-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  background: #fff0e5;
+  border-radius: 50%;
+  color: #f97316;
+}
+.cc-appeal-alert,
+.cc-appeal-panel {
+  background: #fff;
+  border-radius: 15px;
+  padding: 21px;
+  margin-bottom: 17px;
+  border: 1px solid #f3e5da;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.025);
+}
+.cc-appeal-alert {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+.cc-appeal-alert strong,
+.cc-appeal-panel h2,
+.cc-appeal-status,
+.cc-appeal-wait {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.cc-appeal-alert p,
+.cc-appeal-panel p {
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 10px 0;
+  color: #475569;
+}
+.cc-appeal-panel h2 {
+  font-size: 16px;
+  margin: 0 0 14px;
+}
+.cc-appeal-status {
+  color: #ea580c !important;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.cc-appeal-panel small {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 8px;
+}
+.cc-appeal-panel label {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 15px 0 9px;
+}
+.cc-appeal-panel textarea,
+.cc-appeal-panel input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px;
+  outline: none;
+  resize: vertical;
+}
+.cc-appeal-panel textarea:focus,
+.cc-appeal-panel input:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px #ffedd5;
+}
+.cc-appeal-panel :is(textarea, input):disabled {
+  background: #f8fafc;
+  color: #64748b;
+}
+.cc-appeal-counter {
+  text-align: right;
+}
+.cc-appeal-primary {
+  width: 100%;
+  min-height: 45px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: #f97316;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 12px;
+  margin-top: 15px;
+}
+.cc-appeal-primary:hover:not(:disabled) {
+  background: #ea580c;
+}
+.cc-appeal-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.cc-appeal-explanation {
+  background: #fef2f2;
+  border-radius: 9px;
+  padding: 13px;
+  font-size: 12px;
+}
+.cc-appeal-notification {
+  border-top: 1px solid #f1f5f9;
+  padding: 14px 0;
+}
+.cc-appeal-notification strong {
+  font-size: 13px;
+}
+.cc-appeal-new {
+  font-size: 9px;
+  background: #fff0e5;
+  color: #c2410c;
+  border-radius: 9px;
+  padding: 3px 6px;
+}
+.cc-appeal-wait {
+  background: #f1f5f9;
+  border-radius: 9px;
+  padding: 12px;
+  font-weight: 700;
+}
+.cc-appeal-feedback {
+  padding: 12px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.cc-appeal-error {
+  color: #991b1b;
+  background: #fef2f2;
+}
+.cc-appeal-success {
+  color: #166534;
+  background: #f0fdf4;
+}
+.cc-appeal-footnote {
+  text-align: center;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 18px;
+}
+.cc-appeal-loading {
+  text-align: center;
+  padding: 30px;
+}
+.cc-appeal-login-notice {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #9a3412;
+}
+.cc-appeal-notice-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+.cc-appeal-login-notice p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 9px 0;
+}
+.cc-appeal-login-notice .cc-appeal-primary {
+  margin-top: 12px;
+}
+@media (max-width: 540px) {
+  .cc-appeal-heading h1 {
+    font-size: 25px;
+  }
+  .cc-appeal-alert,
+  .cc-appeal-panel {
+    padding: 16px;
+  }
+}

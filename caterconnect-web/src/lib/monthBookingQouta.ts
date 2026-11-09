@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { COMMITTED_BOOKING_STATUSES } from './avalability';
+import { COMMITTED_BOOKING_STATUSES } from './availability';
 
 export type MonthlyQuota =
   | { status: 'ready'; month: string; used: number; limit: number | null; remaining: number | null }

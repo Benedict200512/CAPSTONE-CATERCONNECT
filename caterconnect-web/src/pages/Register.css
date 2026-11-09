@@ -1,0 +1,613 @@
+/* CaterConnect Web registration: locally scoped styles, no global auth overrides. */
+.cc-reg-page {
+  --cc-orange: rgb(249, 115, 22);
+  --cc-ink: #171717;
+  --cc-muted: #747474;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: #fafafa;
+  color: var(--cc-ink);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  padding: 28px 18px 40px;
+}
+.cc-reg-page * {
+  box-sizing: border-box;
+}
+.cc-reg-page a {
+  text-decoration: none;
+  color: inherit;
+}
+.cc-reg-page button,
+.cc-reg-page input {
+  font: inherit;
+}
+.cc-reg-glow {
+  pointer-events: none;
+  position: absolute;
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  filter: blur(22px);
+  opacity: 0.6;
+}
+.cc-reg-glow-one {
+  top: -290px;
+  left: -170px;
+  background: #ffedd5;
+}
+.cc-reg-glow-two {
+  right: -280px;
+  bottom: -260px;
+  background: #ffe6d1;
+}
+.cc-reg-container {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 640px);
+  margin: 0 auto;
+}
+.cc-reg-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #666 !important;
+  font-size: 13px;
+  font-weight: 650;
+  margin-bottom: 23px;
+}
+.cc-reg-back:hover {
+  color: var(--cc-orange) !important;
+}
+.cc-reg-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 25px;
+}
+.cc-reg-logo {
+  width: 48px;
+  height: 48px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  padding: 5px;
+}
+.cc-reg-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.cc-reg-brand strong {
+  display: block;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: 0.25px;
+}
+.cc-reg-brand strong span {
+  color: var(--cc-orange);
+}
+.cc-reg-brand small {
+  display: block;
+  color: #777;
+  font-size: 10px;
+  margin-top: 3px;
+}
+.cc-reg-card {
+  background: white;
+  border: 1px solid #eaeaea;
+  border-radius: 22px;
+  box-shadow: 0 16px 55px rgba(0, 0, 0, 0.065);
+  padding: 35px 39px;
+}
+.cc-reg-heading {
+  text-align: center;
+  margin-bottom: 23px;
+}
+.cc-reg-kicker {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-weight: 800;
+  color: #c2410c;
+  background: #fff7ed;
+  border: 1px solid #ffedd5;
+  border-radius: 40px;
+  padding: 7px 12px;
+}
+.cc-reg-heading h1 {
+  font-size: 29px;
+  letter-spacing: -1.15px;
+  margin: 12px 0 5px;
+  font-weight: 900;
+}
+.cc-reg-heading p {
+  color: #777;
+  font-size: 12.5px;
+  line-height: 1.7;
+  margin: 0;
+}
+.cc-reg-role-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px;
+  margin-bottom: 25px;
+}
+.cc-reg-role {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  position: relative;
+  border: 1.5px solid #e7e7e7;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.22s,
+    background 0.22s,
+    box-shadow 0.22s,
+    transform 0.22s;
+}
+.cc-reg-role:hover {
+  transform: translateY(-2px);
+}
+.cc-reg-role.is-active {
+  background: #fff7ed;
+  border-color: var(--cc-orange);
+  box-shadow: 0 0 0 3px #ffedd5;
+}
+.cc-reg-role-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 12px;
+  background: #f5f5f5;
+  color: #555;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.cc-reg-role.is-active .cc-reg-role-icon {
+  background: #ffedd5;
+  color: #ea580c;
+}
+.cc-reg-role strong,
+.cc-reg-role small {
+  display: block;
+}
+.cc-reg-role strong {
+  font-size: 13px;
+  font-weight: 850;
+}
+.cc-reg-role small {
+  font-size: 10px;
+  color: #777;
+  margin-top: 3px;
+}
+.cc-reg-role-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: #ea580c;
+}
+.cc-reg-form-transition {
+  animation: ccRegSwap 0.33s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ccRegSwap {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+.cc-reg-customer {
+  transform-origin: left center;
+}
+.cc-reg-caterer {
+  transform-origin: right center;
+}
+.cc-reg-role-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 850;
+  color: #222;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 13px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.cc-reg-role-heading span {
+  display: grid;
+  place-items: center;
+  background: #fff0e4;
+  color: #ea580c;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+}
+.cc-reg-role-heading > svg:last-child {
+  margin-left: auto;
+  color: #888;
+}
+.cc-reg-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px 14px;
+}
+.cc-reg-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 6px;
+}
+.cc-reg-label {
+  color: #444;
+  font-size: 11px;
+  font-weight: 780;
+}
+.cc-reg-input-shell {
+  width: 100%;
+  min-height: 47px;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  background: #fff;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.cc-reg-input-shell:focus-within {
+  border-color: var(--cc-orange);
+  box-shadow: 0 0 0 3px #ffedd5;
+}
+.cc-reg-input-error {
+  border-color: #dc2626;
+}
+.cc-reg-field-icon {
+  display: flex;
+  color: #a3a3a3;
+  flex: none;
+}
+.cc-reg-input-shell input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  color: #171717;
+  font-size: 12px;
+  padding: 13px 0;
+}
+.cc-reg-input-shell input::placeholder {
+  color: #aaa;
+}
+.cc-reg-field-error {
+  color: #b91c1c;
+  font-size: 10px;
+}
+.cc-reg-eye {
+  border: 0;
+  background: transparent;
+  color: #666;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  cursor: pointer;
+}
+.cc-reg-strength {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 11px 0 0;
+}
+.cc-reg-strength > div {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.cc-reg-strength span {
+  height: 4px;
+  flex: 1;
+  border-radius: 4px;
+  background: #ececec;
+}
+.cc-reg-strength .filled {
+  background: #f97316;
+}
+.cc-reg-strength small {
+  font-size: 10px;
+  color: #777;
+  white-space: nowrap;
+}
+.cc-reg-terms {
+  margin: 22px 0 16px;
+}
+.cc-reg-view-terms {
+  border: 1px solid #fbd6bc;
+  border-radius: 10px;
+  background: #fff7ed;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 13px;
+  text-align: left;
+  color: #9a3412;
+  font-weight: 750;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cc-reg-view-terms svg:last-child {
+  margin-left: auto;
+}
+.cc-reg-agreement {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #666;
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 14px 0 0;
+}
+.cc-reg-agreement input {
+  accent-color: var(--cc-orange);
+  margin-top: 3px;
+}
+.cc-reg-agreement button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #c2410c;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 750;
+}
+.cc-reg-verification-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #57534e;
+  background: #fafafa;
+  border: 1px solid #ededed;
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+.cc-reg-verification-note svg {
+  flex: none;
+  color: #ea580c;
+}
+.cc-reg-alert {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.cc-reg-submit {
+  width: 100%;
+  border: 0;
+  border-radius: 11px;
+  background: var(--cc-orange);
+  color: white;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.cc-reg-submit:hover:not(:disabled) {
+  background: #ea580c;
+  transform: translateY(-1px);
+}
+.cc-reg-submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.cc-reg-login {
+  text-align: center;
+  margin: 20px 0 0;
+  font-size: 12px;
+  color: #777;
+}
+.cc-reg-login a {
+  color: #c2410c;
+  font-weight: 800;
+}
+.cc-reg-footnote {
+  text-align: center;
+  color: #999;
+  font-size: 10px;
+  margin: 19px 0 0;
+}
+.cc-reg-page :focus-visible {
+  outline: 3px solid #fdba74;
+  outline-offset: 2px;
+}
+@media (max-width: 650px) {
+  .cc-reg-page {
+    padding: 20px 14px 34px;
+  }
+  .cc-reg-card {
+    padding: 26px 19px;
+    border-radius: 17px;
+  }
+  .cc-reg-heading h1 {
+    font-size: 25px;
+  }
+  .cc-reg-fields {
+    grid-template-columns: 1fr;
+  }
+  .cc-reg-role {
+    padding: 11px 9px;
+  }
+  .cc-reg-role-icon {
+    width: 33px;
+    height: 33px;
+  }
+  .cc-reg-role strong {
+    font-size: 12px;
+  }
+  .cc-reg-role small {
+    font-size: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-reg-form-transition {
+    animation: none;
+  }
+  .cc-reg-role,
+  .cc-reg-submit {
+    transition: none;
+  }
+}
+
+/* Confirmation shown after Supabase Auth accepts signup; not an activation guarantee. */
+.cc-reg-success {
+  text-align: center;
+  padding-block: 50px;
+  animation: ccRegAppear 0.35s ease both;
+}
+.cc-reg-success-icon {
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 20px;
+  border-radius: 20px;
+  color: #ea580c;
+  background: #fff1e6;
+}
+.cc-reg-success h1 {
+  font-size: clamp(25px, 4vw, 33px);
+  margin: 0 0 15px;
+}
+.cc-reg-success p {
+  color: #666;
+  line-height: 1.75;
+  margin: 0 auto 14px;
+  max-width: 470px;
+  font-size: 14px;
+}
+.cc-reg-success strong {
+  color: #171717;
+  overflow-wrap: anywhere;
+}
+.cc-reg-success-link {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+  border-radius: 11px;
+  background: #f97316;
+  padding: 14px 22px;
+  color: white;
+  font-weight: 800;
+  text-decoration: none;
+}
+.cc-reg-success-link:hover {
+  background: #ea580c;
+}
+
+/* === Polished typography + single-border input focus (November 2026) === */
+/* Match the uppercase, bold, tracked JOIN CATERCONNECT eyebrow. */
+.cc-reg-page .cc-reg-terms-text {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  line-height: 1.55;
+  text-transform: uppercase;
+}
+
+.cc-reg-page .cc-reg-view-terms {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+.cc-reg-page .cc-reg-view-terms:hover {
+  background: #ffedd5;
+  border-color: #fdba74;
+}
+
+/* Use the same label typography as the registration heading accent. */
+.cc-reg-page .cc-reg-label {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Remove the inner rectangular browser/global :focus-visible outline.
+   Leave one clean, rounded orange border on the outside input shell. */
+.cc-reg-page .cc-reg-input-shell input,
+.cc-reg-page .cc-reg-input-shell input:focus,
+.cc-reg-page .cc-reg-input-shell input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.cc-reg-page .cc-reg-input-shell:focus-within {
+  border-color: var(--cc-orange);
+  box-shadow: none;
+}
+/* Keep keyboard focus visibly accessible on actual buttons and links. */
+.cc-reg-page button:focus-visible,
+.cc-reg-page a:focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 3px;
+}
+
+/* Match the Login page's "Sign In to CATERCONNECT" submit button typography. */
+.cc-reg-page .cc-reg-submit {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: normal;
+  text-transform: none;
+  min-height: 53px;
+  border-radius: 12px;
+}

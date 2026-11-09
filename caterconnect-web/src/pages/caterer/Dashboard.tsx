@@ -33,7 +33,7 @@ import {
   loadAvailability,
   manilaToday,
   shiftMonth,
-} from '../../lib/avalability';
+} from '../../lib/availability';
 
 type Booking = {
   id: string;

@@ -1,0 +1,224 @@
+.cc-av-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.cc-av-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #292524;
+}
+.cc-av-open {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  min-height: 46px;
+  border: 1px solid #d6d3d1;
+  border-radius: 10px;
+  background: #fff;
+  color: #292524;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cc-av-open svg {
+  color: #ea580c;
+  flex-shrink: 0;
+}
+.cc-av-open:hover {
+  border-color: #ea580c;
+}
+.cc-av-open.cc-av-invalid {
+  border-color: #dc2626;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+.cc-av-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 18px;
+}
+.cc-av-dialog {
+  width: min(100%, 425px);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border-radius: 20px;
+  background: #fff;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+}
+.cc-av-heading,
+.cc-av-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.cc-av-heading h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #292524;
+}
+.cc-av-navigation {
+  margin: 18px 0 14px;
+}
+.cc-av-navigation strong {
+  font-size: 16px;
+  color: #292524;
+}
+.cc-av-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.cc-av-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.cc-av-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+.cc-av-weekday {
+  text-align: center;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 0;
+}
+.cc-av-day {
+  aspect-ratio: 1;
+  min-width: 0;
+  border: 1px solid #e7e5e4;
+  border-radius: 9px;
+  background: #fff;
+  color: #292524;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cc-av-day:not(:disabled):hover {
+  background: #ffedd5;
+  border-color: #f97316;
+}
+.cc-av-day.cc-av-selected:not(:disabled) {
+  background: #ea580c;
+  color: white;
+  border-color: #ea580c;
+}
+.cc-av-day:disabled {
+  color: #a8a29e;
+  background: #f5f5f4;
+  cursor: not-allowed;
+}
+.cc-av-day.cc-av-blocked {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fecaca;
+  text-decoration: line-through;
+}
+.cc-av-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: #57534e;
+}
+.cc-av-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.cc-av-dot {
+  height: 11px;
+  width: 11px;
+  display: inline-block;
+  border: 1px solid #d6d3d1;
+  border-radius: 3px;
+}
+.cc-av-dot-open {
+  background: #fff;
+}
+.cc-av-dot-blocked {
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+.cc-av-dot-selected {
+  background: #ea580c;
+  border-color: #ea580c;
+}
+.cc-av-status,
+.cc-av-warning,
+.cc-av-note {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+.cc-av-status {
+  color: #9a3412;
+}
+.cc-av-warning {
+  color: #b91c1c;
+}
+.cc-av-note {
+  color: #78716c;
+}
+.cc-av-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 11px;
+  width: 100%;
+  margin-top: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cc-av-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cc-av-icon:focus-visible,
+.cc-av-day:focus-visible,
+.cc-av-open:focus-visible,
+.cc-av-refresh:focus-visible {
+  outline: 3px solid #fb923c;
+  outline-offset: 2px;
+}
+@media (max-width: 400px) {
+  .cc-av-dialog {
+    padding: 14px;
+  }
+  .cc-av-grid {
+    gap: 3px;
+  }
+  .cc-av-day {
+    font-size: 12px;
+  }
+}
+
+/* Match the bold Event Details form values. */
+.cc-av-open > span {
+  font-weight: 800;
+}

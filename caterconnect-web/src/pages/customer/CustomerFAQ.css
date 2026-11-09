@@ -1,0 +1,51 @@
+/* Customer FAQ-only styling. Existing profile design is unchanged. */
+.cc-customer-faq-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 0 0 24px;
+}
+.cc-customer-faq-chip {
+  background: #fff;
+  color: #52525b;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.cc-customer-faq-chip.selected {
+  color: #fff;
+  background: #f97316;
+  border-color: #f97316;
+}
+.cc-customer-faq-chip:focus-visible {
+  outline: 3px solid #fdba74;
+  outline-offset: 2px;
+}
+.cc-customer-faq-heading {
+  font-size: 19px;
+  font-weight: 850;
+  margin: 0 0 13px;
+}
+.cc-customer-faq-label-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.cc-customer-faq-category-label {
+  color: #ea580c;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.7px;
+}
+.cc-profile-faq-item > button {
+  min-height: 76px;
+}
+.cc-profile-faq-item > p {
+  white-space: pre-line;
+}

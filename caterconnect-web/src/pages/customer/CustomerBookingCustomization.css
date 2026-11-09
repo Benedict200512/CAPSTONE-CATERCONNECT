@@ -1,0 +1,169 @@
+/* Phase 3: Customer-only menu customization. Existing Book Now styles stay authoritative. */
+.cc-book-customize {
+  min-width: 0;
+}
+.cc-book-customize > p {
+  color: #747474;
+  line-height: 1.6;
+}
+.cc-book-customize-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 16px;
+  margin: 16px 0 20px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.cc-book-customize-total strong {
+  font-size: 19px;
+  color: #ea580c;
+  white-space: nowrap;
+}
+.cc-book-menu-category {
+  margin: 24px 0 0;
+}
+.cc-book-menu-category h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  color: #252525;
+  font-size: 18px;
+  font-weight: 850;
+}
+.cc-book-menu-category h3 svg {
+  color: #f97316;
+  flex-shrink: 0;
+}
+.cc-book-menu-list {
+  display: grid;
+  gap: 12px;
+}
+.cc-book-menu-item {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #eaeaea;
+  border-radius: 13px;
+  background: #fff;
+  min-width: 0;
+}
+.cc-book-menu-item > img,
+.cc-book-menu-placeholder {
+  flex: 0 0 78px;
+  width: 78px;
+  height: 78px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+.cc-book-menu-placeholder {
+  display: grid;
+  place-items: center;
+  background: #fff1e6;
+  color: #ea580c;
+}
+.cc-book-menu-info {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cc-book-menu-info strong {
+  color: #252525;
+  font-size: 15px;
+  font-weight: 800;
+}
+.cc-book-menu-info p {
+  margin: 5px 0;
+  color: #737373;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cc-book-menu-info small {
+  display: block;
+  margin-top: 5px;
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 700;
+}
+.cc-book-menu-qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cc-book-menu-qty button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  background: #fff7ed;
+  color: #c2410c;
+  cursor: pointer;
+}
+.cc-book-menu-qty button:last-child {
+  border-color: #f97316;
+  background: #f97316;
+  color: #fff;
+}
+.cc-book-menu-qty button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.cc-book-menu-qty output {
+  min-width: 20px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.cc-book-review-addons {
+  margin: 20px 0;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+}
+.cc-book-review-addons h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 800;
+}
+.cc-book-menu-qty button:focus-visible {
+  outline: 3px solid #fb923c;
+  outline-offset: 2px;
+}
+@media (max-width: 650px) {
+  .cc-book-menu-item {
+    flex-wrap: wrap;
+  }
+  .cc-book-menu-item > img,
+  .cc-book-menu-placeholder {
+    flex-basis: 64px;
+    width: 64px;
+    height: 64px;
+  }
+  .cc-book-menu-qty {
+    margin-left: auto;
+  }
+  .cc-book-customize-total {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-book-menu-qty button {
+    transition: none;
+  }
+}
+
+/* Match the venue value to the other Event Details inputs. */
+.cc-book-fields #cc-book-venue-input {
+  font-weight: 800;
+}
+.cc-book-venue-preview small {
+  font-weight: 700;
+}
