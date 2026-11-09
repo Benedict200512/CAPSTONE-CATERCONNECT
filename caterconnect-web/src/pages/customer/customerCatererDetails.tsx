@@ -36,7 +36,7 @@ import {
   type DetailPackage,
 } from "../../lib/customerCatererDetails";
 import CustomerHeader from "./CustomerHeader";
-import "./CustomerCatererDetails.css";
+import "./customerCatererDetails.css";
 
 type Tab = "packages" | "menu" | "reviews";
 const money = (n: number) =>
