@@ -135,6 +135,18 @@ function ProtectedRoute({
 }
 
 // ==========================================
+// CUSTOMER ROUTE WITH MAINTENANCE PROTECTION
+// ==========================================
+
+function CustomerRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute allow={["customer"]}>
+      <WebMaintenanceGate>{children}</WebMaintenanceGate>
+    </ProtectedRoute>
+  );
+}
+
+// ==========================================
 // APPROVED CATERER ROUTE
 // ==========================================
 
@@ -225,40 +237,40 @@ export default function App() {
           <Route
             path="/customer"
             element={
-              <ProtectedRoute allow={["customer"]}>
+              <CustomerRoute>
                 <CustomerMarketplace />
-              </ProtectedRoute>
+              </CustomerRoute>
             }
           />
 
           <Route
             path="/customer/caterer/:catererId"
             element={
-              <ProtectedRoute allow={["customer"]}>
+              <CustomerRoute>
                 <CustomerCatererDetails />
-              </ProtectedRoute>
+              </CustomerRoute>
             }
           />
 
           <Route
             path="/customer/saved"
             element={
-              <ProtectedRoute allow={["customer"]}>
+              <CustomerRoute>
                 <CustomerSavedPackages />
-              </ProtectedRoute>
+              </CustomerRoute>
             }
           />
 
-          <Route path="/customer/bookings" element={<ProtectedRoute allow={["customer"]}><CustomerBookings /></ProtectedRoute>} />
-          <Route path="/customer/book/:catererId" element={<ProtectedRoute allow={["customer"]}><CustomerBookNow /></ProtectedRoute>} />
-          <Route path="/customer/messages" element={<ProtectedRoute allow={["customer"]}><CustomerMessages /></ProtectedRoute>} />
-          <Route path="/customer/notifications" element={<ProtectedRoute allow={["customer"]}><CustomerNotifications /></ProtectedRoute>} />
+          <Route path="/customer/bookings" element={<CustomerRoute><CustomerBookings /></CustomerRoute>} />
+          <Route path="/customer/book/:catererId" element={<CustomerRoute><CustomerBookNow /></CustomerRoute>} />
+          <Route path="/customer/messages" element={<CustomerRoute><CustomerMessages /></CustomerRoute>} />
+          <Route path="/customer/notifications" element={<CustomerRoute><CustomerNotifications /></CustomerRoute>} />
 
           {/* CUSTOMER PROFILE & SETTINGS */}
-          <Route path="/customer/profile" element={<ProtectedRoute allow={["customer"]}><CustomerProfile /></ProtectedRoute>} />
-          <Route path="/customer/profile/edit" element={<ProtectedRoute allow={["customer"]}><CustomerEditProfile /></ProtectedRoute>} />
-          <Route path="/customer/faq" element={<ProtectedRoute allow={["customer"]}><CustomerFAQ /></ProtectedRoute>} />
-          <Route path="/customer/support" element={<ProtectedRoute allow={["customer"]}><CustomerTechnicalSupport /></ProtectedRoute>} />
+          <Route path="/customer/profile" element={<CustomerRoute><CustomerProfile /></CustomerRoute>} />
+          <Route path="/customer/profile/edit" element={<CustomerRoute><CustomerEditProfile /></CustomerRoute>} />
+          <Route path="/customer/faq" element={<CustomerRoute><CustomerFAQ /></CustomerRoute>} />
+          <Route path="/customer/support" element={<CustomerRoute><CustomerTechnicalSupport /></CustomerRoute>} />
 
           {/* ==================================
               STAFF ROUTES
