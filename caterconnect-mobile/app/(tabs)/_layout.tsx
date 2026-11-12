@@ -1,15 +1,17 @@
-
 import { Tabs, Redirect } from 'expo-router';
+import type { RefObject } from 'react';
 import {
   Platform,
   StyleSheet,
   Text,
   View,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import {
   Home,
   CalendarDays,
+  Heart,
   MessageSquare,
   User,
 } from 'lucide-react-native';
@@ -20,30 +22,37 @@ import {
   useComparisonBarVisible,
 } from '../../components/PackageComparisonControls';
 import { useAuth } from '../../context/AuthContext';
+import { FavoriteFlightProvider, useFavoriteFlight } from '../../context/FavoriteFlightContext';
 
 const ORANGE = '#F97316';
 const GRAY = '#9CA3AF';
 const ACTIVE_BG = '#FFF7ED';
 
-// Reusable Tab Item Component
+// Reusable bottom navigation item.
 function TabItem({
   label,
   icon: Icon,
   focused,
+  targetRef,
+  pulse,
 }: {
   label: string;
-  icon: any;
+  icon: typeof Home;
   focused: boolean;
+  targetRef?: RefObject<View | null>;
+  pulse?: Animated.Value;
 }) {
   return (
     <View style={styles.tabItem}>
-      <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-        <Icon
-          size={22}
-          color={focused ? ORANGE : GRAY}
-          strokeWidth={focused ? 2.5 : 2}
-        />
-      </View>
+      <Animated.View style={pulse ? { transform: [{ scale: pulse }] } : undefined}>
+        <View ref={targetRef} style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+          <Icon
+            size={22}
+            color={focused ? ORANGE : GRAY}
+            strokeWidth={focused ? 2.5 : 2}
+          />
+        </View>
+      </Animated.View>
 
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
         {label}
@@ -86,13 +95,16 @@ export default function TabLayout() {
 
   return (
     <PackageComparisonProvider>
-      <CustomerTabs />
+      <FavoriteFlightProvider>
+        <CustomerTabs />
+      </FavoriteFlightProvider>
     </PackageComparisonProvider>
   );
 }
 
 function CustomerTabs() {
   const comparisonVisible = useComparisonBarVisible();
+  const { favoriteTabRef, favoritePulse } = useFavoriteFlight();
 
   return (
     <View style={{ flex: 1 }}>
@@ -119,10 +131,23 @@ function CustomerTabs() {
           name="bookings"
           options={{
             tabBarIcon: ({ focused }) => (
+              <TabItem label="Bookings" icon={CalendarDays} focused={focused} />
+            ),
+          }}
+        />
+
+        {/* Favorite is a visible tab between Bookings and Messages. */}
+        <Tabs.Screen
+          name="saved-packages"
+          options={{
+            title: 'Favorite',
+            tabBarIcon: ({ focused }) => (
               <TabItem
-                label="Bookings"
-                icon={CalendarDays}
+                label="Favorite"
+                icon={Heart}
                 focused={focused}
+                targetRef={favoriteTabRef}
+                pulse={favoritePulse}
               />
             ),
           }}
@@ -132,11 +157,7 @@ function CustomerTabs() {
           name="messages"
           options={{
             tabBarIcon: ({ focused }) => (
-              <TabItem
-                label="Messages"
-                icon={MessageSquare}
-                focused={focused}
-              />
+              <TabItem label="Messages" icon={MessageSquare} focused={focused} />
             ),
           }}
         />
@@ -153,7 +174,6 @@ function CustomerTabs() {
         {/* Hidden screens */}
         <Tabs.Screen name="package-comparison" options={{ href: null }} />
         <Tabs.Screen name="my-reviews" options={{ href: null }} />
-        <Tabs.Screen name="saved-packages" options={{ href: null }} />
         <Tabs.Screen name="faq" options={{ href: null }} />
         <Tabs.Screen name="notifications" options={{ href: null }} />
         <Tabs.Screen name="book/[catererId]" options={{ href: null }} />
@@ -191,7 +211,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minWidth: 64,
+    minWidth: 58,
   },
   iconWrap: {
     width: 48,

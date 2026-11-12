@@ -115,9 +115,9 @@ export default function CaterConnectLanding({
             </div>
             <div className="hero-trust">
               <div className="avatar-stack" aria-hidden="true">
-                <span>J</span>
-                <span>M</span>
                 <span>A</span>
+                <span>D</span>
+                <span>C</span>
                 <span>K</span>
               </div>
               <div>

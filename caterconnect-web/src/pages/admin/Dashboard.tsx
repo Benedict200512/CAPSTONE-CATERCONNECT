@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Store,
   AlertTriangle,
+  FileClock,
   Loader2,
   Bell,
   X,
@@ -50,6 +51,7 @@ type AdminNotification = {
     | 'new_caterer_registration'
     | 'new_caterer_verification'
     | 'caterer_verification_decision'
+    | 'account_appeal_admin_decision'
     | 'complaint_handled';
   booking_id: string | null;
   is_read: boolean;
@@ -61,6 +63,7 @@ const ADMIN_NOTIFICATION_TYPES = [
   'new_caterer_registration',
   'new_caterer_verification',
   'caterer_verification_decision',
+  'account_appeal_admin_decision',
   'complaint_handled',
 ];
 
@@ -399,6 +402,7 @@ export default function AdminDashboard() {
       ? '/staff/verification'
       : notification.type === 'complaint_handled'
         ? '/staff/complaints'
+        // Account appeals awaiting an Admin decision are handled in User Directory.
         : '/admin/users';
   navigate(destination);
 };
@@ -809,6 +813,8 @@ export default function AdminDashboard() {
                                 notification.type === 'new_caterer_registration' ||
                                 notification.type === 'caterer_verification_decision'
                                   ? '#F5F3FF'
+                                  : notification.type === 'account_appeal_admin_decision'
+                                    ? '#EFF6FF'
                                   : notification.type === 'complaint_handled'
                                     ? '#FEF2F2'
                                     : '#FFF7ED',
@@ -816,6 +822,8 @@ export default function AdminDashboard() {
                                 notification.type === 'new_caterer_registration' ||
                                 notification.type === 'caterer_verification_decision'
                                   ? '#7C3AED'
+                                  : notification.type === 'account_appeal_admin_decision'
+                                    ? '#2563EB'
                                   : notification.type === 'complaint_handled'
                                     ? '#DC2626'
                                     : '#EA580C',
@@ -827,6 +835,8 @@ export default function AdminDashboard() {
                             {notification.type === 'caterer_verification_decision' ||
                             notification.type === 'new_caterer_registration' ? (
                               <Store size={18} />
+                            ) : notification.type === 'account_appeal_admin_decision' ? (
+                              <FileClock size={18} />
                             ) : notification.type === 'complaint_handled' ? (
                               <AlertTriangle size={18} />
                             ) : (
@@ -900,7 +910,9 @@ export default function AdminDashboard() {
                                 color: '#EA580C',
                               }}
                             >
-                              View user directory →
+                              {notification.type === 'account_appeal_admin_decision'
+                                ? 'Review pending appeal →'
+                                : 'View user directory →'}
                             </div>
                           </div>
                         </button>

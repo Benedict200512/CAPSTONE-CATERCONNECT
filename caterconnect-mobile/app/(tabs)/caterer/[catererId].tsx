@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { GestureResponderEvent } from 'react-native';
 import {
   ActivityIndicator, Alert, Dimensions, Image, Platform,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
@@ -7,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import { useAuth } from '../../../context/AuthContext';
 import { usePackageBookmarks } from '../../../hooks/usePackageBookmarks';
+import { useFavoriteFlight } from '../../../context/FavoriteFlightContext';
 import { ComparePackageButton } from '../../../components/PackageComparisonControls';
 import { supabase } from '../../../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -117,10 +119,23 @@ export default function CatererDetailScreen() {
   const { session } = useAuth();
   const router = useRouter();
   const saved = usePackageBookmarks();
-  const toggleBookmark = async (id: string) => {
+  const { flyToFavorite } = useFavoriteFlight();
+  const toggleBookmark = async (id: string, event: GestureResponderEvent) => {
     if (!session) { router.push('/(auth)/login'); return; }
-    try { await (saved.isBookmarked(id) ? saved.unsave(id) : saved.save(id)); }
-    catch (error) { Alert.alert('Could not update saved package', error instanceof Error ? error.message : 'Please try again.'); }
+    // Preserve the touch position across the asynchronous save request.
+    const { pageX, pageY } = event.nativeEvent;
+    const alreadySaved = saved.isBookmarked(id);
+    try {
+      if (alreadySaved) {
+        await saved.unsave(id);
+      } else {
+        await saved.save(id);
+        // Celebrate a confirmed save, never a failed request or an unsave.
+        flyToFavorite(pageX, pageY);
+      }
+    } catch (error) {
+      Alert.alert('Could not update saved package', error instanceof Error ? error.message : 'Please try again.');
+    }
   };
 
   const [caterer, setCaterer]     = useState<Caterer | null>(null);
@@ -417,7 +432,7 @@ export default function CatererDetailScreen() {
                       {caterer?.verification_status === 'approved' && <ComparePackageButton packageId={pkg.id} />}
                       <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved.isBookmarked(pkg.id) ? `Unsave ${pkg.name}` : `Save ${pkg.name}`}
                         accessibilityState={{ selected: saved.isBookmarked(pkg.id), disabled: saved.loading || saved.pending.has(pkg.id) }}
-                        disabled={saved.loading || saved.pending.has(pkg.id)} onPress={() => void toggleBookmark(pkg.id)}
+                        disabled={saved.loading || saved.pending.has(pkg.id)} onPress={(event) => void toggleBookmark(pkg.id, event)}
                         style={{ alignSelf: 'flex-end', padding: 10, borderRadius: 20, backgroundColor: Colors.orangeLight, opacity: saved.loading || saved.pending.has(pkg.id) ? 0.5 : 1 }}>
                         {saved.pending.has(pkg.id) ? <ActivityIndicator size="small" color={Colors.orange} />
                           : <Heart size={22} color={Colors.orange} fill={saved.isBookmarked(pkg.id) ? Colors.orange : 'transparent'} />}
