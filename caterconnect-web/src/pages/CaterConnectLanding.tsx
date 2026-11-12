@@ -4,10 +4,36 @@ import {
   ChefHat,
   Check,
   CirclePlay,
+  Download,
+  Heart,
+  CalendarDays,
+  MessageCircle,
+  Smartphone,
+  Store,
+  UtensilsCrossed,
+  Search,
+  ShieldCheck,
   MapPin,
   Menu,
   Sparkles,
   X,
+  Bell,
+  LayoutGrid,
+  House,
+  UserRound,
+  SlidersHorizontal,
+  CakeSlice,
+  BriefcaseBusiness,
+  Package,
+  Clock3,
+  CircleCheck,
+  CreditCard,
+  ArrowRight,
+  ChevronRight,
+  Wifi,
+  Signal,
+  BatteryFull,
+  Star,
 } from "lucide-react";
 import "./CaterConnectLanding.css";
 import CaterConnectPolicyDialog from "./CaterConnectPolicyDialog";
@@ -51,6 +77,7 @@ export default function CaterConnectLanding({
             <a href="#explore">Explore Caterers</a>
             <a href="#how-it-works">How It Works</a>
             <a href="#about">About Us</a>
+            <a href="#android-app">Android App</a>
           </nav>
           <div className="header-actions">
             <a className="login-link" href={loginPath}>
@@ -82,6 +109,7 @@ export default function CaterConnectLanding({
           <a href="#explore">Explore Caterers</a>
           <a href="#how-it-works">How It Works</a>
           <a href="#about">About Us</a>
+          <a href="#android-app">Android App</a>
           <a href={loginPath}>Log In</a>
           <a className="mobile-register" href={registerPath}>
             Create an Account
@@ -377,6 +405,190 @@ export default function CaterConnectLanding({
             </a>
           </div>
         </section>
+        {/* CaterConnect original code-drawn Android previews: no image assets required. */}
+        <section
+          className="cc-app-showcase"
+          id="android-app"
+          aria-labelledby="cc-app-showcase-title"
+        >
+          <div className="shell cc-app-shell">
+            <div className="cc-app-intro">
+              <div className="cc-app-overline">
+                <Smartphone size={16} aria-hidden="true" />
+                CATERCONNECT MOBILE
+                <span className="cc-app-overline-divider" aria-hidden="true" />
+                ANDROID
+              </div>
+              <h2 id="cc-app-showcase-title">
+                One app. <em>Two ways to connect.</em>
+              </h2>
+              <p>
+                Planning an occasion or managing a catering business?
+                CaterConnect brings both experiences together wherever you go.
+              </p>
+            </div>
+
+            <div className="cc-app-role-grid">
+              <article className="cc-app-role-card cc-app-role-card--customer">
+                <div className="cc-app-role-content">
+                  <div className="cc-app-role-eyebrow">
+                    <span className="cc-app-role-symbol"><Heart size={19} aria-hidden="true" /></span>
+                    <span>01 &nbsp; / &nbsp; FOR CUSTOMERS</span>
+                  </div>
+                  <h3>Find it. Save it.<br /><span>Celebrate it.</span></h3>
+                  <p>
+                    Discover Cebu caterers, find packages that fit your event,
+                    and manage reservations without the back-and-forth.
+                  </p>
+                  <ul className="cc-app-role-benefits">
+                    <li><Search size={16} aria-hidden="true" /><span>Explore caterers and packages</span></li>
+                    <li><Heart size={16} aria-hidden="true" /><span>Save favorite options</span></li>
+                    <li><CalendarDays size={16} aria-hidden="true" /><span>Book and track your events</span></li>
+                  </ul>
+                  <span className="cc-app-role-caption">YOUR EVENT, MADE EASIER</span>
+                </div>
+                <div className="cc-app-device-stage">
+                  <span className="cc-app-stage-orbit" aria-hidden="true" />
+                  {/* Static illustrative app UI. Drawn with HTML and CSS, not a screenshot. */}
+                  <div className="cc-app-device" role="img" aria-label="Illustration of CaterConnect customer mobile app with caterer search, categories, favorite packages and navigation">
+                    <div className="cc-app-screen cc-app-screen--customer">
+                      <div className="cc-app-mobile-status">
+                        <strong>9:41</strong>
+                        <span className="cc-app-mobile-signal"><Signal size={9} /><Wifi size={9} /><BatteryFull size={12} /></span>
+                      </div>
+                      <div className="cc-app-mobile-customer-header">
+                        <div className="cc-app-mobile-header-row">
+                          <div className="cc-app-mobile-wordmark"><ChefHat size={17} /><b>CATER<span>CONNECT</span></b></div>
+                          <span className="cc-app-mobile-round-icon"><Bell size={12}/></span>
+                        </div>
+                        <small>Discover catering made easy.</small>
+                      </div>
+                      <div className="cc-app-mobile-customer-body">
+                        <div className="cc-app-mobile-search"><Search size={12}/><span>Search caterers or events...</span><SlidersHorizontal size={12}/></div>
+                        <div className="cc-app-mobile-promo">
+                          <small>CEBU CELEBRATIONS</small>
+                          <b>Find the perfect caterer for your event.</b>
+                          <span className="cc-app-mobile-mini-pill">Explore now <ArrowRight size={10}/></span>
+                          <span className="cc-app-mobile-promo-decoration" aria-hidden="true"><UtensilsCrossed size={55}/></span>
+                        </div>
+                        <div className="cc-app-mobile-section-label"><b>Categories</b><span>See all</span></div>
+                        <div className="cc-app-mobile-categories">
+                          <div><span><LayoutGrid size={14}/></span><b>All</b></div>
+                          <div><span><Heart size={14}/></span><b>Wedding</b></div>
+                          <div><span><CakeSlice size={14}/></span><b>Birthday</b></div>
+                          <div><span><BriefcaseBusiness size={14}/></span><b>Corporate</b></div>
+                        </div>
+                        <div className="cc-app-mobile-section-label"><b>Featured caterers</b><span>See all <ChevronRight size={10}/></span></div>
+                        <div className="cc-app-mobile-featured">
+                          <div className="cc-app-mobile-food-art"><UtensilsCrossed size={24}/><span>POPULAR</span></div>
+                          <div className="cc-app-mobile-featured-details"><strong>Local Cebu Catering</strong><span>Event packages from ₱150/guest</span><small><Star size={9} fill="currentColor"/> Discover packages <ChevronRight size={10}/></small></div>
+                        </div>
+                      </div>
+                      <div className="cc-app-mobile-tabbar cc-app-mobile-customer-tabbar">
+                        <span className="is-active"><House size={15}/><small>Home</small></span>
+                        <span><CalendarDays size={15}/><small>Bookings</small></span>
+                        <span><Heart size={15}/><small>Favorite</small></span>
+                        <span><MessageCircle size={15}/><small>Messages</small></span>
+                        <span><UserRound size={15}/><small>Profile</small></span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className="cc-app-device-label"><Heart size={13} aria-hidden="true" /> CUSTOMER VIEW</span>
+                </div>
+              </article>
+
+              <article className="cc-app-role-card cc-app-role-card--caterer">
+                <div className="cc-app-role-content">
+                  <div className="cc-app-role-eyebrow">
+                    <span className="cc-app-role-symbol"><Store size={19} aria-hidden="true" /></span>
+                    <span>02 &nbsp; / &nbsp; FOR CATERERS</span>
+                  </div>
+                  <h3>Your business.<br /><span>In your pocket.</span></h3>
+                  <p>
+                    Stay on top of bookings, update packages and menus,
+                    and reply to customers directly from your phone.
+                  </p>
+                  <ul className="cc-app-role-benefits">
+                    <li><CalendarDays size={16} aria-hidden="true" /><span>Monitor booking requests</span></li>
+                    <li><UtensilsCrossed size={16} aria-hidden="true" /><span>Manage menus and packages</span></li>
+                    <li><MessageCircle size={16} aria-hidden="true" /><span>Stay connected with customers</span></li>
+                  </ul>
+                  <span className="cc-app-role-caption">YOUR BUSINESS, ON THE GO</span>
+                </div>
+                <div className="cc-app-device-stage">
+                  <span className="cc-app-stage-orbit" aria-hidden="true" />
+                  {/* Static illustrative app UI. Drawn with HTML and CSS, not a screenshot. */}
+                  <div className="cc-app-device" role="img" aria-label="Illustration of CaterConnect caterer mobile app with dashboard, booking statistics, premium plan and availability">
+                    <div className="cc-app-screen cc-app-screen--caterer">
+                      <div className="cc-app-mobile-status">
+                        <strong>9:41</strong>
+                        <span className="cc-app-mobile-signal"><Signal size={9}/><Wifi size={9}/><BatteryFull size={12}/></span>
+                      </div>
+                      <div className="cc-app-mobile-caterer-header">
+                        <div className="cc-app-mobile-header-row"><small>CATERCONNECT BUSINESS</small><span className="cc-app-mobile-round-icon"><Bell size={12}/></span></div>
+                        <span>Welcome back,</span>
+                        <strong>Your catering dashboard</strong>
+                      </div>
+                      <div className="cc-app-mobile-caterer-body">
+                        <div className="cc-app-mobile-stat-grid">
+                          <div className="cc-app-mobile-stat"><span><CalendarDays size={15}/></span><small>Total bookings</small><strong>3</strong></div>
+                          <div className="cc-app-mobile-stat"><span><CircleCheck size={15}/></span><small>Completed</small><strong>3</strong></div>
+                          <div className="cc-app-mobile-stat"><span><Clock3 size={15}/></span><small>Pending</small><strong>0</strong></div>
+                          <div className="cc-app-mobile-stat"><span><CreditCard size={15}/></span><small>Your plan</small><strong>Premium</strong></div>
+                        </div>
+                        <div className="cc-app-mobile-plan"><span><Star size={12} fill="currentColor"/></span><div><small>YOUR SUBSCRIPTION</small><strong>Premium Plan</strong></div><b>ACTIVE</b></div>
+                        <div className="cc-app-mobile-calendar">
+                          <small>CALENDAR OVERVIEW</small>
+                          <strong>Monthly availability</strong>
+                          <div className="cc-app-mobile-calendar-month"><span>‹</span><b>November 2026</b><span>›</span></div>
+                          <div className="cc-app-mobile-calendar-week"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+                          <div className="cc-app-mobile-calendar-days"><span>9</span><span>10</span><span>11</span><span>12</span><span className="selected">13</span><span>14</span><span>15</span></div>
+                          <div className="cc-app-mobile-calendar-link">Check availability <ChevronRight size={10}/></div>
+                        </div>
+                      </div>
+                      <div className="cc-app-mobile-tabbar cc-app-mobile-caterer-tabbar">
+                        <span className="is-active"><LayoutGrid size={13}/><small>Home</small></span>
+                        <span><Package size={13}/><small>Packages</small></span>
+                        <span><UtensilsCrossed size={13}/><small>Menu</small></span>
+                        <span><CalendarDays size={13}/><small>Bookings</small></span>
+                        <span><MessageCircle size={13}/><small>Chat</small></span>
+                        <span><Store size={13}/><small>Business</small></span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className="cc-app-device-label"><Store size={13} aria-hidden="true" /> CATERER VIEW</span>
+                </div>
+              </article>
+            </div>
+
+            <div className="cc-app-download-panel">
+              <div className="cc-app-download-copy">
+                <span className="cc-app-download-symbol"><Smartphone size={23} aria-hidden="true" /></span>
+                <div>
+                  <strong>One download. Both CaterConnect experiences.</strong>
+                  <span>Install CaterConnect on your Android device.</span>
+                </div>
+              </div>
+              <a
+                className="cc-app-download-action"
+                href="https://expo.dev/accounts/benedictoo/projects/caterconnect-mobile/builds/131917a7-583e-4133-98b3-ec6f36d77565"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Get the Android APK from the official CaterConnect Expo build page (opens in a new tab)"
+              >
+                <Download size={19} aria-hidden="true" />
+                Get the Android APK
+                <ArrowUpRight size={17} aria-hidden="true" />
+              </a>
+            </div>
+            <p className="cc-app-install-note">
+              <ShieldCheck size={16} aria-hidden="true" />
+              The button opens the official Expo build page. Select Download there
+              to get the Android APK. Android may ask you to allow installation
+              from your browser.
+            </p>
+          </div>
+        </section>
         <section className="cta-section shell">
           <div className="cta-content">
             <div className="cta-kicker">YOUR NEXT CELEBRATION STARTS HERE</div>
@@ -429,6 +641,7 @@ export default function CaterConnectLanding({
               <a href="#explore">Explore Caterers</a>
               <a href="#how-it-works">How It Works</a>
               <a href="#about">About Us</a>
+              <a href="#android-app">Android App</a>
             
               <button type="button" className="footer-policy-link" onClick={() => setOpenPolicy("customer")}>
                 Customer Terms

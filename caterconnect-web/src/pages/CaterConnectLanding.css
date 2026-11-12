@@ -1420,3 +1420,478 @@ h2 em {
   color: #777;
   font-size: 11px;
 }
+
+
+
+/* ======================================================================
+   CaterConnect mobile showcase — original dual-role editorial card layout.
+   Two code-rendered phone previews, one brand-orange (#F97316) system.
+   Completely scoped to .cc-app-* so existing landing styles are preserved.
+   ====================================================================== */
+.caterconnect-landing .cc-app-showcase {
+  --cc-app-orange: #f97316;
+  --cc-app-dark-orange: #ea580c;
+  --cc-app-ink: #251a14;
+  --cc-app-muted: #725f53;
+  position: relative;
+  isolation: isolate;
+  padding: 94px 0 86px;
+  scroll-margin-top: 90px;
+  overflow: hidden;
+  background: #fffaf7;
+  border-top: 1px solid #fae9dc;
+  border-bottom: 1px solid #fae9dc;
+}
+.caterconnect-landing .cc-app-showcase::before {
+  content: "";
+  position: absolute;
+  top: -260px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 760px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe6d4 0, rgba(255,230,212,0) 73%);
+  pointer-events: none;
+  z-index: -1;
+}
+.caterconnect-landing .cc-app-shell { position: relative; }
+.caterconnect-landing .cc-app-intro {
+  text-align: center;
+  max-width: 780px;
+  margin: 0 auto 39px;
+}
+.caterconnect-landing .cc-app-overline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 9px 15px;
+  background: #fff;
+  color: #a44e15;
+  border: 1px solid #f9d7bf;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .95px;
+}
+.caterconnect-landing .cc-app-overline-divider { width: 1px; height: 12px; background: #efc5aa; }
+.caterconnect-landing .cc-app-intro h2 {
+  color: var(--cc-app-ink);
+  margin: 19px 0 14px;
+  font-size: clamp(30px, 3.55vw, 49px);
+  font-weight: 900;
+  letter-spacing: -2.3px;
+  line-height: 1.16;
+}
+.caterconnect-landing .cc-app-intro h2 em {
+  color: var(--cc-app-orange);
+  font-style: normal;
+}
+.caterconnect-landing .cc-app-intro > p {
+  max-width: 580px;
+  margin: 0 auto;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--cc-app-muted);
+}
+.caterconnect-landing .cc-app-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.caterconnect-landing .cc-app-role-card {
+  position: relative;
+  min-height: 552px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .78fr);
+  align-items: center;
+  gap: 0;
+  border: 1px solid #f2dccd;
+  border-radius: 25px;
+  overflow: hidden;
+  box-shadow: 0 15px 35px rgba(87, 49, 23, .055);
+}
+.caterconnect-landing .cc-app-role-card--customer {
+  background: linear-gradient(142deg, #fff 0%, #fff5ee 65%, #ffe9d9 100%);
+}
+.caterconnect-landing .cc-app-role-card--caterer {
+  background: linear-gradient(142deg, #fff 0%, #fff7f0 62%, #ffe7d5 100%);
+}
+.caterconnect-landing .cc-app-role-card::after {
+  content: "";
+  position: absolute;
+  height: 5px;
+  left: 29px;
+  right: 29px;
+  top: 0;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(90deg, #f97316 0%, #ffc196 63%, transparent 100%);
+}
+.caterconnect-landing .cc-app-role-content {
+  padding: 42px 0 40px 29px;
+  align-self: center;
+  z-index: 2;
+  min-width: 0;
+}
+.caterconnect-landing .cc-app-role-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #a34b13;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .82px;
+  white-space: nowrap;
+}
+.caterconnect-landing .cc-app-role-symbol {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 11px;
+  background: #ffede1;
+  color: var(--cc-app-orange);
+}
+.caterconnect-landing .cc-app-role-content h3 {
+  font-size: clamp(24px, 2.2vw, 31px);
+  letter-spacing: -1.15px;
+  line-height: 1.18;
+  font-weight: 900;
+  color: var(--cc-app-ink);
+  margin: 26px 0 15px;
+}
+.caterconnect-landing .cc-app-role-content h3 span { color: var(--cc-app-orange); }
+.caterconnect-landing .cc-app-role-content > p {
+  font-size: 12px;
+  color: var(--cc-app-muted);
+  line-height: 1.85;
+  max-width: 255px;
+  margin: 0 0 23px;
+}
+.caterconnect-landing .cc-app-role-benefits {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 13px;
+}
+.caterconnect-landing .cc-app-role-benefits li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #3e322b;
+  line-height: 1.45;
+}
+.caterconnect-landing .cc-app-role-benefits svg {
+  flex: none;
+  color: var(--cc-app-orange);
+  margin-top: 1px;
+}
+.caterconnect-landing .cc-app-role-caption {
+  display: inline-block;
+  margin-top: 36px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.25px;
+  color: #cc8150;
+}
+.caterconnect-landing .cc-app-device-stage {
+  align-self: stretch;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 33px 15px 25px 0;
+  min-width: 0;
+}
+.caterconnect-landing .cc-app-stage-orbit {
+  width: 360px;
+  height: 360px;
+  position: absolute;
+  left: 30%;
+  top: 21%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249,115,22,.19) 0%, rgba(249,115,22,.08) 53%, transparent 72%);
+  pointer-events: none;
+}
+.caterconnect-landing .cc-app-device {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 226px);
+  padding: 7px;
+  border: 2px solid #f97316;
+  border-radius: 31px;
+  background: #342019;
+  box-shadow: 0 18px 33px rgba(73, 38, 15, .23), 0 0 0 4px rgba(255,255,255,.72);
+  transform: rotate(2.4deg);
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+.caterconnect-landing .cc-app-role-card--caterer .cc-app-device {
+  transform: rotate(-2.4deg);
+}
+.caterconnect-landing .cc-app-role-card:hover .cc-app-device {
+  transform: translateY(-6px) rotate(0deg);
+  box-shadow: 0 23px 42px rgba(73, 38, 15, .26), 0 0 0 4px rgba(255,255,255,.72);
+}
+.caterconnect-landing .cc-app-device-label {
+  position: absolute;
+  z-index: 2;
+  left: 3px;
+  bottom: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 9px 12px;
+  box-shadow: 0 8px 19px rgba(69,38,15,.1);
+  border: 1px solid #ffd9be;
+  background: rgba(255,255,255,.96);
+  color: #a44b14;
+  font-size: 9px;
+  letter-spacing: .5px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.caterconnect-landing .cc-app-download-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  background: #26201d;
+  color: #fff;
+  border-radius: 18px;
+  padding: 23px 26px;
+  margin-top: 23px;
+}
+.caterconnect-landing .cc-app-download-copy {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.caterconnect-landing .cc-app-download-symbol {
+  display: grid;
+  place-items: center;
+  width: 49px;
+  height: 49px;
+  flex: none;
+  color: #ffad6f;
+  border-radius: 14px;
+  border: 1px solid rgba(249,115,22,.28);
+  background: rgba(249,115,22,.13);
+}
+.caterconnect-landing .cc-app-download-copy strong,
+.caterconnect-landing .cc-app-download-copy span:last-child {
+  display: block;
+}
+.caterconnect-landing .cc-app-download-copy strong {
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 800;
+}
+.caterconnect-landing .cc-app-download-copy div > span {
+  display: block;
+  color: #c2b8b1;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.caterconnect-landing .cc-app-download-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: none;
+  border-radius: 12px;
+  padding: 17px 20px;
+  background: #f97316;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+  box-shadow: 0 9px 19px rgba(249,115,22,.19);
+  transition: transform .17s ease, background .17s ease;
+}
+.caterconnect-landing .cc-app-download-action:hover,
+.caterconnect-landing .cc-app-download-action:focus-visible {
+  background: #ea580c;
+  transform: translateY(-2px);
+}
+.caterconnect-landing .cc-app-download-action:focus-visible { outline: 3px solid #ffc196; outline-offset: 3px; }
+.caterconnect-landing .cc-app-install-note {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  margin: 18px 0 0;
+  color: #826b5d;
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: center;
+}
+.caterconnect-landing .cc-app-install-note svg { flex: none; color: #bc6632; margin-top: 1px; }
+@media (max-width: 1100px) {
+  .caterconnect-landing .cc-app-role-card { min-height: 505px; }
+  .caterconnect-landing .cc-app-role-content { padding-left: 20px; }
+  .caterconnect-landing .cc-app-role-card::after { left: 20px; right: 20px; }
+  .caterconnect-landing .cc-app-role-content h3 { font-size: 24px; }
+  .caterconnect-landing .cc-app-role-content > p { font-size: 11px; }
+  .caterconnect-landing .cc-app-role-benefits li { font-size: 10px; }
+  .caterconnect-landing .cc-app-device { width: min(100%, 195px); }
+  .caterconnect-landing .cc-app-device-label { display: none; }
+}
+@media (max-width: 840px) {
+  .caterconnect-landing .cc-app-showcase { padding: 70px 0 64px; }
+  .caterconnect-landing .cc-app-intro h2 { font-size: clamp(31px,5vw,41px); }
+  .caterconnect-landing .cc-app-role-grid { grid-template-columns: 1fr; gap: 18px; }
+  .caterconnect-landing .cc-app-role-card { min-height: 470px; grid-template-columns: 1fr 1fr; }
+  .caterconnect-landing .cc-app-role-content { padding-left: 35px; }
+  .caterconnect-landing .cc-app-role-content h3 { font-size: 32px; }
+  .caterconnect-landing .cc-app-role-content > p { font-size: 12px; max-width: 330px; }
+  .caterconnect-landing .cc-app-role-benefits li { font-size: 11px; }
+  .caterconnect-landing .cc-app-device { width: min(100%, 207px); }
+  .caterconnect-landing .cc-app-device-label { display: inline-flex; left: 20px; }
+}
+@media (max-width: 580px) {
+  .caterconnect-landing .cc-app-showcase { padding: 60px 0 55px; }
+  .caterconnect-landing .cc-app-intro { margin-bottom: 29px; }
+  .caterconnect-landing .cc-app-intro h2 { font-size: 33px; letter-spacing: -1.5px; }
+  .caterconnect-landing .cc-app-intro > p { font-size: 12px; }
+  .caterconnect-landing .cc-app-role-card { display: flex; flex-direction: column; min-height: 0; }
+  .caterconnect-landing .cc-app-role-content { align-self: stretch; padding: 30px 25px 0; }
+  .caterconnect-landing .cc-app-role-content h3 { font-size: 30px; margin: 20px 0 12px; }
+  .caterconnect-landing .cc-app-role-content > p { max-width: 100%; }
+  .caterconnect-landing .cc-app-role-benefits { gap: 10px; }
+  .caterconnect-landing .cc-app-role-caption { margin-top: 20px; }
+  .caterconnect-landing .cc-app-device-stage { align-self: stretch; padding: 20px 20px 34px; }
+  .caterconnect-landing .cc-app-device { width: min(75%, 226px); }
+  .caterconnect-landing .cc-app-device-label { bottom: 55px; left: calc(50% - 155px); }
+  .caterconnect-landing .cc-app-download-panel { flex-direction: column; align-items: stretch; padding: 20px; gap: 18px; }
+  .caterconnect-landing .cc-app-download-copy strong { font-size: 14px; }
+  .caterconnect-landing .cc-app-download-copy div > span { font-size: 11px; }
+  .caterconnect-landing .cc-app-download-action { width: 100%; }
+  .caterconnect-landing .cc-app-install-note { text-align: left; justify-content: flex-start; }
+}
+@media (max-width: 370px) {
+  .caterconnect-landing .cc-app-role-content { padding-left: 20px; padding-right: 20px; }
+  .caterconnect-landing .cc-app-device-label { display: none; }
+  .caterconnect-landing .cc-app-role-eyebrow { font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .caterconnect-landing .cc-app-device,
+  .caterconnect-landing .cc-app-download-action { transition: none; }
+}
+/* Keep the existing orange signup CTA distinct below this new section. */
+.caterconnect-landing .cc-app-showcase + .cta-section { margin-top: 82px; }
+@media (max-width: 580px) {
+  .caterconnect-landing .cc-app-showcase + .cta-section { margin-top: 54px; }
+}
+
+/* ======================================================================
+   Code-only CaterConnect phone previews — no .webp/.png files required.
+   Both phones use the same #F97316 brand accent. Illustration only.
+   ====================================================================== */
+.caterconnect-landing .cc-app-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  aspect-ratio: 630 / 1400;
+  overflow: hidden;
+  border-radius: 23px;
+  background: #fff;
+  color: #19212d;
+  font-family: Inter, system-ui, Arial, sans-serif;
+  font-size: 10px;
+  line-height: 1.3;
+  isolation: isolate;
+}
+.caterconnect-landing .cc-app-screen svg { flex-shrink: 0; }
+.caterconnect-landing .cc-app-mobile-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 21px;
+  padding: 6px 12px 1px;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 900;
+}
+.caterconnect-landing .cc-app-mobile-signal { display:flex; gap:2px; align-items:center; color:#273243; }
+.caterconnect-landing .cc-app-mobile-header-row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.caterconnect-landing .cc-app-mobile-wordmark { display:flex; align-items:center; gap:3px; color:#151b24; }
+.caterconnect-landing .cc-app-mobile-wordmark svg { color:#f97316; }
+.caterconnect-landing .cc-app-mobile-wordmark b { font-size:10px; letter-spacing:-.3px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-wordmark b span { color:#f97316; }
+.caterconnect-landing .cc-app-mobile-round-icon { width:22px; height:22px; display:grid; place-items:center; color:#f97316; background:#fff1e8; border-radius:100%; }
+.caterconnect-landing .cc-app-mobile-customer-header { padding:8px 10px 6px; background:#fff; }
+.caterconnect-landing .cc-app-mobile-customer-header > small { display:block; margin:3px 0 0 20px; font-size:6.5px; color:#92959c; }
+.caterconnect-landing .cc-app-mobile-customer-body { display:flex; flex:1; flex-direction:column; gap:8px; padding:6px 10px 9px; overflow:hidden; }
+.caterconnect-landing .cc-app-mobile-search { display:flex; align-items:center; gap:5px; min-height:28px; padding:0 8px; color:#9ca2ac; border:1px solid #eef0f2; background:#f7f8fa; border-radius:10px; }
+.caterconnect-landing .cc-app-mobile-search span { font-size:7px; flex:1; white-space:nowrap; }
+.caterconnect-landing .cc-app-mobile-search svg:last-child { color:#f97316; }
+.caterconnect-landing .cc-app-mobile-promo { position:relative; display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:7px; min-height:115px; padding:13px 11px; border-radius:12px; overflow:hidden; background:linear-gradient(125deg,#ef5b09 0%,#f97316 67%,#ffb168 100%); color:#fff; }
+.caterconnect-landing .cc-app-mobile-promo > small { position:relative; z-index:1; font-size:6px; font-weight:900; letter-spacing:.8px; padding:3px 5px; border:1px solid rgba(255,255,255,.35); border-radius:4px; background:rgba(255,255,255,.13); }
+.caterconnect-landing .cc-app-mobile-promo > b { position:relative; z-index:1; max-width:128px; font-size:13px; line-height:1.25; letter-spacing:-.35px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-mini-pill { position:relative; z-index:1; display:inline-flex; align-items:center; gap:4px; width:max-content; padding:5px 7px; border-radius:20px; background:#fff; color:#dc570c; font-size:7px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-promo-decoration { position:absolute; right:-11px; bottom:6px; color:#fff; opacity:.19; transform:rotate(-18deg); }
+.caterconnect-landing .cc-app-mobile-section-label { display:flex; align-items:center; justify-content:space-between; color:#262a33; }
+.caterconnect-landing .cc-app-mobile-section-label b { font-size:9px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-section-label > span { display:inline-flex; align-items:center; color:#f97316; font-size:7px; font-weight:800; }
+.caterconnect-landing .cc-app-mobile-categories { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; }
+.caterconnect-landing .cc-app-mobile-categories > div { display:grid; place-items:center; gap:3px; min-width:0; padding:7px 1px 6px; border-radius:8px; border:1px solid #f3ebe7; background:#fffdfa; }
+.caterconnect-landing .cc-app-mobile-categories > div:first-child { border-color:#f97316; }
+.caterconnect-landing .cc-app-mobile-categories div span { display:grid; place-items:center; width:24px; height:24px; border-radius:7px; background:#fff1e7; color:#ef6c16; }
+.caterconnect-landing .cc-app-mobile-categories div:first-child span { background:#f97316; color:#fff; }
+.caterconnect-landing .cc-app-mobile-categories div b { font-size:6.2px; font-weight:800; }
+.caterconnect-landing .cc-app-mobile-featured { display:flex; overflow:hidden; border:1px solid #f1e8e2; border-radius:10px; background:#fff; box-shadow:0 2px 7px rgba(26,32,39,.04); }
+.caterconnect-landing .cc-app-mobile-food-art { position:relative; display:grid; place-items:center; flex:0 0 43%; min-height:66px; overflow:hidden; background:radial-gradient(circle at 22% 70%,#ffcc8c 0%,#ef7c32 28%,transparent 30%),radial-gradient(circle at 70% 20%,#ffe9ac 0%,#fd9c3f 32%,transparent 34%),linear-gradient(145deg,#844923,#c97d43); color:rgba(255,255,255,.94); }
+.caterconnect-landing .cc-app-mobile-food-art > span { position:absolute; left:5px; top:5px; font-size:5px; font-weight:900; background:#fff; color:#bd5518; padding:3px 4px; border-radius:3px; }
+.caterconnect-landing .cc-app-mobile-featured-details { display:flex; flex-direction:column; justify-content:center; gap:5px; min-width:0; padding:6px 5px 6px 7px; }
+.caterconnect-landing .cc-app-mobile-featured-details strong { font-size:7.2px; line-height:1.25; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-featured-details > span { font-size:6px; color:#87888c; }
+.caterconnect-landing .cc-app-mobile-featured-details > small { display:flex; align-items:center; gap:2px; color:#f97316; font-size:6px; font-weight:800; }
+.caterconnect-landing .cc-app-mobile-tabbar { display:grid; align-items:center; justify-items:center; min-height:43px; padding:6px 3px 7px; margin-top:auto; background:#fff; border-top:1px solid #eef0f2; box-shadow:0 -3px 8px rgba(30,33,39,.035); }
+.caterconnect-landing .cc-app-mobile-customer-tabbar { grid-template-columns:repeat(5,1fr); }
+.caterconnect-landing .cc-app-mobile-caterer-tabbar { grid-template-columns:repeat(6,1fr); }
+.caterconnect-landing .cc-app-mobile-tabbar > span { display:flex; align-items:center; flex-direction:column; gap:3px; color:#9198a4; }
+.caterconnect-landing .cc-app-mobile-tabbar .is-active { color:#f97316; }
+.caterconnect-landing .cc-app-mobile-tabbar small { font-size:5.5px; font-weight:800; }
+.caterconnect-landing .cc-app-mobile-caterer-header { padding:8px 12px 13px; color:#fff; background:linear-gradient(137deg,#f97316,#e8580b); border-radius:0 0 18px 18px; }
+.caterconnect-landing .cc-app-mobile-caterer-header .cc-app-mobile-header-row { margin-bottom:10px; }
+.caterconnect-landing .cc-app-mobile-caterer-header .cc-app-mobile-header-row > small { font-size:7px; letter-spacing:.6px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-caterer-header .cc-app-mobile-round-icon { background:rgba(255,255,255,.24); color:#fff; }
+.caterconnect-landing .cc-app-mobile-caterer-header > span { display:block; margin-bottom:2px; opacity:.88; font-size:8px; }
+.caterconnect-landing .cc-app-mobile-caterer-header > strong { display:block; font-size:14px; max-width:165px; line-height:1.17; font-weight:900; letter-spacing:-.3px; }
+.caterconnect-landing .cc-app-mobile-caterer-body { display:flex; flex:1; flex-direction:column; gap:9px; padding:11px 9px; overflow:hidden; background:linear-gradient(180deg,#fff9f5 0,#fff 70%); }
+.caterconnect-landing .cc-app-mobile-stat-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.caterconnect-landing .cc-app-mobile-stat { display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-height:73px; padding:9px 9px 7px; border:1px solid #f2e9e3; border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(66,40,24,.04); }
+.caterconnect-landing .cc-app-mobile-stat > span { display:grid; place-items:center; width:23px; height:23px; border-radius:7px; color:#f97316; background:#fff0e5; }
+.caterconnect-landing .cc-app-mobile-stat:nth-child(2) > span { color:#16a260; background:#e9fbf2; }
+.caterconnect-landing .cc-app-mobile-stat:nth-child(3) > span { color:#d99716; background:#fff6d9; }
+.caterconnect-landing .cc-app-mobile-stat:nth-child(4) > span { color:#8f52d7; background:#f4ecff; }
+.caterconnect-landing .cc-app-mobile-stat > small { font-size:7px; font-weight:700; color:#797f8b; }
+.caterconnect-landing .cc-app-mobile-stat > strong { font-size:17px; line-height:1; font-weight:900; color:#f97316; }
+.caterconnect-landing .cc-app-mobile-stat:nth-child(2) > strong { color:#16a260; }
+.caterconnect-landing .cc-app-mobile-stat:nth-child(3) > strong { color:#d99716; }
+.caterconnect-landing .cc-app-mobile-stat:nth-child(4) > strong { color:#8f52d7; font-size:13px; }
+.caterconnect-landing .cc-app-mobile-plan { display:flex; align-items:center; gap:7px; padding:9px 8px; border:1px solid #f8cfb3; border-radius:11px; background:#fff7ee; }
+.caterconnect-landing .cc-app-mobile-plan > span { display:grid; place-items:center; color:#fff; background:#f97316; border-radius:7px; width:24px; height:24px; }
+.caterconnect-landing .cc-app-mobile-plan > div { display:flex; flex:1; flex-direction:column; gap:2px; }
+.caterconnect-landing .cc-app-mobile-plan > div small { color:#bc743d; font-size:6px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-plan > div strong { color:#503323; font-size:10px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-plan > b { padding:4px 5px; border-radius:9px; background:#f97316; color:#fff; font-size:6px; }
+.caterconnect-landing .cc-app-mobile-calendar { display:flex; flex-direction:column; gap:6px; padding:10px 9px; border:1px solid #f0e9e5; border-radius:11px; background:#fff; }
+.caterconnect-landing .cc-app-mobile-calendar > small { color:#ed741b; font-size:6px; letter-spacing:.6px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-calendar > strong { color:#202732; font-size:11px; font-weight:900; }
+.caterconnect-landing .cc-app-mobile-calendar-month { display:flex; align-items:center; justify-content:space-between; padding-top:2px; font-size:9px; }
+.caterconnect-landing .cc-app-mobile-calendar-month > span { font-size:17px; color:#f97316; }
+.caterconnect-landing .cc-app-mobile-calendar-week,.caterconnect-landing .cc-app-mobile-calendar-days { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; align-items:center; justify-items:center; }
+.caterconnect-landing .cc-app-mobile-calendar-week span { font-size:6px; color:#9fa1a8; }
+.caterconnect-landing .cc-app-mobile-calendar-days span { font-size:7px; font-weight:800; display:grid; place-items:center; width:16px; height:16px; color:#3d4650; }
+.caterconnect-landing .cc-app-mobile-calendar-days span.selected { color:#fff; background:#f97316; border-radius:50%; }
+.caterconnect-landing .cc-app-mobile-calendar-link { display:flex; justify-content:space-between; align-items:center; margin-top:2px; color:#ed741b; font-size:7px; font-weight:800; }
