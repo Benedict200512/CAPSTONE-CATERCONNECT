@@ -110,7 +110,7 @@ const displayXenditPaymentMethod = (method: string | null | undefined): string =
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending:   { label: 'Pending Review', color: '#B45309', bg: '#FEF3C7', icon: Clock },
-  confirmed: { label: 'Confirmed', color: '#1D4ED8', bg: '#DBEAFE', icon: CheckCircle },
+  confirmed: { label: 'Accepted', color: '#1D4ED8', bg: '#DBEAFE', icon: CheckCircle },
   awaiting_payment: { label: 'Awaiting Payment', color: '#B45309', bg: '#FEF3C7', icon: Clock },
   paid:      { label: 'Downpayment Verified', color: '#15803D', bg: '#DCFCE7', icon: ShieldCheck },
   ongoing:   { label: 'Event Ongoing', color: '#6D28D9', bg: '#EDE9FE', icon: RefreshCw },
@@ -1540,7 +1540,7 @@ export default function CatererBookings() {
                       {updating ? <ActivityIndicator color="#FFF" /> : (
                         <View style={styles.btnRow}>
                           <Check size={18} color="#FFF" />
-                          <Text style={styles.actionBtnText}>Confirm Booking Request</Text>
+                          <Text style={styles.actionBtnText}>Accept Booking Request</Text>
                         </View>
                       )}
                     </TouchableOpacity>

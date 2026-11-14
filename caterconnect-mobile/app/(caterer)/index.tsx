@@ -1230,7 +1230,7 @@ export default function CatererDashboard() {
                                 { color: statusStyle.color },
                               ]}
                             >
-                              {b.status.replace('_', ' ').toUpperCase()}
+                              {b.status === 'confirmed' ? 'ACCEPTED' : b.status.replace('_', ' ').toUpperCase()}
                             </Text>
                           </View>
                         </View>

@@ -72,7 +72,7 @@ export default function AvailabilityScreen() {
     if (!ready || busy || selected < manilaToday()) return;
     Alert.alert(blocked ? 'Make this date available?' : 'Mark this date as unavailable?',
       blocked ? `${selected} will reopen if daily capacity permits.`
-        : `New requests and confirmations for ${selected} will be prevented. Existing bookings will remain unchanged.`,
+        : `New requests and acceptances for ${selected} will be prevented. Existing bookings will remain unchanged.`,
       [{ text: 'Keep current setting', style: 'cancel' }, { text: blocked ? 'Make available' : 'Mark unavailable',
         onPress: () => { if (current.current === key) void mutate(() => setDateBlocked(catererId!, userId!, selected, !blocked)); } }]);
   };
@@ -116,7 +116,7 @@ export default function AvailabilityScreen() {
           <Text style={styles.heading}>{selected}</Text>
           <Text style={styles.hint}>{count} committed bookings out of {data.capacity} available daily slots</Text>
           <Text style={styles.link}>{blocked ? 'Unavailable for Bookings' : count >= data.capacity ? 'Fully Booked' : 'Open for Bookings'}</Text>
-          <Text style={styles.hint}>Committed bookings include confirmed, awaiting-payment, paid, ongoing, and completed reservations. Existing commitments remain unchanged.</Text>
+          <Text style={styles.hint}>Committed bookings include accepted, awaiting-payment, paid, ongoing, and completed reservations. Existing commitments remain unchanged.</Text>
           <TouchableOpacity accessibilityRole="button" disabled={busy || selected < manilaToday()} onPress={toggleBlock}
             style={[styles.button, { marginTop: 16 }, (busy || selected < manilaToday()) && styles.dim]}>
             <Text style={styles.buttonText}>{blocked ? 'Make Date Available' : 'Mark as Unavailable'}</Text>

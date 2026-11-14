@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { formatReportMoney, loadCatererReport, reportError, reportRange, validateReportRange, type CatererReport, type ReportPreset, type ReportRange } from '../../lib/catererReports';
 const PRESETS: ReportPreset[] = ['This Month','Last Month','This Year','Custom Date Range'];
-const EXPECTED_DEFINITION = 'Combined value of confirmed, awaiting-payment, paid, ongoing and completed bookings placed during the selected period. This amount represents the value of accepted bookings, not payments received.';
+const EXPECTED_DEFINITION = 'Combined value of accepted, awaiting-payment, paid, ongoing and completed bookings placed during the selected period. This amount represents the value of accepted bookings, not payments received.';
 const EVIDENCE_DEFINITION = 'Total downpayments recorded as confirmed during the selected period for bookings marked paid, ongoing or completed. Based on the amount required for each booking; remaining balances are excluded.';
 // The existing database has no independent booking-payment ledger. This read-only
 // calculation reflects recorded verification fields, not confirmed cash settlement.
@@ -108,7 +108,7 @@ export default function CatererReports() {
   const maxMonth=Math.max(1,...chartMonths.map(m=>m.count));
   const statusCards = data ? [
     { label: 'Pending', value: data.statuses.pending, Icon: Clock3, tone: '#A16207', bg: '#FEF3C7' },
-    { label: 'Confirmed / awaiting payment', value: data.statuses.confirmed + data.statuses.awaiting_payment, Icon: ClipboardList, tone: '#9A3412', bg: '#FFEDD5' },
+    { label: 'Accepted / awaiting payment', value: data.statuses.confirmed + data.statuses.awaiting_payment, Icon: ClipboardList, tone: '#9A3412', bg: '#FFEDD5' },
     { label: 'Paid / ongoing', value: data.statuses.paid + data.statuses.ongoing, Icon: Wallet, tone: '#047857', bg: '#D1FAE5' },
     { label: 'Completed', value: data.statuses.completed, Icon: CircleCheck, tone: '#1D4ED8', bg: '#DBEAFE' },
     { label: 'Rejected', value: data.statuses.rejected, Icon: CircleX, tone: '#B91C1C', bg: '#FEE2E2' },

@@ -131,7 +131,7 @@ export async function sendBookingNotifications(
     booking_submitted: {
       customer: {
         title: 'Booking Request Submitted',
-        message: `Your booking request with ${bName} has been submitted. Please wait for confirmation.`,
+        message: `Your booking request with ${bName} has been submitted. Please wait for acceptance.`,
       },
       caterer: {
         title: 'New Booking Request',
@@ -145,7 +145,7 @@ export async function sendBookingNotifications(
         message: `${bName} approved your booking for ${eDate}. Please proceed with the downpayment.`,
       },
       caterer: {
-        title: 'Booking Confirmed',
+        title: 'Booking Accepted',
         message: `You approved the booking for ${eDate}. Waiting for the customer downpayment.`,
       },
     },

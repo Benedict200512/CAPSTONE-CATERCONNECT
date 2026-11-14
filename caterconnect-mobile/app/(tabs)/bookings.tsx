@@ -80,7 +80,7 @@ const displayXenditPaymentMethod = (method: string | null | undefined): string =
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending:   { label: 'Pending Review',   color: '#B45309', bg: '#FEF3C7', icon: Clock },
-  confirmed: { label: 'Confirmed',        color: '#1D4ED8', bg: '#DBEAFE', icon: CheckCircle2 },
+  confirmed: { label: 'Accepted',        color: '#1D4ED8', bg: '#DBEAFE', icon: CheckCircle2 },
   awaiting_payment: { label: 'Awaiting Payment', color: '#B45309', bg: '#FEF3C7', icon: CreditCard },
   paid:      { label: 'Downpayment Verified', color: '#15803D', bg: '#DCFCE7', icon: ShieldCheck },
   ongoing:   { label: 'Event Ongoing',    color: '#6D28D9', bg: '#EDE9FE', icon: RefreshCw },
@@ -205,7 +205,7 @@ function BookingTimeline({ status }: { status: string }) {
   const currentStep = getStepIndex(status);
   if (currentStep === -1) return null;
 
-  const steps = ['Requested', 'Confirmed', 'Downpayment', 'Completed'];
+  const steps = ['Requested', 'Accepted', 'Downpayment', 'Completed'];
 
   return (
     <View style={tl.wrap}>

@@ -65,7 +65,7 @@ export default function MonthlyBookingQuotaSummary({ refreshKey = 0, compact = f
         <Text style={styles.hint}>{result.month.slice(0, 7)} · Asia/Manila</Text>
       </>}
     {!compact && <Text style={styles.hint}>{result?.status === 'ready'
-      ? 'Pending and rejected requests do not count. Completed bookings stay in their assigned month. Cancellation releases that booking\'s quota. The server checks the limit when confirming.'
+      ? 'Pending and rejected requests do not count. Completed bookings stay in their assigned month. Cancellation releases that booking\'s quota. The server checks the limit when accepting a booking.'
       : 'Accepted-booking usage and limits require monthly quota setup. Usage is never estimated from pending requests.'}</Text>}
   </View>;
 }

@@ -171,7 +171,7 @@ export default function ChatScreen({
     ...(details?.eventType ? [['Event type', details.eventType]] : []),
     ...(details?.guests !== null && details?.guests !== undefined ? [['Booked guests', `${details.guests}`]] : []),
     ...(details?.capacity !== null && details?.capacity !== undefined ? [['Package capacity', `${details.capacity} guests per package`]] : []),
-    ['Status', details?.status ? details.status.charAt(0).toUpperCase() + details.status.slice(1).replace(/_/g, ' ') : 'Not available'],
+    ['Status', details?.status === 'confirmed' ? 'Accepted' : details?.status ? details.status.charAt(0).toUpperCase() + details.status.slice(1).replace(/_/g, ' ') : 'Not available'],
   ];
 
   // ── Load messages ──────────────────────────────────────────────────────
