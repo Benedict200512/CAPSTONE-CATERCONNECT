@@ -118,7 +118,7 @@ type Filter =
 const tabs: { id: Filter; label: string }[] = [
   { id: "all", label: "All Bookings" },
   { id: "pending", label: "Pending Review" },
-  { id: "confirmed", label: "Confirmed" },
+  { id: "confirmed", label: "Accepted" },
   { id: "awaiting_payment", label: "Awaiting Payment" },
   { id: "paid", label: "Downpayment Verified" },
   { id: "ongoing", label: "Event Ongoing" },
@@ -128,7 +128,7 @@ const tabs: { id: Filter; label: string }[] = [
 ];
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending Review",
-  confirmed: "Confirmed",
+  confirmed: "Accepted",
   awaiting_payment: "Awaiting Payment",
   paid: "Downpayment Verified",
   ongoing: "Event Ongoing",
@@ -473,7 +473,7 @@ const displayRefundAccount = (raw: string | null | undefined) => {
 
 const matches = (status: string, filter: Filter) =>
   filter === "all" || status === filter;
-const stages = ["Requested", "Confirmed", "Downpayment", "Completed"];
+const stages = ["Requested", "Accepted", "Downpayment", "Completed"];
 const stageIndex = (status: string) => {
   if (status === "completed") return 3;
   if (["paid", "ongoing"].includes(status)) return 2;

@@ -256,6 +256,7 @@ const getDateLabel = (value: string) => {
 
 const formatStatus = (status: string | null) => {
   if (!status) return 'Not specified';
+  if (status === 'confirmed') return 'Accepted';
 
   return status
     .replace(/_/g, ' ')

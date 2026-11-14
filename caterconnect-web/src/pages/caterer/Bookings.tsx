@@ -166,7 +166,7 @@ type Booking = {
 const FILTERS: { label: string; value: BookingFilter }[] = [
   { label: 'All Bookings', value: 'all' },
   { label: 'Pending Review', value: 'pending' },
-  { label: 'Confirmed', value: 'confirmed' },
+  { label: 'Accepted', value: 'confirmed' },
   { label: 'Awaiting Payment', value: 'awaiting_payment' },
   { label: 'Downpayment Verified', value: 'paid' },
   { label: 'Event Ongoing', value: 'ongoing' },
@@ -865,7 +865,7 @@ const openClientChatroom = (booking: Booking) => {
     }
 
     const actionLabels: Record<BookingAction, string> = {
-      confirm: 'confirm this booking',
+      confirm: 'accept this booking',
       reject: 'reject this booking',
       ongoing: 'mark this booking as ongoing',
       complete: 'mark this booking as completed',
@@ -910,7 +910,7 @@ const openClientChatroom = (booking: Booking) => {
       }
 
       const messages: Record<BookingAction, string> = {
-        confirm: 'Booking successfully confirmed.',
+        confirm: 'Booking successfully accepted.',
         reject: 'Booking successfully rejected.',
         ongoing: 'Booking marked as ongoing.',
         complete: 'Booking marked as completed.',
@@ -925,7 +925,7 @@ const openClientChatroom = (booking: Booking) => {
       if (action === 'confirm' && isMonthlyQuotaRejection(err)) {
         setQuotaRefreshKey((value) => value + 1);
         setError(
-          'Monthly booking limit reached. This booking remains pending. Review your plan usage or confirm in a later month.'
+          'Monthly booking limit reached. This booking remains pending. Review your plan usage or accept in a later month.'
         );
       } else {
         setError(getErrorMessage(err));
@@ -943,7 +943,7 @@ const openClientChatroom = (booking: Booking) => {
     if (!selectedBooking || !catererId || actionLoading) return;
     const booking = selectedBooking;
     if (!['confirmed', 'paid'].includes(booking.status)) {
-      setError('Only confirmed or paid bookings may be emergency-cancelled.');
+      setError('Only accepted or paid bookings may be emergency-cancelled.');
       return;
     }
     const reason = emergencyCancelReason === 'Other'
@@ -1449,7 +1449,7 @@ const openClientChatroom = (booking: Booking) => {
           </p>
         )}
         <small className="booking-quota-footnote">
-          Pending and rejected requests do not count. The server checks the limit when a booking is confirmed.
+          Pending and rejected requests do not count. The server checks the limit when a booking is accepted.
         </small>
       </section>}
 
@@ -2759,7 +2759,7 @@ const openClientChatroom = (booking: Booking) => {
                   {selectedBooking.status === 'pending' && (
                     <>
                       <p>
-                        Review the customer's event details before confirming
+                        Review the customer's event details before accepting
                         or rejecting this booking request.
                       </p>
 
@@ -2779,7 +2779,7 @@ const openClientChatroom = (booking: Booking) => {
                             ) : (
                               <CheckCircle2 size={17} />
                             )}
-                            Confirm Booking
+                            Accept Booking
                           </button>
 
                           <button

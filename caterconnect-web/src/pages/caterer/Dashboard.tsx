@@ -580,7 +580,7 @@ export default function CatererDashboard() {
       {/* BOOKING STATISTICS */}
       <section className="caterer-stats-grid" aria-label="Business statistics">
         <div className="caterer-stat-card"><span className="stat-icon yellow"><Clock3 size={21} /></span><p>Pending Bookings</p><h2>{pendingBookings}</h2><span className="stat-caption">Awaiting your response</span></div>
-        <div className="caterer-stat-card"><span className="stat-icon green"><CheckCircle2 size={21} /></span><p>Confirmed Bookings</p><h2>{confirmedBookings}</h2><span className="stat-caption">Bookings on your calendar</span></div>
+        <div className="caterer-stat-card"><span className="stat-icon green"><CheckCircle2 size={21} /></span><p>Accepted Bookings</p><h2>{confirmedBookings}</h2><span className="stat-caption">Bookings on your calendar</span></div>
         <div className="caterer-stat-card"><span className="stat-icon orange"><Package size={21} /></span><p>Active Packages</p><h2>{activePackages}</h2><span className="stat-caption">Published packages</span></div>
         <div className="caterer-stat-card"><span className="stat-icon purple"><Star size={21} /></span><p>Customer Rating</p><h2>{catererData.avg_rating == null ? 'N/A' : Number(catererData.avg_rating).toFixed(1)}</h2><span className="stat-caption">{catererData.review_count ?? 0} reviews</span></div>
       </section>
@@ -856,7 +856,7 @@ export default function CatererDashboard() {
                     <span>{formatDate(booking.event_date)}</span>
                     <span>{booking.event_time || 'Not provided'}</span>
                     <span className={statusClass(booking.status)}>
-                      {booking.status.replace(/_/g, ' ')}
+                      {booking.status === 'confirmed' ? 'Accepted' : booking.status.replace(/_/g, ' ')}
                     </span>
                   </div>
 

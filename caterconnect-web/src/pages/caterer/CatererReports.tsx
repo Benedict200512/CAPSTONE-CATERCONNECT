@@ -34,7 +34,7 @@ import './CatererReports.css';
 
 const PRESETS: ReportPreset[] = ['This Month', 'Last Month', 'This Year', 'Custom Date Range'];
 
-const EXPECTED_VALUE_DEFINITION = 'Combined value of confirmed, awaiting-payment, paid, ongoing and completed bookings created during the selected period. This is accepted booking value, not payments received.';
+const EXPECTED_VALUE_DEFINITION = 'Combined value of accepted, awaiting-payment, paid, ongoing and completed bookings created during the selected period. This is accepted booking value, not payments received.';
 const DOWNPAYMENT_DEFINITION = 'Sum of configured downpayments recorded as verified during the selected period for bookings marked paid, ongoing or completed. Remaining balances are excluded.';
 
 type ReportState = {
@@ -144,7 +144,7 @@ export default function CatererReports() {
 
   const statusCards = data ? [
     { label: 'Pending', value: data.statuses.pending, Icon: Clock3, tone: '#A16207', background: '#FEF3C7' },
-    { label: 'Confirmed / awaiting payment', value: data.statuses.confirmed + data.statuses.awaiting_payment, Icon: ClipboardList, tone: '#9A3412', background: '#FFEDD5' },
+    { label: 'Accepted / awaiting payment', value: data.statuses.confirmed + data.statuses.awaiting_payment, Icon: ClipboardList, tone: '#9A3412', background: '#FFEDD5' },
     { label: 'Paid / ongoing', value: data.statuses.paid + data.statuses.ongoing, Icon: Wallet, tone: '#047857', background: '#D1FAE5' },
     { label: 'Completed', value: data.statuses.completed, Icon: CheckCircle2, tone: '#1D4ED8', background: '#DBEAFE' },
     { label: 'Rejected', value: data.statuses.rejected, Icon: CircleX, tone: '#B91C1C', background: '#FEE2E2' },

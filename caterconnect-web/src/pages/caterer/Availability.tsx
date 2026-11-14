@@ -146,7 +146,7 @@ export default function CatererAvailability() {
     const action = isBlocked ? 'Make this date available?' : 'Mark this date unavailable?';
     const details = isBlocked
       ? `${selectedDate} will reopen if daily capacity permits.`
-      : `New requests and confirmations for ${selectedDate} will be prevented. Existing bookings will remain unchanged.`;
+      : `New requests and acceptances for ${selectedDate} will be prevented. Existing bookings will remain unchanged.`;
     if (!window.confirm(`${action}\n\n${details}`)) return;
 
     void runMutation(
@@ -296,7 +296,7 @@ export default function CatererAvailability() {
               {selectedCount === 0 && (
                 <p className="availability-empty-note">No committed bookings are scheduled for this date.</p>
               )}
-              <p className="availability-calendar-hint">Committed bookings include confirmed, awaiting-payment, paid, ongoing, and completed reservations. Blocking a date will not remove existing bookings.</p>
+              <p className="availability-calendar-hint">Committed bookings include accepted, awaiting-payment, paid, ongoing, and completed reservations. Blocking a date will not remove existing bookings.</p>
               <button
                 type="button"
                 className={`availability-primary-button availability-block-button${isBlocked ? ' secondary' : ''}`}

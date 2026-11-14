@@ -336,7 +336,7 @@ export default function CatererSubscription() {
             <li>A paid plan is activated or extended only after CaterConnect verifies payment.</li>
             <li>When a paid plan expires without a verified renewal, the booking quota uses the Free allowance in the available backend implementation. A complete automatic Free-plan downgrade, including package limits, is not confirmed.</li>
             <li>Plan limits are subject to the platform’s applicable rules and backend enforcement.</li>
-            <li>Subscription expiration alone does not cancel bookings that have already been accepted or confirmed.</li>
+            <li>Subscription expiration alone does not cancel bookings that have already been accepted.</li>
             <li>Existing packages are not automatically deleted solely because a subscription expires. Package-limit enforcement after expiry is not confirmed by the available backend source.</li>
             <li>This page displays up to the 10 most recent payment records returned by the backend. Longer-term record retention is not established by the inspected client implementation.</li>
             <li>Caterers are responsible for reviewing subscription status and selecting a paid plan again when needed.</li>

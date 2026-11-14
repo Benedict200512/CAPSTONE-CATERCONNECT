@@ -54,7 +54,7 @@ export async function loadMonthlyBookingQuota(catererId: string, userId: string)
   } catch (error) {
     const failure = error as { code?: string; message?: string } | null;
     if (['42703', 'PGRST204'].includes(failure?.code ?? '') && /quota_month/.test(failure?.message ?? '')) {
-      return { status: 'setup', message: 'Monthly quota setup required. Confirmed-booking usage is not available yet.' };
+      return { status: 'setup', message: 'Monthly quota setup required. Accepted-booking usage is not available yet.' };
     }
     return { status: 'unavailable', message: 'Monthly usage is unavailable. Refresh to try again.' };
   }

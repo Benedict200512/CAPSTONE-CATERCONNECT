@@ -11,7 +11,7 @@ import {
 const STATUS_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
   all:              { label: 'All', icon: Layers, color: '#2563EB' },
   pending:          { label: 'Pending', icon: Clock, color: '#D97706' },
-  confirmed:        { label: 'Confirmed', icon: CheckCircle2, color: '#16A34A' },
+  confirmed:        { label: 'Accepted', icon: CheckCircle2, color: '#16A34A' },
   awaiting_payment: { label: 'Awaiting Payment', icon: Wallet, color: '#0284C7' },
   paid:             { label: 'Paid', icon: ShieldCheck, color: '#059669' },
   ongoing:          { label: 'Ongoing', icon: Activity, color: '#7C3AED' },
@@ -317,7 +317,7 @@ export default function BookingMonitor() {
                           STATUS_BADGE[b.status] ?? 'badge-pending'
                         }`}
                       >
-                        {b.status.replace('_', ' ')}
+                        {b.status === 'confirmed' ? 'Accepted' : b.status.replace('_', ' ')}
                       </span>
                     </td>
 
@@ -547,7 +547,7 @@ export default function BookingMonitor() {
                       STATUS_BADGE[selected.status] ?? 'badge-pending'
                     }`}
                   >
-                    {selected.status.replace('_', ' ')}
+                    {selected.status === 'confirmed' ? 'Accepted' : selected.status.replace('_', ' ')}
                   </span>
                 </div>
               </div>
