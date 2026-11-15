@@ -1,3 +1,4 @@
+import { eventTimingLabel, isUrgentEvent, URGENT_CANCELLATION_WARNING } from '../../lib/emergencyCancellation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 // app/(tabs)/CatererBookings.tsx
 import { useEffect, useRef, useState } from 'react';
@@ -166,20 +167,10 @@ const getCancelWarningMessage = (booking: Booking | null) => {
   const refund = hasVerifiedDownpayment(booking)
     ? Number(booking.downpayment_amount)
     : 0;
-  const [year, month, day] = booking.event_date.slice(0, 10).split('-').map(Number);
-  const today = new Date();
-  const daysBeforeEvent = Math.round(
-    (Date.UTC(year, month - 1, day) -
-      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) /
-      86400000
-  );
-  const urgency = daysBeforeEvent < 7
-    ? '⚠️ URGENT: The event is less than 7 days away. The Customer may have difficulty finding a replacement. '
-    : '';
 
   return refund > 0
-    ? `${urgency}Cancelling as the Caterer requires a 100% refund of the verified downpayment (₱${refund.toLocaleString('en-PH')}), regardless of the event date. You are responsible for transferring the refund to the Customer’s chosen account. Platform Staff monitors the refund and handles disputes.`
-    : `${urgency}No verified downpayment is recorded, so cancelling this booking does not create a refund. The Customer will be notified.`;
+    ? `Cancelling as the Caterer requires a 100% refund of the verified downpayment (₱${refund.toLocaleString('en-PH')}), regardless of the event date. You are responsible for transferring the refund to the Customer’s chosen account. Platform Staff monitors the refund.`
+    : `No verified downpayment is recorded, so cancelling this booking does not create a refund. The Customer will be notified.`;
 };
 
 function NotesRefreshIcon({ loading }: { loading: boolean }) {
@@ -1642,6 +1633,11 @@ export default function CatererBookings() {
                 {showCancelModal && (
                   <View style={[styles.rejectContainer, { marginTop: 10, borderColor: '#FCA5A5' }]}>
                     <Text style={styles.fieldLabel}>Emergency Reason for Cancellation *</Text>
+                    <Text style={styles.refundHint}>Customer's event date: {selected.event_date} ; {eventTimingLabel(selected.event_date, clockNow)}</Text>
+                    {isUrgentEvent(selected.event_date, clockNow) && <Text accessibilityRole="alert" style={[styles.refundHint, { color: '#B91C1C', fontWeight: '700' }]}>{URGENT_CANCELLATION_WARNING}</Text>}
+                    <Text style={styles.refundHint}>Cancellation affects the Customer's event preparations. Use this option only when you cannot provide the service.</Text>
+                    <Text style={styles.refundHint}>Selected reason: {selectedReason === 'Other' ? customReason || 'Please specify below' : selectedReason || 'Not selected'}</Text>
+                    <Text style={styles.refundHint}>Refund deadline: {selected.refund_due_at ? new Date(selected.refund_due_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : 'The existing 72-hour transfer deadline applies after cancellation; the recorded deadline will be shown when available.'}</Text>
 
                     <Text style={{ fontSize: 13, color: '#B91C1C', fontWeight: '600', marginBottom: 12, padding: 10, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' }}>
                       {getCancelWarningMessage(selected)}

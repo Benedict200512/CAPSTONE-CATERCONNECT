@@ -1,5 +1,6 @@
 // app/(tabs)/index.tsx
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { readAlternativeSearch, type AlternativeSearchContext } from '../../lib/emergencyCancellation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -63,6 +64,8 @@ const EVENT_CATEGORIES = [
 export default function HomeScreen() {
   const { profile, session } = useAuth();
   const router = useRouter();
+  const { alternative, eventDate, eventType, venue, guests: alternativeGuests, budget: alternativeBudget, alternativeRequest } = useLocalSearchParams();
+  const [alternativeContext, setAlternativeContext] = useState<AlternativeSearchContext | null>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [browseAllY, setBrowseAllY] = useState(0);
@@ -90,6 +93,16 @@ export default function HomeScreen() {
   const [reviewError, setReviewError] = useState(false);
   const loadVersion = useRef(0);
   const notificationVersion = useRef(0);
+  useEffect(() => {
+    const context = readAlternativeSearch({ alternative, eventDate, eventType, venue, guests: alternativeGuests, budget: alternativeBudget });
+    if (!context) return;
+    setAlternativeContext(context);
+    setBudget(context.budget); setGuests(context.guests); setActiveCategory(context.eventType);
+    setSearchQuery(''); setCity(''); setMinBudget(''); setSort('priority'); setMatcherMode(false);
+    setAppliedNumbers(parseFilterNumbers('', context.budget, context.guests));
+    setSearched(!!context.budget || !!context.guests);
+    setMatcherError(null); setFilterError(null); setShowNotifs(false);
+  }, [alternative, eventDate, eventType, venue, alternativeGuests, alternativeBudget, alternativeRequest]);
   const account = useRef(session?.user.id);
   account.current = session?.user.id;
 
@@ -188,6 +201,7 @@ export default function HomeScreen() {
     .map(normalizeSearch).filter(Boolean))].map(value => value === 'all' ? 'All' : value[0].toUpperCase() + value.slice(1)), [caterers]);
   const filtersActive = !!searchQuery.trim() || activeCategory !== 'All' || !!budget || !!guests || !!minBudget || !!city || sort !== 'priority';
   const resetFilters = () => {
+    setAlternativeContext(null);
     setSearchQuery(''); setActiveCategory('All'); setBudget(''); setGuests(''); setMinBudget('');
     setCity(''); setSort('priority'); setSearched(false); setMatcherMode(false); setMatcherError(null); setFilterError(null);
     setAppliedNumbers({ minBudget: null, maxBudget: null, guests: null });
@@ -378,6 +392,7 @@ export default function HomeScreen() {
         }
       >
         {/* ── HEADER ── */}
+
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={styles.brandContainer}>
@@ -451,6 +466,12 @@ export default function HomeScreen() {
         </View>
 
         {/* ── HERO BANNER ── */}
+        {alternativeContext && <View style={{ margin: 14, padding: 14, gap: 10, borderRadius: 12, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA' }}>
+          <Text accessibilityRole="header" style={{ fontSize: 17, fontWeight: '800', color: '#9A3412' }}>Find Alternative Caterers</Text>
+          <Text style={{ fontSize: 14, lineHeight: 21, color: Colors.textPrimary }}>Your recorded booking total is used as a suggested maximum budget, with the original guest count and event type where available. Adjust or clear the existing filters as needed.</Text>
+          <Text style={{ fontSize: 14, lineHeight: 21, color: Colors.textPrimary }}>Original event date: {alternativeContext.eventDate || 'Not recorded'}; Location: {alternativeContext.venue || 'Not recorded'}</Text>
+          <Text style={{ fontSize: 14, lineHeight: 21, color: Colors.textPrimary }}>Date and location are reference information, not availability filters. Confirm the venue, event date and final price directly with a caterer. Replacement availability is not guaranteed.</Text>
+        </View>}
         <ImageBackground source={HERO_BUFFET_IMAGE} style={styles.heroBanner} imageStyle={styles.heroBannerImage}>
           <View style={styles.heroBannerOverlay} />
           <View style={styles.heroBannerContent}>

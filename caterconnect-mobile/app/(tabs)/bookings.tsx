@@ -1,3 +1,5 @@
+import CustomerEmergencyAssistance from '../../components/CustomerEmergencyAssistance';
+import { alternativeCatererParams } from '../../lib/emergencyCancellation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 // app/(tabs)/CustomerBookings.tsx
 import { useEffect, useRef, useState } from 'react';
@@ -295,6 +297,10 @@ const describePackageField = (value: unknown): string[] => {
 export default function CustomerBookings() {
   const { session } = useAuth();
   const router = useRouter();
+  const findAlternativeCaterers = (booking: Booking) => {
+    setDetailBooking(null);
+    router.push({ pathname: '/(tabs)', params: { ...alternativeCatererParams(booking), alternativeRequest: String(Date.now()) } });
+  };
   const { id: notificationBookingId, notification_id: notificationId, section: notificationSection } = useLocalSearchParams<{ id?: string; notification_id?: string; section?: string }>();
   const lastOpenedNotification = useRef<string | null>(null);
   const [refundEvidence, setRefundEvidence] = useState<Record<string, boolean>>({});
@@ -1103,6 +1109,7 @@ export default function CustomerBookings() {
 
               {detailBooking.status === 'cancelled' && (
                 <BookingRefundSummary booking={detailBooking}>
+                  <CustomerEmergencyAssistance booking={detailBooking} onFind={() => findAlternativeCaterers(detailBooking)} showRefund={false} />
                   {detailBooking.cancelled_by === 'caterer' && Number(detailBooking.refund_amount) > 0 &&
                     ['pending', 'overdue'].includes(detailBooking.refund_status) && !detailBooking.refund_account_details?.trim() && (
                     <TouchableOpacity  style={styles.provideRefundAccountButton}
@@ -1649,6 +1656,7 @@ export default function CustomerBookings() {
                       <Ban size={16} color="#4B5563" />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.cancelledTitle}>Booking Cancelled</Text>
+                        <CustomerEmergencyAssistance booking={b} onFind={() => findAlternativeCaterers(b)} />
                         <Text style={styles.cancelledText}>
                           Initiated by: {
                             b.cancelled_by === 'caterer' ? 'Caterer' :
