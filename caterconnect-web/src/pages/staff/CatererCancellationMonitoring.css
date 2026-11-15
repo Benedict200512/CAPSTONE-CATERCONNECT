@@ -1,0 +1,229 @@
+/* Scoped to Staff Account Monitoring to avoid global button/tab style conflicts. */
+.cc-staff-unified .staff-cancellation-monitoring {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 26px 0;
+  padding: 20px;
+  border: 1px solid var(--staff-border, #ebe5de);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.cc-staff-unified .staff-cancellation-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cc-staff-unified .staff-cancellation-heading > div {
+  min-width: 0;
+  flex: 1 1 300px;
+}
+
+.cc-staff-unified .staff-cancellation-heading h2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 19px;
+  line-height: 1.35;
+  color: #111827;
+}
+
+.cc-staff-unified .staff-cancellation-monitoring p {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.cc-staff-unified .staff-cancellation-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 14px;
+}
+
+.cc-staff-unified .staff-cancellation-monitoring .staff-cancellation-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background-color: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.cc-staff-unified
+  .staff-cancellation-monitoring
+  .staff-cancellation-button:hover:not(:disabled):not([aria-pressed="true"]) {
+  background-color: #fff7ed;
+  border-color: #fed7aa;
+}
+
+/* Keep inactive/active filters readable even when Staff global .active rules override buttons. */
+.cc-staff-unified
+  .staff-cancellation-filters
+  > .staff-cancellation-button[aria-pressed="false"] {
+  background-color: #fff !important;
+  border-color: #e5e7eb !important;
+  color: #374151 !important;
+  opacity: 1;
+}
+
+.cc-staff-unified
+  .staff-cancellation-filters
+  > .staff-cancellation-button[aria-pressed="true"],
+.cc-staff-unified
+  .staff-cancellation-filters
+  > .staff-cancellation-button[aria-pressed="true"]:hover {
+  background-color: #111827 !important;
+  border-color: #111827 !important;
+  color: #fff !important;
+  opacity: 1;
+}
+
+.cc-staff-unified
+  .staff-cancellation-monitoring
+  .staff-cancellation-button:focus-visible {
+  outline: 3px solid #fdba74;
+  outline-offset: 2px;
+}
+
+.cc-staff-unified
+  .staff-cancellation-monitoring
+  .staff-cancellation-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cc-staff-unified .staff-cancellation-table-scroll {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 14px 0;
+  border-radius: 10px;
+}
+
+.cc-staff-unified .staff-cancellation-table {
+  min-width: 1600px;
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.cc-staff-unified .staff-cancellation-table th {
+  padding: 12px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.cc-staff-unified .staff-cancellation-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #ebe5de;
+  vertical-align: top;
+  font-weight: 600; /* Match Customer Name boldness for all record values. */
+}
+
+/* Use the same weight for IDs and secondary details inside the data cells. */
+.cc-staff-unified .staff-cancellation-table td code,
+.cc-staff-unified .staff-cancellation-table td small {
+  font-weight: 600;
+}
+
+.cc-staff-unified .staff-cancellation-table code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.cc-staff-unified .staff-cancellation-table small {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+}
+
+.cc-staff-unified .staff-cancellation-customer-name {
+  min-width: 160px;
+  max-width: 240px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cc-staff-unified .staff-cancellation-reason {
+  min-width: 210px;
+  max-width: 320px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cc-staff-unified .staff-cancellation-timing {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cc-staff-unified .staff-cancellation-urgent {
+  background-color: #fff7ed;
+}
+.cc-staff-unified .staff-cancellation-timing.urgent {
+  color: #b91c1c;
+}
+.cc-staff-unified .staff-cancellation-timing.unknown {
+  color: #92400e;
+}
+.cc-staff-unified .staff-cancellation-monitoring .staff-cancellation-error {
+  color: #b91c1c;
+}
+.cc-staff-unified
+  .staff-cancellation-monitoring
+  .staff-cancellation-name-notice {
+  color: #92400e;
+}
+
+@media (max-width: 600px) {
+  .cc-staff-unified .staff-cancellation-monitoring {
+    padding: 14px;
+  }
+  .cc-staff-unified .staff-cancellation-heading h2 {
+    font-size: 17px;
+  }
+  .cc-staff-unified .staff-cancellation-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  }
+  .cc-staff-unified .staff-cancellation-filters > .staff-cancellation-button {
+    width: 100%;
+  }
+}

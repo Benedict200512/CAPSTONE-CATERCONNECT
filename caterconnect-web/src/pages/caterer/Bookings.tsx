@@ -1,3 +1,4 @@
+import { eventTimingLabel, isUrgentEvent, URGENT_CANCELLATION_WARNING } from '../../lib/emergencyCancellation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
@@ -2869,6 +2870,11 @@ const openClientChatroom = (booking: Booking) => {
                       ) : (
                         <div className="booking-emergency-form">
                           <h4>Emergency Cancellation</h4>
+                          <p><strong>Customer's event date:</strong> {selectedBooking.event_date} ; {eventTimingLabel(selectedBooking.event_date, clockNow)}</p>
+                          {isUrgentEvent(selectedBooking.event_date, clockNow) && <p role="status" className="booking-emergency-urgency">{URGENT_CANCELLATION_WARNING}</p>}
+                          <p>Cancellation affects the Customer's event preparations. Use this option only when you cannot provide the service.</p>
+                          <p><strong>Selected reason:</strong> {emergencyCancelReason === 'Other' ? emergencyCancelCustomReason || 'Please specify below' : emergencyCancelReason || 'Not selected'}</p>
+                          <p><strong>Refund deadline:</strong> {selectedBooking.refund_due_at ? formatDateTime(selectedBooking.refund_due_at) : 'The existing 72-hour transfer deadline applies after cancellation; the recorded deadline will be shown when available.'}</p>
 
                           <p>
                             Use this option only when an unexpected situation

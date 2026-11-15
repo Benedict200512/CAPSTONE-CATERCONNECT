@@ -1930,3 +1930,12 @@
   color: #6d28d9;
   background: rgba(237, 233, 254, 0.83);
 }
+.cc-market-alternative-assistance {
+  padding: 16px;
+  margin: 16px 0;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}

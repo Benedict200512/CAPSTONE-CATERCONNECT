@@ -2983,3 +2983,12 @@
     width: 100%;
   }
 }
+.booking-emergency-form .booking-emergency-urgency {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 700;
+  line-height: 1.6;
+}

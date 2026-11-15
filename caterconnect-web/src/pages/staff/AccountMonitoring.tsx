@@ -1,4 +1,5 @@
 import './StaffUnified.css';
+import CatererCancellationMonitoring from './CatererCancellationMonitoring';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -1672,6 +1673,8 @@ export default function AccountMonitoring() {
           );
         })}
       </div>
+
+      <CatererCancellationMonitoring />
 
       {/* ACCOUNT ACTION MODAL */}
       {chosen && (

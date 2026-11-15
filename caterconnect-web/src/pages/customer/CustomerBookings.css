@@ -1361,3 +1361,18 @@
     flex-wrap: wrap;
   }
 }
+.cc-cb-emergency-assistance {
+  padding: 16px;
+  margin: 14px 0;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.cc-cb-emergency-assistance p { line-height: 1.65; }
+.cc-cb-emergency-assistance .cc-cb-refund-primary {
+  display: inline-flex;
+  white-space: normal;
+  text-align: center;
+  text-decoration: none;
+}

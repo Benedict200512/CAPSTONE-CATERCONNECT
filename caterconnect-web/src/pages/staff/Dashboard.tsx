@@ -16,16 +16,23 @@ type StaffNotification = {
   created_at: string;
 };
 
+// An existing server-owned notification path must insert this type into
+// `notifications` after a successful 0–7 day Caterer cancellation.
+// This component only reads/displays notifications; it does NOT create them.
+const URGENT_CATERER_CANCELLATION_TYPE = 'urgent_caterer_cancellation';
+
 const STAFF_NOTIFICATION_TYPES = [
   'new_caterer_verification',
   'new_complaint',
   'new_account_appeal',
+  URGENT_CATERER_CANCELLATION_TYPE,
 ];
 
 const STAFF_NOTIFICATION_DESTINATIONS: Record<string, string> = {
   new_caterer_verification: '/staff/verification',
   new_complaint: '/staff/complaints',
   new_account_appeal: '/staff/account-monitoring',
+  [URGENT_CATERER_CANCELLATION_TYPE]: '/staff/account-monitoring',
 };
 
 function sortStaffNotifications(items: StaffNotification[]) {
@@ -416,28 +423,36 @@ export default function StaffDashboard() {
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>No notifications yet</div>
                       <p style={{ fontSize: 12, lineHeight: 1.6, color: '#9CA3AF', margin: '7px 0 0' }}>
-                        New verification requests, complaints, and account appeals will appear here.
+                        New verification requests, complaints, account appeals, and urgent Caterer cancellations will appear here.
                       </p>
                     </div>
                   ) : (
                     <div className="staff-notification-list">
                       {notifications.map((notification) => {
+                        const isUrgentCatererCancellation =
+                          notification.type === URGENT_CATERER_CANCELLATION_TYPE;
                         const NotificationIcon = notification.type === 'new_caterer_verification'
                           ? Store
-                          : notification.type === 'new_complaint'
+                          : notification.type === 'new_complaint' || isUrgentCatererCancellation
                             ? AlertTriangle
                             : UserRound;
-                        const iconColor = notification.type === 'new_caterer_verification'
-                          ? '#7C3AED'
-                          : '#EA580C';
-                        const iconBackground = notification.type === 'new_caterer_verification'
-                          ? '#F5F3FF'
-                          : '#FFF7ED';
-                        const destinationLabel = notification.type === 'new_caterer_verification'
-                          ? 'View verification queue'
-                          : notification.type === 'new_complaint'
-                            ? 'View complaints'
-                            : 'View account monitoring';
+                        const iconColor = isUrgentCatererCancellation
+                          ? '#B91C1C'
+                          : notification.type === 'new_caterer_verification'
+                            ? '#7C3AED'
+                            : '#EA580C';
+                        const iconBackground = isUrgentCatererCancellation
+                          ? '#FEF2F2'
+                          : notification.type === 'new_caterer_verification'
+                            ? '#F5F3FF'
+                            : '#FFF7ED';
+                        const destinationLabel = isUrgentCatererCancellation
+                          ? 'View emergency cancellations in Account Monitoring'
+                          : notification.type === 'new_caterer_verification'
+                            ? 'View verification queue'
+                            : notification.type === 'new_complaint'
+                              ? 'View complaints'
+                              : 'View account monitoring';
 
                         return (
                           <button

@@ -31,6 +31,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import CustomerHeader from "./CustomerHeader";
+import CustomerEmergencyAssistance from "../../components/CustomerEmergencyAssistance";
 import "./CustomerBookings.css";
 
 type Caterer = {
@@ -2147,6 +2148,7 @@ export default function CustomerBookings() {
                   <h3>
                     <ReceiptText size={17} /> Cancellation & Refund
                   </h3>
+                  <CustomerEmergencyAssistance booking={selected} />
                   <dl className="cc-cb-detail-grid">
                     <div>
                       <dt>Reason</dt>
@@ -2162,7 +2164,7 @@ export default function CustomerBookings() {
                     </div>
                     <div>
                       <dt>Refund Amount</dt>
-                      <dd>{peso(selected.refund_amount)}</dd>
+                      <dd>{selected.refund_amount == null ? "Not recorded" : peso(selected.refund_amount)}</dd>
                     </div>
                     <div>
                       <dt>Refund Deadline</dt>

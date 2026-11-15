@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { readAlternativeSearch, type AlternativeSearchContext } from "../../lib/emergencyCancellation";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -90,6 +91,8 @@ const emptyNumbers = { minBudget: null, maxBudget: null, guests: null };
 
 export default function CustomerMarketplace() {
   const { session, profile } = useAuth();
+  const { state: navigationState, key: navigationKey } = useLocation();
+  const [alternativeContext, setAlternativeContext] = useState<AlternativeSearchContext | null>(null);
   const [caterers, setCaterers] = useState<CatererWithPackages[]>([]);
   const [reviews, setReviews] = useState<
     Record<string, { avg: number; count: number }>
@@ -124,6 +127,16 @@ export default function CustomerMarketplace() {
   const [showAllFeatured, setShowAllFeatured] = useState(false);
   const version = useRef(0);
   const browseRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const context = readAlternativeSearch(navigationState?.alternativeSearch);
+    if (!context) return;
+    setAlternativeContext(context);
+    setBudget(context.budget); setGuests(context.guests); setCategory(context.eventType);
+    setQuery(""); setCity(""); setMinimum(""); setSort("priority"); setMatcherMode(false);
+    setApplied(parseFilterNumbers("", context.budget, context.guests));
+    setSearched(!!context.budget || !!context.guests);
+    setMatcherError(""); setFilterError("");
+  }, [navigationState, navigationKey]);
 
   const reload = useCallback(async (first = false) => {
     const request = ++version.current;
@@ -245,6 +258,7 @@ export default function CustomerMarketplace() {
     sort !== "priority";
 
   const clearAll = () => {
+    setAlternativeContext(null);
     setQuery("");
     setCategory("All");
     setCity("");
@@ -337,6 +351,12 @@ export default function CustomerMarketplace() {
       <CustomerHeader activePage="marketplace" />
 
       <main className="cc-market-main" id="marketplace">
+        {alternativeContext && <section className="cc-market-alternative-assistance" aria-label="Alternative caterer search">
+          <h2>Find Alternative Caterers</h2>
+          <p>Your recorded booking total is used as a suggested maximum budget, with the original guest count and event type where available. Adjust or clear the existing filters as needed.</p>
+          <p>Original event date: {alternativeContext.eventDate || 'Not recorded'}; Location: {alternativeContext.venue || 'Not recorded'}</p>
+          <p>Date and location are reference information, not availability filters. Confirm the venue, event date and final price directly with a caterer. Replacement availability is not guaranteed.</p>
+        </section>}
         <div className="cc-market-intro">
           <div>
             <span className="cc-market-eyebrow">
