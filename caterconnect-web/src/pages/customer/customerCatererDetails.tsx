@@ -36,6 +36,7 @@ import {
   type DetailPackage,
 } from "../../lib/customerCatererDetails";
 import CustomerHeader from "./CustomerHeader";
+import { menuCategoryKeys, menuCategoryLabel } from '../../lib/buildYourOwn';
 import "./customerCatererDetails.css";
 
 type Tab = "packages" | "menu" | "reviews";
@@ -585,7 +586,9 @@ export default function CustomerCatererDetails() {
                             yet.
                           </div>
                         )}
-                        {categories.map(({ key, label, Icon }) => {
+                        {menuCategoryKeys(details.menu).map(key => {
+                          const label = menuCategoryLabel(key);
+                          const Icon = categories.find(category => category.key === key)?.Icon ?? UtensilsCrossed;
                           const items = details.menu.filter(
                             (item) => item.category === key,
                           );

@@ -8,6 +8,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { menuCategoryLabel, normalizeMenuCategory } from '../../lib/buildYourOwn';
+import { catererCategoryOptions, resolveMenuCategory, CUSTOM_MENU_CATEGORY_WRITES_ENABLED, CUSTOM_CATEGORY_SETUP_MESSAGE } from '../../lib/menuCategoryManagement';
 import {
   Plus, Edit3, Trash2, Check,
   ChevronDown, UtensilsCrossed, Soup, CakeSlice,
@@ -71,6 +73,9 @@ export default function MenuScreen() {
   const [activeCategory, setActiveCategory] = useState('main_course');
   const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
   const [customServingUnit, setCustomServingUnit] = useState('');
   const [showCustomServingUnit, setShowCustomServingUnit] = useState(false);
 
@@ -132,6 +137,9 @@ export default function MenuScreen() {
   }, [catererData?.id]);
 
   const openAdd = () => {
+    setAddingCategory(false);
+    setCategoryName('');
+    setCategoryError('');
     setEditing(null);
     setForm({ ...EMPTY_FORM, category: activeCategory });
     setCustomServingUnit('');
@@ -140,6 +148,9 @@ export default function MenuScreen() {
   };
 
   const openEdit = (item: MenuItem) => {
+    setAddingCategory(false);
+    setCategoryName('');
+    setCategoryError('');
     setEditing(item);
     setForm({
       name: item.name,
@@ -195,6 +206,12 @@ export default function MenuScreen() {
 
   const handleSave = async () => {
     if (uploadingImage || saving) return;
+    const categoryResult = resolveMenuCategory(addingCategory ? categoryName : null, form.category);
+    if (!categoryResult.key) {
+      setCategoryError(categoryResult.error);
+      Alert.alert('Category', categoryResult.error);
+      return;
+    }
     if (!form.name.trim()) {
       Alert.alert('Required', 'Item name is required.');
       return;
@@ -228,7 +245,7 @@ export default function MenuScreen() {
     const payload = {
       caterer_id: catererData.id,
       name: form.name.trim(),
-      category: form.category,
+      category: categoryResult.key,
       description: form.description.trim() || null,
       price_per_guest: price,
       serving_size: servingSize,
@@ -237,14 +254,15 @@ export default function MenuScreen() {
     };
 
     if (editing) {
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('menu_items')
         .update(payload)
         .eq('id', editing.id)
-        .eq('caterer_id', catererData.id);
+        .eq('caterer_id', catererData.id)
+        .select('id');
 
-      if (error) {
-        Alert.alert('Error', error.message);
+      if (error || updated?.length !== 1) {
+        Alert.alert('Error', error?.message ?? 'Menu item could not be updated. Refresh and try again.');
         setSaving(false);
         return;
       }
@@ -261,6 +279,10 @@ export default function MenuScreen() {
     }
 
     setSaving(false);
+    setActiveCategory(categoryResult.key);
+    setAddingCategory(false);
+    setCategoryName('');
+    setCategoryError('');
     setShowForm(false);
     setEditing(null);
     await load();
@@ -322,7 +344,11 @@ export default function MenuScreen() {
   };
 
   const filteredItems = items.filter(item => item.category === activeCategory);
-  const catInfo = CATEGORIES.find(category => category.key === activeCategory);
+  const categories = catererCategoryOptions(items).map(category => ({ ...category,
+    icon: CATEGORIES.find(item => item.key === category.key)?.icon ?? UtensilsCrossed, color: getCategoryColor(category.key) }));
+  const formCategories = catererCategoryOptions(items, form.category);
+  const categoryPreview = addingCategory ? normalizeMenuCategory(categoryName) : null;
+  const catInfo = categories.find(category => category.key === activeCategory);
 
   return (
     <View style={styles.root}>
@@ -348,7 +374,7 @@ export default function MenuScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryTabs}
         >
-          {CATEGORIES.map(cat => {
+          {categories.map(cat => {
             const count = items.filter(item => item.category === cat.key).length;
             const isActive = activeCategory === cat.key;
 
@@ -546,8 +572,9 @@ export default function MenuScreen() {
                 <Text style={styles.formLabel}>Category *</Text>
 
                 <View style={styles.categoryGrid}>
-                  {CATEGORIES.map(cat => {
-                    const isActive = form.category === cat.key;
+                  {formCategories.map(category => {
+                    const cat = { ...category, icon: CATEGORIES.find(item => item.key === category.key)?.icon ?? UtensilsCrossed, color: getCategoryColor(category.key) };
+                    const isActive = !addingCategory && form.category === cat.key;
 
                     return (
                       <TouchableOpacity
@@ -559,7 +586,7 @@ export default function MenuScreen() {
                             borderColor: cat.color,
                           },
                         ]}
-                        onPress={() => setForm(current => ({ ...current, category: cat.key }))}
+                        onPress={() => { setAddingCategory(false); setCategoryError(''); setForm(current => ({ ...current, category: cat.key })); }}
                         activeOpacity={0.85}
                       >
                         <cat.icon
@@ -577,7 +604,22 @@ export default function MenuScreen() {
                       </TouchableOpacity>
                     );
                   })}
+                  <TouchableOpacity style={styles.catChip} accessibilityRole="button" accessibilityLabel="Add New Category"
+                    onPress={() => { setAddingCategory(true); setCategoryError(''); }}>
+                    <Plus size={18} color={Colors.orange} /><Text style={styles.catChipLabel}>Add New Category</Text>
+                  </TouchableOpacity>
                 </View>
+                {addingCategory && <>
+                  <Text style={styles.formLabel}>New category name</Text>
+                  <TextInput style={styles.formInput} value={categoryName} placeholder="e.g. Rice" accessibilityLabel="New category name"
+                    autoCapitalize="words" onChangeText={value => { setCategoryName(value); setCategoryError(''); }} />
+                  <Text style={{ color: categoryName && !categoryPreview ? Colors.error : Colors.textSecondary, fontSize: 12, lineHeight: 18 }}>
+                    {categoryPreview ? `${menuCategoryLabel(categoryPreview)} · Saved key: ${categoryPreview}${formCategories.some(category => category.key === categoryPreview) ? ' · Existing category will be reused.' : ''}`
+                      : 'Use 1–50 English letters or numbers; spaces, hyphens and underscores separate words.'}
+                  </Text>
+                </>}
+                {!!categoryError && <Text accessibilityRole="alert" style={{ color: Colors.error, fontSize: 12, lineHeight: 18 }}>{categoryError}</Text>}
+                {!CUSTOM_MENU_CATEGORY_WRITES_ENABLED && <Text style={{ color: Colors.textSecondary, fontSize: 12, lineHeight: 18 }}>{CUSTOM_CATEGORY_SETUP_MESSAGE}</Text>}
               </View>
 
               <View style={styles.formGroup}>
@@ -799,7 +841,7 @@ function getCategoryColor(category: string) {
     drink: '#2563EB',
   };
 
-  return map[category] ?? Colors.orange;
+  return Object.prototype.hasOwnProperty.call(map, category) ? map[category] : Colors.orange;
 }
 
 const styles = StyleSheet.create({
@@ -1033,7 +1075,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  catChipLabel: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
+  catChipLabel: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
   servingRow: { flexDirection: 'row', gap: 10 },
   servingSizeInput: { flex: 1 },
   unitPickerBtn: {

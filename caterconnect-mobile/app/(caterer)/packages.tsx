@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Platform, ScrollView,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,7 +15,11 @@ import {
   Users, RefreshCw, Send, Eye, EyeOff
 } from 'lucide-react-native';
 
+import { BuffetConfigEditor } from '../../components/BuffetChoices';
+import { createBuffetConfig, type BuffetConfig } from '../../lib/buildYourOwn';
+import { validateBuffetCatalog } from '../../lib/buildYourOwnBackend';
 type Package = {
+  build_your_own_config?: BuffetConfig | null;
   id: string;
   publication_status: PackagePublicationStatus;
   tier: string;
@@ -90,6 +94,7 @@ export default function PackagesScreen() {
   // New Direct Entry Food State
   const [foodInclusions, setFoodInclusions] = useState<string[]>([]);
   const [newFood, setNewFood] = useState('');
+  const [buffetConfig, setBuffetConfig] = useState<BuffetConfig | null>(null);
 
   const load = async () => {
     if (!catererData?.id) return;
@@ -97,7 +102,7 @@ export default function PackagesScreen() {
     setLoadError(null);
     try {
       const { data, error } = await supabase.from('packages')
-        .select('id, tier, name, description, price, guest_capacity, min_guests, max_guests, includes, food_inclusions, event_types, image_url, publication_status')
+        .select('*')
         .eq('caterer_id', catererData.id).order('created_at', { ascending: true });
       if (error) throw error;
       if ((data ?? []).some(pkg => !isPublicationStatus(pkg.publication_status))) {
@@ -156,6 +161,7 @@ export default function PackagesScreen() {
 
   const openCreate = () => {
     setEditing(null);
+    setBuffetConfig(null);
     setName(''); setTier('bronze'); setDescription('');
     setPrice(''); setGuestCapacity(''); setMinGuests('');
     setMaxGuests('');
@@ -168,14 +174,42 @@ export default function PackagesScreen() {
 
   const openEdit = (pkg: Package) => {
     setEditing(pkg);
+    setBuffetConfig(pkg.build_your_own_config ?? null);
     setName(pkg.name); setTier(pkg.tier); setDescription(pkg.description ?? '');
     setPrice(String(pkg.price)); setGuestCapacity(String(pkg.guest_capacity)); setMinGuests(String(pkg.min_guests ?? ''));
     setMaxGuests(String(pkg.max_guests ?? ''));
     setIncludes(pkg.includes ?? []); setEventTypes((pkg.event_types ?? []).filter(e => e !== 'Other'));
     setCustomEventType(''); setShowCustomEventType((pkg.event_types ?? []).some(e => e === 'Other' || !ALL_EVENT_TYPES.includes(e)));
-    setFoodInclusions(pkg.food_inclusions ?? []);
+    setFoodInclusions(pkg.build_your_own_config ? [] : pkg.food_inclusions ?? []);
     setImageUrl(pkg.image_url ?? null); setCustomInclude(''); setNewFood('');
     setShowModal(true);
+  };
+
+  const changePackageType = (buildYourOwn: boolean) => {
+    if (saving || uploadingImage || editing?.publication_status === 'published') return;
+    if (buildYourOwn === Boolean(buffetConfig)) return;
+
+    const applyType = () => {
+      setBuffetConfig(buildYourOwn ? createBuffetConfig() : null);
+      setFoodInclusions([]);
+      setNewFood('');
+    };
+    const discardsFood = foodInclusions.length > 0 || newFood.trim().length > 0;
+    if (!buffetConfig && !discardsFood) {
+      applyType();
+      return;
+    }
+    const message = buildYourOwn
+      ? 'Standard Food Inclusions will be cleared. Your shared package details will be kept.'
+      : 'Included Buffet Choices will be cleared. Your shared package details will be kept.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) applyType();
+      return;
+    }
+    Alert.alert('Change package type?', message, [
+      { text: 'Keep Current Type', style: 'cancel' },
+      { text: 'Switch Type', style: 'destructive', onPress: applyType },
+    ]);
   };
 
   const toggleEventType = (et: string) => {
@@ -225,16 +259,21 @@ export default function PackagesScreen() {
     if (!catererData?.id) return;
 
     const limits = { price, guest_capacity: Number(guestCapacity), min_guests: minGuests ? Number(minGuests) : null, max_guests: Number(maxGuests) };
+    setSaving(true);
     try {
+      if (buffetConfig || editing?.build_your_own_config) {
+        await validateBuffetCatalog(buffetConfig, catererData.id, editing?.publication_status === 'published');
+      }
       packageGuestBounds(limits);
       calculatePackagePricing(limits, limits.guest_capacity);
     } catch (error) {
+      setSaving(false);
       Alert.alert('Check package pricing', error instanceof Error ? error.message : 'Check the package guest limits.');
       return;
     }
 
-    setSaving(true);
     const payload = {
+      ...(buffetConfig || editing?.build_your_own_config ? { build_your_own_config: buffetConfig } : {}),
       caterer_id: catererData.id,
       name: name.trim(),
       tier,
@@ -244,7 +283,7 @@ export default function PackagesScreen() {
       min_guests: limits.min_guests,
       max_guests: limits.max_guests,
       includes: includes.length > 0 ? includes : null,
-      food_inclusions: foodInclusions.length > 0 ? foodInclusions : null,
+      food_inclusions: !buffetConfig && foodInclusions.length > 0 ? foodInclusions : null,
       event_types: eventTypes.length > 0 ? eventTypes : null,
       image_url: imageUrl,
     };
@@ -267,6 +306,7 @@ export default function PackagesScreen() {
     if (changingId || saving || !session?.user.id || !catererData?.id) return;
     setChangingId(pkg.id);
     try {
+      if (next === 'published' && pkg.build_your_own_config) await validateBuffetCatalog(pkg.build_your_own_config, catererData.id);
       await setPackagePublication(pkg.id, catererData.id, session.user.id, pkg.publication_status, next);
       await load();
     } catch (error) {
@@ -363,7 +403,7 @@ export default function PackagesScreen() {
                 <View style={styles.pkgContent}>
                   <View style={styles.pkgHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={styles.pkgName} numberOfLines={1}>{pkg.name}</Text>
+                      <Text style={styles.pkgName} numberOfLines={1}>{pkg.name}</Text><Text style={styles.sectionSub}>{pkg.build_your_own_config ? 'Build Your Own Package' : 'Standard Package'}</Text>
                       <View style={styles.statusPillContainer}>
                         <View style={[styles.statusDot, { backgroundColor: isPublished ? '#10B981' : '#94A3B8' }]} />
                         <Text style={[styles.statusPillText, { color: isPublished ? '#047857' : '#64748B' }]}>
@@ -470,6 +510,7 @@ export default function PackagesScreen() {
 
       {/* --- ADD / EDIT MODAL --- */}
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>{editing ? 'Edit Package' : 'New Package'}</Text>
           <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowModal(false)} activeOpacity={0.8} accessibilityLabel="Close Modal">
@@ -483,6 +524,33 @@ export default function PackagesScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.formSection}>
+            <Text style={styles.sectionTitle}>PACKAGE TYPE</Text>
+            <View style={styles.packageTypeOptions} accessibilityRole="radiogroup">
+              {[
+                { buildYourOwn: false, title: 'Standard Package', description: 'A ready-made package with food inclusions you define.', Icon: PackageSearch },
+                { buildYourOwn: true, title: 'Build Your Own Package', description: 'Customers choose included dishes from your eligible menu.', Icon: UtensilsCrossed },
+              ].map(({ buildYourOwn, title, description: typeDescription, Icon }) => {
+                const selected = buildYourOwn === Boolean(buffetConfig);
+                const disabled = saving || uploadingImage || editing?.publication_status === 'published';
+                return (
+                  <TouchableOpacity key={title} accessibilityRole="radio" accessibilityLabel={title}
+                    accessibilityState={{ checked: selected, disabled }} disabled={disabled}
+                    onPress={() => changePackageType(buildYourOwn)} activeOpacity={0.85}
+                    style={[styles.packageTypeCard, selected && styles.packageTypeCardSelected, disabled && styles.packageTypeCardDisabled]}>
+                    <Icon size={24} color={Colors.orange} />
+                    <View style={styles.packageTypeCopy}>
+                      <Text style={styles.packageTypeTitle}>{title}</Text>
+                      <Text style={styles.packageTypeDescription}>{typeDescription}</Text>
+                    </View>
+                    {selected && <CheckCircle2 size={18} color={Colors.orange} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {editing?.publication_status === 'published' && <Text style={styles.packageTypeHelp}>Unpublish this package before changing its type.</Text>}
+          </View>
+
           {/* Section 1: Visuals & Basics */}
           <View style={styles.formSection}>
             <Text style={styles.sectionTitle}>VISUALS & TIER</Text>
@@ -574,8 +642,11 @@ export default function PackagesScreen() {
             </View>
           </View>
 
+          {buffetConfig && <View style={styles.formSection}>
+            <BuffetConfigEditor value={buffetConfig} onChange={setBuffetConfig} catererId={catererData?.id ?? ''} published={editing?.publication_status === 'published'} showTypeSelector={false} />
+          </View>}
           {/* Section 4: Direct Entry Food Menu */}
-          <View style={styles.formSection}>
+          {!buffetConfig && <View style={styles.formSection}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>FOOD MENU FOR THIS PACKAGE</Text>
               <Text style={styles.selectionCount}>{foodInclusions.length} Added</Text>
@@ -610,7 +681,7 @@ export default function PackagesScreen() {
                 ))}
               </View>
             )}
-          </View>
+          </View>}
 
           {/* Section 5: Inclusions */}
           <View style={styles.formSection}>
@@ -730,6 +801,7 @@ export default function PackagesScreen() {
           </TouchableOpacity>
           
         </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -858,6 +930,14 @@ const styles = StyleSheet.create({
   modalCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   
   formSection: { backgroundColor: Colors.white, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#F1F5F9' },
+  packageTypeOptions: { gap: 12 },
+  packageTypeCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, minHeight: 88, borderWidth: 1, borderColor: Colors.border, borderRadius: 14, backgroundColor: Colors.bgCard },
+  packageTypeCardSelected: { borderColor: Colors.orange, backgroundColor: Colors.orangeLight },
+  packageTypeCardDisabled: { opacity: 0.7 },
+  packageTypeCopy: { flex: 1, minWidth: 0, gap: 6 },
+  packageTypeTitle: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  packageTypeDescription: { fontSize: 13, lineHeight: 20, color: Colors.textSecondary },
+  packageTypeHelp: { fontSize: 13, lineHeight: 20, color: Colors.textSecondary, marginTop: 12 },
   sectionTitle: { fontSize: 12, fontWeight: '900', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 16 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   sectionSub: { fontSize: 13, color: Colors.textSecondary, marginBottom: 16, lineHeight: 20 },

@@ -1,0 +1,48 @@
+.cc-byo-summary { display: grid; gap: 14px; min-width: 0; }
+.cc-byo-card { min-width: 0; border: 1px solid #e8e4de; border-radius: 14px; padding: 18px; background: #fff; overflow-wrap: anywhere; }
+.cc-byo-card h3.cc-byo-section-title { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; color: var(--black, #111); font-size: 16px; font-weight: 750; line-height: 1.4; }
+.cc-byo-section-title svg, .cc-byo-group-label svg, .cc-byo-detail-rows dt svg { color: var(--orange, #f97316); flex: none; }
+.cc-byo-overview { display: grid; gap: 12px; min-width: 0; }
+.cc-byo-overview .cc-byo-section-title { margin-bottom: 0; }
+.cc-byo-overview h4.cc-byo-package-name { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.35; color: var(--black, #111); overflow-wrap: anywhere; }
+.cc-byo-badges { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 7px; min-width: 0; }
+.cc-byo-badge { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 10px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.cc-byo-badge svg { flex: none; }
+.cc-byo-badge-tier { background: #f5f3f0; color: #52525b; border-color: #e8e4de; text-transform: capitalize; }
+.cc-byo-card p.cc-byo-helper { margin: -4px 0 14px; color: #6b7280; font-size: 13px; line-height: 1.5; }
+.cc-byo-groups { display: grid; gap: 10px; }
+.cc-byo-group { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr); align-items: start; gap: 14px; padding: 13px; border: 1px solid #eee9e2; border-radius: 11px; background: #faf8f5; min-width: 0; }
+.cc-byo-group-label { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+.cc-byo-group-label h4 { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.5; color: #52525b; overflow-wrap: anywhere; }
+.cc-byo-dishes { display: grid; gap: 8px; min-width: 0; }
+.cc-byo-dish, .cc-byo-service { display: flex; align-items: flex-start; gap: 8px; min-width: 0; color: #1a1a1a; font-size: 14px; line-height: 1.5; }
+.cc-byo-dish svg { flex: none; margin-top: 3px; color: #6b7280; }
+.cc-byo-dish span, .cc-byo-service span { min-width: 0; overflow-wrap: anywhere; }
+.cc-byo-services { display: grid; gap: 10px; }
+.cc-byo-service svg { flex: none; margin-top: 2px; color: #15803d; }
+.cc-byo-detail-rows { display: grid; gap: 0; margin: 0; min-width: 0; }
+.cc-byo-detail-rows > div { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid #eee9e2; }
+.cc-byo-detail-rows > div:last-child { border-bottom: 0; }
+.cc-byo-detail-rows dt { display: flex; align-items: flex-start; gap: 8px; color: #6b7280; font-size: 13px; line-height: 1.5; }
+.cc-byo-detail-rows dd { margin: 0; color: #1a1a1a; font-size: 14px; font-weight: 600; line-height: 1.5; text-align: right; overflow-wrap: anywhere; }
+.cc-byo-package-section.cc-cb-detail-section { padding: 0; border: 0; background: transparent; }
+.cc-byo-package-stack.cc-cb-package-heading { display: block; }
+.cc-byo-details .cc-cb-detail-grid { background: #fff; border-color: #e8e4de; padding: 18px; gap: 18px; }
+.cc-byo-pricing > div:first-child dd { font-size: 22px; line-height: 1.35; font-weight: 800; color: var(--black, #111); }
+.cc-byo-details .cc-cb-special-request, .cc-byo-request { padding: 14px; border: 1px solid #e8e4de; border-radius: 12px; background: #faf8f5; color: #6b7280; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.cc-byo-details .cc-cb-addon-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 9px; }
+.cc-byo-details .cc-cb-addon-list li { border: 1px solid #e8e4de; background: #faf8f5; padding: 12px; border-radius: 10px; overflow-wrap: anywhere; }
+.cc-byo-details .booking-detail-section { border-color: #e8e4de; }
+.cc-byo-details .cc-byo-summary { margin: 20px 0; }
+.cc-byo-review .cc-byo-card { margin-top: 14px; }
+.cc-byo-review .cc-book-review-row { align-items: flex-start; gap: 14px; }
+.cc-byo-review .cc-book-review-row > * { min-width: 0; overflow-wrap: anywhere; }
+.cc-byo-review .cc-book-review-row > span { flex: 1; }
+.cc-byo-review .cc-book-review-row > strong { flex: 1; text-align: right; }
+.cc-byo-review .cc-book-review-downpayment { flex-wrap: wrap; gap: 12px; }
+@media (max-width: 480px) {
+  .cc-byo-card { padding: 14px; }
+  .cc-byo-group { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .cc-byo-overview h4.cc-byo-package-name { font-size: 18px; }
+  .cc-byo-detail-rows > div { gap: 10px; }
+}

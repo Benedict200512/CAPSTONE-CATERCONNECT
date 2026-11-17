@@ -1,3 +1,6 @@
+import BookingPackageSnapshotCard from '../../components/BookingPackageSnapshotCard';
+import type { PackageSelectionSnapshot } from '../../lib/buildYourOwn';
+import { withPackageSnapshot } from '../../lib/buildYourOwnBackend';
 import { eventTimingLabel, isUrgentEvent, URGENT_CANCELLATION_WARNING } from '../../lib/emergencyCancellation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 // app/(tabs)/CatererBookings.tsx
@@ -42,6 +45,7 @@ type Review = {
 };
 
 type Booking = {
+  package_selection_snapshot?: PackageSelectionSnapshot | null;
   id: string;
   customer_id: string;
   status: string;
@@ -71,12 +75,12 @@ type Booking = {
   refunded_at: string | null;
   refund_account_details: string | null;
   profiles: { full_name: string; email: string; avatar_url: string | null; phone_number: string | null } | null;
-  packages: { name: string; tier: string } | null;
+  packages: { name: string; tier: string; includes?: string[] | null } | null;
   reviews: Review[] | null;
 };
 
 // Explicit booking projection keeps legacy shared notes out of this editor's data.
-const BOOKING_SELECT = 'id, customer_id, caterer_id, package_id, status, event_date, event_time, event_type, guest_count, total_cost, downpayment_amount, downpayment_deadline, venue, special_requests, payment_method, payment_receipt_url, payment_reference, payment_submitted_at, payment_verified_at, customized_items, created_at, rejection_reason, cancelled_by, cancellation_reason, cancelled_at, refund_status, refund_amount, refund_due_at, refunded_at, refund_account_details, profiles(full_name, email, avatar_url, phone_number), packages(name, tier), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, caterer_replied_at, created_at)';
+const BOOKING_SELECT = 'id, customer_id, caterer_id, package_id, status, event_date, event_time, event_type, guest_count, total_cost, downpayment_amount, downpayment_deadline, venue, special_requests, payment_method, payment_receipt_url, payment_reference, payment_submitted_at, payment_verified_at, customized_items, created_at, rejection_reason, cancelled_by, cancellation_reason, cancelled_at, refund_status, refund_amount, refund_due_at, refunded_at, refund_account_details, profiles(full_name, email, avatar_url, phone_number), packages(name, tier, includes), reviews(id, food_quality, service_quality, timeliness, overall, comment, caterer_reply, caterer_replied_at, created_at)';
 
 type RefundDispute = {
   id: string;
@@ -256,7 +260,7 @@ export default function CatererBookings() {
 
     let query = supabase
       .from('bookings')
-      .select(BOOKING_SELECT)
+      .select(await withPackageSnapshot(BOOKING_SELECT))
       .eq('caterer_id', catererData.id)
       .order('created_at', { ascending: false });
 
@@ -269,7 +273,7 @@ export default function CatererBookings() {
     // Fetch actionable refund deadlines separately so alerts remain visible under every filter.
     const { data: refundAlertRows, error: refundAlertError } = await supabase
       .from('bookings')
-      .select(BOOKING_SELECT)
+      .select(await withPackageSnapshot(BOOKING_SELECT))
       .eq('caterer_id', catererData.id)
       .eq('status', 'cancelled')
       .in('refund_status', ['pending', 'overdue'])
@@ -327,10 +331,10 @@ export default function CatererBookings() {
     setCounts(c);
     if (selected) {
       const { data: current } = await supabase.from('bookings')
-        .select(BOOKING_SELECT)
+        .select(await withPackageSnapshot(BOOKING_SELECT))
         .eq('id', selected.id).eq('caterer_id', catererData.id).maybeSingle();
       if (!isCurrent()) return;
-      if (current) setSelected(previous => previous?.id === current.id ? current as unknown as Booking : previous);
+      if (current) setSelected(previous => previous?.id === (current as unknown as Booking).id ? current as unknown as Booking : previous);
     }
     } catch (error: any) {
       if (isCurrent()) setLoadError(error?.message || 'Bookings could not be refreshed.');
@@ -347,7 +351,7 @@ export default function CatererBookings() {
     let active = true;
     const open = async () => {
       try {
-        const result = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).eq('caterer_id', catererData.id).maybeSingle();
+        const result = await supabase.from('bookings').select(await withPackageSnapshot(BOOKING_SELECT)).eq('id', id).eq('caterer_id', catererData.id).maybeSingle();
         if (!active) return;
         if (result.error || !result.data) throw new Error('This booking is missing or no longer accessible.');
         lastReviewNotification.current = key;
@@ -702,7 +706,7 @@ export default function CatererBookings() {
       if (selected) {
         const { data: updatedBooking } = await supabase
           .from('bookings')
-          .select(BOOKING_SELECT)
+          .select(await withPackageSnapshot(BOOKING_SELECT))
           .eq('id', selected.id)
           .single();
         if (updatedBooking) setSelected(updatedBooking as any);
@@ -1213,28 +1217,42 @@ export default function CatererBookings() {
                 </View>
               </View>
 
+              {/* The same package overview and event layout for every type/status. */}
               <View style={styles.modalSection}>
-                <Text style={styles.sectionHeaderLabel}>EVENT & LOCATION</Text>
-                <View style={styles.modalCard}>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Package Selected</Text>
-                    <Text style={styles.modalRowValue}>{selected.packages?.name ?? 'Custom Setup'}</Text>
-                  </View>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Package Tier</Text>
-                    <Text style={styles.modalRowValue}>{selected.packages?.tier ?? 'Not specified'}</Text>
-                  </View>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Event Date & Time</Text>
-                    <Text style={styles.modalRowValue}>{formatDate(selected.event_date)} @ {formatTime(selected.event_time)}</Text>
-                  </View>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Guest Count</Text>
-                    <Text style={styles.modalRowValue}>{selected.guest_count} guests</Text>
-                  </View>
-                  <View style={styles.modalRow}>
-                    <Text style={styles.modalRowLabel}>Event Type</Text>
-                    <Text style={styles.modalRowValue}>{selected.event_type ?? 'Catering'}</Text>
+                <BookingPackageSnapshotCard
+                  snapshot={selected.package_selection_snapshot}
+                  tier={selected.packages?.tier}
+                  packageName={selected.packages?.name}
+                  standardIncludes={selected.packages?.includes}
+                />
+              </View>
+              <View style={styles.modalSection}>
+                <View style={styles.byoSectionHeading}>
+                  <View style={styles.byoSectionIcon}><Calendar size={18} color={Colors.orange} /></View>
+                  <Text style={styles.byoSectionTitle}>Event Details</Text>
+                </View>
+                <View style={[styles.modalCard, styles.byoEventCard]}>
+                  <View style={styles.byoEventGrid}>
+                    <View style={styles.byoEventFact}>
+                      <Calendar size={17} color={Colors.orange} />
+                      <Text style={styles.byoEventLabel}>Event date</Text>
+                      <Text style={styles.byoEventValue}>{formatDate(selected.event_date)}</Text>
+                    </View>
+                    <View style={styles.byoEventFact}>
+                      <Clock size={17} color={Colors.orange} />
+                      <Text style={styles.byoEventLabel}>Event time</Text>
+                      <Text style={styles.byoEventValue}>{formatTime(selected.event_time)}</Text>
+                    </View>
+                    <View style={styles.byoEventFact}>
+                      <Users size={17} color={Colors.orange} />
+                      <Text style={styles.byoEventLabel}>Guests</Text>
+                      <Text style={styles.byoEventValue}>{selected.guest_count} guests</Text>
+                    </View>
+                    <View style={styles.byoEventFact}>
+                      <Sparkles size={17} color={Colors.orange} />
+                      <Text style={styles.byoEventLabel}>Event type</Text>
+                      <Text style={styles.byoEventValue}>{selected.event_type ?? 'Catering'}</Text>
+                    </View>
                   </View>
 
                   {selected.venue && (
@@ -1248,7 +1266,7 @@ export default function CatererBookings() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.mapPinTitle}>Venue Location</Text>
-                        <Text style={styles.mapPinAddress} numberOfLines={2}>{selected.venue}</Text>
+                        <Text style={styles.mapPinAddress} >{selected.venue}</Text>
                       </View>
                       <ExternalLink size={16} color={Colors.textSecondary} />
                     </TouchableOpacity>
@@ -1266,18 +1284,25 @@ export default function CatererBookings() {
               </View>
 
               <View style={styles.modalSection}>
-                <Text style={styles.sectionHeaderLabel}>SELECTED MENU & CUSTOMIZATIONS</Text>
-                <View style={styles.modalCard}>
+                <View style={styles.byoSectionHeading}>
+                  <View style={styles.byoSectionIcon}><Package size={18} color={Colors.orange} /></View>
+                  <Text style={styles.byoSectionTitle}>Paid Add-ons</Text>
+                </View>
+                <View style={[styles.modalCard, styles.byoAddonsCard]}>
                   {selected.customized_items?.length ? selected.customized_items.map((item, index) => (
-                    <View key={item.menu_item_id ?? index} style={styles.modalRow}>
-                      <Text style={styles.modalRowLabel}>{item.name ?? 'Selected item'} (x{item.quantity ?? 1})</Text>
-                      <Text style={styles.modalRowValue}>{item.price_per_guest == null ? 'Charge not recorded' : `PHP ${Number(item.price_per_guest).toLocaleString('en-PH')} / guest`}</Text>
+                    <View key={item.menu_item_id ?? index} style={styles.byoAddonRow}>
+                      <View style={styles.byoAddonIcon}><Package size={17} color={Colors.orange} /></View>
+                      <View style={styles.byoAddonInfo}>
+                        <Text style={styles.byoAddonName}>{item.name ?? 'Selected item'}</Text>
+                        <Text style={styles.byoAddonCost}>{item.price_per_guest == null ? 'Charge not recorded' : `₱${Number(item.price_per_guest).toLocaleString('en-PH')} / guest`}</Text>
+                      </View>
+                      <View style={styles.byoAddonQty}><Text style={styles.byoAddonQtyText}>×{item.quantity ?? 1}</Text></View>
                     </View>
                   )) : <Text style={styles.modalCustomerSub}>No additional menu items or customizations selected.</Text>}
                 </View>
               </View>
 
-              <BookingPaymentSummary booking={selected} methodLabel={displayXenditPaymentMethod(selected.payment_method)} />
+              <BookingPaymentSummary booking={selected} methodLabel={displayXenditPaymentMethod(selected.payment_method)} title="Pricing Summary" />
 
               {selected.status === 'cancelled' && <BookingRefundSummary booking={selected} />}
 
@@ -1844,6 +1869,23 @@ const styles = StyleSheet.create({
   alertBoxTitle: { fontSize: 13, fontWeight: '900', color: '#374151', marginBottom: 2 },
   alertBoxText: { fontSize: 12, fontWeight: '600', color: '#4B5563', lineHeight: 16 },
   modalSection: { gap: 8 },
+  byoSectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 3 },
+  byoSectionIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#FFF4E9', justifyContent: 'center', alignItems: 'center' },
+  byoSectionTitle: { fontSize: 17, lineHeight: 24, fontWeight: '700', color: '#172033', flexShrink: 1 },
+  byoEventCard: { padding: 14, borderRadius: 16, borderColor: '#E5E7EB' },
+  byoEventGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  byoEventFact: { flexGrow: 1, flexBasis: '46%', minWidth: 0, borderRadius: 12, borderWidth: 1, borderColor: '#EAEFF5', padding: 12, backgroundColor: '#F8FAFC', alignItems: 'flex-start', gap: 5 },
+  byoEventLabel: { fontSize: 12, lineHeight: 17, fontWeight: '500', color: '#64748B' },
+  byoEventValue: { fontSize: 14, lineHeight: 20, fontWeight: '700', color: '#172033', flexShrink: 1 },
+  byoAddonsCard: { padding: 12, borderColor: '#E5E7EB', borderRadius: 16 },
+  byoAddonRow: { flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#EAEFF5', borderRadius: 12, padding: 12, marginVertical: 3 },
+  byoAddonIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#FFF4E9', justifyContent: 'center', alignItems: 'center' },
+  byoAddonInfo: { flex: 1, minWidth: 0, gap: 3 },
+  byoAddonName: { fontSize: 14, lineHeight: 20, fontWeight: '700', color: '#172033' },
+  byoAddonCost: { fontSize: 12, lineHeight: 18, color: '#64748B' },
+  byoAddonQty: { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#FFF4E9', borderRadius: 999 },
+  byoAddonQtyText: { fontSize: 12, fontWeight: '700', color: '#C2410C' },
+
   sectionHeaderLabel: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.3 },
   modalCard: { backgroundColor: Colors.white, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border },
   catererNotesHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18, marginBottom: 10 },

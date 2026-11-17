@@ -12,6 +12,7 @@ import { useFavoriteFlight } from '../../../context/FavoriteFlightContext';
 import { ComparePackageButton } from '../../../components/PackageComparisonControls';
 import { supabase } from '../../../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
+import { menuCategoryKeys, menuCategoryLabel } from '../../../lib/buildYourOwn';
 
 // ── Lucide Icons ──
 import {
@@ -97,7 +98,10 @@ const CATEGORY_CONFIG: Record<string, { icon: any; color: string }> = {
   dessert:     { icon: Cake,    color: '#EC4899' },
   drink:       { icon: Wine,      color: '#3B82F6' },
 };
-const CATEGORY_ORDER = ['main_course', 'appetizer', 'dessert', 'drink'];
+function menuCategoryConfig(category: string) {
+  return Object.prototype.hasOwnProperty.call(CATEGORY_CONFIG, category)
+    ? CATEGORY_CONFIG[category] : { icon: Utensils, color: Colors.orange };
+}
 
 function StarRating({ value, size = 14 }: { value: number; size?: number }) {
   return (
@@ -523,24 +527,24 @@ export default function CatererDetailScreen() {
                 <Text style={s.emptyTabText}>No menu items added yet</Text>
               </View>
             ) : (
-              CATEGORY_ORDER.map(cat => {
+              menuCategoryKeys(menuItems).map(cat => {
                 const items = menuItems.filter(m => m.category === cat);
                 if (items.length === 0) return null;
-                const catCfg = CATEGORY_CONFIG[cat];
+                const catCfg = menuCategoryConfig(cat);
                 const Icon = catCfg.icon;
                 return (
                   <View key={cat} style={{ marginBottom: 16 }}>
                     <View style={s.menuCatHeader}>
                       <Icon size={20} color={catCfg.color} />
                       <Text style={s.menuCatLabel}>
-                        {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {menuCategoryLabel(cat)}
                       </Text>
                       <View style={s.menuCatCountBadge}>
                          <Text style={s.menuCatCount}>{items.length}</Text>
                       </View>
                     </View>
                     {items.map(item => {
-                      const itemCfg = CATEGORY_CONFIG[item.category];
+                      const itemCfg = menuCategoryConfig(item.category);
                       const ItemIcon = itemCfg.icon;
                       return (
                         <View key={item.id} style={s.menuItemCard}>

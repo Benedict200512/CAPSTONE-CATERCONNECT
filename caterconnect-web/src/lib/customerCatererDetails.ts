@@ -1,3 +1,4 @@
+import type { BuffetConfig } from './buildYourOwn';
 import { supabase } from './supabase';
 
 export type CustomerCaterer = {
@@ -7,6 +8,7 @@ export type CustomerCaterer = {
   downpayment_percent: number; subscription_plan: string; verification_status: string;
 };
 export type DetailPackage = {
+  build_your_own_config?: BuffetConfig | null;
   id: string; caterer_id: string; publication_status: 'published';
   name: string; tier: string; description: string | null; price: number;
   min_guests: number | null; guest_capacity: number; max_guests: number;
@@ -39,7 +41,7 @@ export async function fetchCustomerCatererDetails(id: string): Promise<DetailDat
 
   const [packageResult, menuResult, reviewResult] = await Promise.all([
     supabase.from('packages')
-      .select('id,caterer_id,publication_status,name,tier,description,price,min_guests,guest_capacity,max_guests,includes,food_inclusions,event_types,image_url')
+      .select('*')
       .eq('caterer_id', id).eq('publication_status', 'published').order('price', { ascending: true }),
     supabase.from('menu_items')
       .select('id,category,name,description,price_per_guest,serving_size,serving_unit,image_url')

@@ -25,7 +25,10 @@ import {
   XCircle, Ban, ClipboardList, MapPin, AlertTriangle, MessageSquare, Star, AlertCircle, Check, Wallet, Smartphone, Building2, ShieldCheck, Lock, CalendarDays, Users, Package, UtensilsCrossed, FileText, Hash, ReceiptText, Info, ChevronRight, X, Gift, ListChecks
 } from 'lucide-react-native';
 
+import { BookingDetailRows, PackageSnapshotDetails } from '../../components/BuffetChoices';
+import type { PackageSelectionSnapshot } from '../../lib/buildYourOwn';
 type Booking = {
+  package_selection_snapshot?: PackageSelectionSnapshot | null;
   id: string; status: string;
   event_date: string; event_type: string | null;
   event_time?: string | null;
@@ -1031,9 +1034,16 @@ export default function CustomerBookings() {
                   <MessageSquare size={17} color={Colors.black} /><Text style={styles.chatBtnText}>Chat Caterer</Text>
                 </TouchableOpacity>
               </View>
+              {detailBooking.package_selection_snapshot && <PackageSnapshotDetails snapshot={detailBooking.package_selection_snapshot} tier={detailBooking.packages?.tier} />}
               <View style={styles.paySummaryCard}>
-                <View style={styles.detailSectionHeading}><CalendarDays size={18} color={Colors.orange} /><Text style={styles.paySectionTitle}>Event Information</Text></View>
-                {([
+                <View style={styles.detailSectionHeading}><CalendarDays size={18} color={Colors.orange} /><Text style={styles.paySectionTitle}>{detailBooking.package_selection_snapshot ? 'Event Details' : 'Event Information'}</Text></View>
+                {detailBooking.package_selection_snapshot ? <BookingDetailRows rows={[
+                  { label: 'Event', value: detailBooking.event_type ?? 'Catering Event', icon: 'event' },
+                  { label: 'Date', value: formatDate(detailBooking.event_date), icon: 'date' },
+                  { label: 'Time', value: detailBooking.event_time ?? 'Not specified', icon: 'time' },
+                  { label: 'Guests', value: `${detailBooking.guest_count} pax`, icon: 'guests' },
+                  { label: 'Venue', value: detailBooking.venue ?? '—', icon: 'venue' },
+                ]} /> : ([
                   ['Package', detailBooking.packages?.name ?? '—', Package],
                   ['Package Tier', detailBooking.packages?.tier ?? 'Not specified', Package],
                   ['Event', detailBooking.event_type ?? 'Catering Event', PartyPopper],
@@ -1050,12 +1060,13 @@ export default function CustomerBookings() {
               </View>
 
               <View style={styles.paySummaryCard}>
-                <View style={styles.detailSectionHeading}><UtensilsCrossed size={18} color={Colors.orange} /><Text style={styles.paySectionTitle}>Selected Menu & Customizations</Text></View>
-                <Text style={styles.detailText}>Package: {detailBooking.packages?.name ?? 'Not available'}</Text>
-                {detailBooking.packages?.tier && (
+                <View style={styles.detailSectionHeading}><UtensilsCrossed size={18} color={Colors.orange} /><Text style={styles.paySectionTitle}>{detailBooking.package_selection_snapshot ? 'Paid Add-ons' : 'Selected Menu & Customizations'}</Text></View>
+                {!detailBooking.package_selection_snapshot && <PackageSnapshotDetails snapshot={detailBooking.package_selection_snapshot} />}
+                {!detailBooking.package_selection_snapshot && <Text style={styles.detailText}>Package: {detailBooking.packages?.name ?? 'Not available'}</Text>}
+                {!detailBooking.package_selection_snapshot && detailBooking.packages?.tier && (
                   <Text style={styles.detailText}>Tier: {detailBooking.packages.tier}</Text>
                 )}
-                {detailBooking.packages?.description && (
+                {!detailBooking.package_selection_snapshot && detailBooking.packages?.description && (
                   <Text style={styles.detailText}>{String(detailBooking.packages.description)}</Text>
                 )}
                 {([
@@ -1063,25 +1074,26 @@ export default function CustomerBookings() {
                   ['Food Inclusions', detailBooking.packages?.food_inclusions],
                   ['Menu', detailBooking.packages?.menu ?? detailBooking.packages?.menu_items],
                   ['Other Inclusions', detailBooking.packages?.included_items],
-                  ['Customizations', detailBooking.customized_items],
+                  ['Paid Add-ons', detailBooking.customized_items],
                 ] as [string, unknown][]).map(([heading, raw]) => {
-                  const entries = describePackageField(raw);
+                  const entries = detailBooking.package_selection_snapshot && heading !== 'Paid Add-ons' ? [] : describePackageField(raw);
                   return entries.length ? (
                     <View key={heading} style={{ marginTop: 12 }}>
                       <View style={styles.detailSubheading}><ListChecks size={15} color={Colors.orange} /><Text style={[styles.detailText, { fontWeight: '800', color: Colors.black, marginTop: 0 }]}>{heading}</Text></View>
                       {entries.map((entry, index) => (
-                        <Text key={`${heading}-${index}`} style={styles.detailText}>• {entry}</Text>
+                        detailBooking.package_selection_snapshot ? <View key={`${heading}-${index}`} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 10, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, marginTop: 8 }}><UtensilsCrossed size={15} color={Colors.orange} /><Text style={[styles.detailText, { flex: 1, marginTop: 0 }]}>{entry}</Text></View> : <Text key={`${heading}-${index}`} style={styles.detailText}>• {entry}</Text>
                       ))}
                     </View>
                   ) : null;
                 })}
+                {detailBooking.package_selection_snapshot && !describePackageField(detailBooking.customized_items).length && <Text style={styles.detailText}>No paid add-ons selected.</Text>}
                 {detailBooking.special_requests ? (
-                  <View style={{ marginTop: 12 }}>
+                  <View style={[{ marginTop: 12 }, detailBooking.package_selection_snapshot && { padding: 12, borderRadius: 10, backgroundColor: Colors.bgInput }]}>
                     <Text style={[styles.detailText, { fontWeight: '800', color: Colors.black }]}>Special Requests</Text>
                     <Text style={styles.detailText}>{detailBooking.special_requests}</Text>
                   </View>
                 ) : null}
-                {![
+                {!detailBooking.package_selection_snapshot && ![
                   detailBooking.packages?.includes, detailBooking.packages?.inclusions,
                   detailBooking.packages?.food_inclusions, detailBooking.packages?.menu,
                   detailBooking.packages?.menu_items, detailBooking.packages?.included_items,
@@ -1091,7 +1103,7 @@ export default function CustomerBookings() {
                 )}
               </View>
 
-              <BookingPaymentSummary booking={detailBooking} methodLabel={displayXenditPaymentMethod(detailBooking.payment_method)} />
+              <BookingPaymentSummary booking={detailBooking} methodLabel={displayXenditPaymentMethod(detailBooking.payment_method)} title={detailBooking.package_selection_snapshot ? 'Pricing Summary' : undefined} />
 
               {detailBooking.status === 'rejected' && <View style={styles.paySummaryCard}>
                 <Text style={styles.paySectionTitle}>Rejection Reason</Text>

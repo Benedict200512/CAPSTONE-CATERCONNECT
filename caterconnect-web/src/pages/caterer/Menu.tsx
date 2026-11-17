@@ -8,6 +8,8 @@ import { useAuth } from '../../context/AuthContext';
 import CatererPageHeader from '../../components/CatererPageHeader';
 import CatererSkeleton from '../../components/CatererSkeleton';
 import { supabase } from '../../lib/supabase';
+import { menuCategoryLabel, normalizeMenuCategory } from '../../lib/buildYourOwn';
+import { catererCategoryOptions, resolveMenuCategory, CUSTOM_MENU_CATEGORY_WRITES_ENABLED, CUSTOM_CATEGORY_SETUP_MESSAGE } from '../../lib/menuCategoryManagement';
 
 type MenuItem = {
   id: string;
@@ -90,7 +92,7 @@ function formatPrice(value: number) {
 }
 
 function getCategory(category: string) {
-  return CATEGORIES.find((item) => item.key === category) ?? { key: category, label: category, icon: UtensilsCrossed, color: '#64748B' };
+  return CATEGORIES.find((item) => item.key === category) ?? { key: category, label: menuCategoryLabel(category), icon: UtensilsCrossed, color: '#64748B' };
 }
 
 export default function CatererMenu() {
@@ -108,6 +110,8 @@ export default function CatererMenu() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [form, setForm] = useState<MenuForm>(EMPTY_FORM);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const menuImageRef = useRef<HTMLInputElement>(null);
@@ -152,8 +156,9 @@ export default function CatererMenu() {
     loadItems();
   }, [loadItems]);
 
-  // Only the four supported food categories are selectable and displayed.
-  const categoriesWithCustom = CATEGORIES;
+  const categoriesWithCustom = useMemo(() => catererCategoryOptions(items).map(category => getCategory(category.key)), [items]);
+  const formCategories = catererCategoryOptions(items, form.category);
+  const categoryPreview = addingCategory ? normalizeMenuCategory(categoryName) : null;
 
   const categoryCounts = useMemo(() => {
     return categoriesWithCustom.reduce<Record<string, number>>((counts, category) => {
@@ -182,6 +187,8 @@ export default function CatererMenu() {
   };
 
   const openCreateModal = () => {
+    setAddingCategory(false);
+    setCategoryName('');
     setEditing(null);
     setForm({ ...EMPTY_FORM, category: activeCategory });
     setSelectedMenuPhoto(null);
@@ -194,6 +201,8 @@ export default function CatererMenu() {
   };
 
   const openEditModal = (item: MenuItem) => {
+    setAddingCategory(false);
+    setCategoryName('');
     setEditing(item);
     setSelectedMenuPhoto(null);
     setMenuPhotoPreview(null);
@@ -262,10 +271,11 @@ export default function CatererMenu() {
     }
 
     const name = form.name.trim();
-    const selectedCategory = form.category;
+    const categoryResult = resolveMenuCategory(addingCategory ? categoryName : null, form.category);
+    const selectedCategory = categoryResult.key;
     const selectedUnit = otherUnitSelected ? customServingUnit.trim() : form.serving_unit;
-    if (!CATEGORIES.some((category) => category.key === selectedCategory)) {
-      setError('Please choose Main Course, Appetizer, Dessert, or Drink.');
+    if (!selectedCategory) {
+      setError(categoryResult.error);
       return;
     }
     if (otherUnitSelected && !selectedUnit) {
@@ -336,6 +346,9 @@ export default function CatererMenu() {
         setSuccess('Menu item added successfully.');
       }
 
+      setActiveCategory(selectedCategory);
+      setAddingCategory(false);
+      setCategoryName('');
       setModalOpen(false);
       setEditing(null);
       setSelectedMenuPhoto(null);
@@ -438,7 +451,8 @@ export default function CatererMenu() {
         .menu-alert.success{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
         .menu-toolbar{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:20px;flex-wrap:wrap}
         .menu-tabs{display:flex;gap:8px;flex-wrap:wrap}
-        .menu-tab{border:1px solid #E2E8F0;padding:10px 14px;border-radius:9px;background:white;color:#64748B;font-size:13px;font-weight:650;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+        .menu-tab{border:1px solid #E2E8F0;padding:10px 14px;border-radius:9px;background:white;color:#64748B;font-size:13px;font-weight:650;display:inline-flex;align-items:center;gap:8px;cursor:pointer;min-width:0;max-width:100%;overflow-wrap:anywhere}
+        .menu-tab svg{flex-shrink:0}
         .menu-tab.active{background:#FFF1E6;color:#C2410C;border-color:#FDBA74}
         .menu-tab-count{background:#F1F5F9;color:#64748B;border-radius:20px;padding:2px 7px;font-size:11px}
         .menu-tab.active .menu-tab-count{background:#FED7AA;color:#9A3412}
@@ -762,32 +776,23 @@ export default function CatererMenu() {
                   </div>
 
                   <div className="menu-field full">
-                    <label>Category *</label>
-                    <div className="menu-category-grid">
-                      {CATEGORIES.map((category) => {
-                        const Icon = category.icon;
-                        const selected = form.category === category.key;
-
-                        return (
-                          <button
-                            type="button"
-                            key={category.key}
-                            className={`menu-category-choice ${selected ? 'selected' : ''}`}
-                            onClick={() => {
-                              updateForm('category', category.key);
-                            }}
-                          >
-                            <Icon
-                              size={18}
-                              style={{
-                                color: selected ? category.color : '#64748B',
-                              }}
-                            />
-                            {category.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <label htmlFor="menu-category">Category *</label>
+                    <select id="menu-category" value={addingCategory ? '__new_category__' : form.category}
+                      onChange={event => { setAddingCategory(event.target.value === '__new_category__'); setError('');
+                        if (event.target.value !== '__new_category__') updateForm('category', event.target.value); }}>
+                      {formCategories.map(category => <option key={category.key} value={category.key}>{category.label}</option>)}
+                      <option value="__new_category__">Add New Category</option>
+                    </select>
+                    {addingCategory && <>
+                      <label htmlFor="menu-category-name">New category name</label>
+                      <input id="menu-category-name" value={categoryName} onChange={event => setCategoryName(event.target.value)}
+                        placeholder="e.g. Rice" aria-describedby="menu-category-help" aria-invalid={!!categoryName && !categoryPreview} />
+                      <small id="menu-category-help" role={categoryName && !categoryPreview ? 'alert' : undefined}>
+                        {categoryPreview ? `${menuCategoryLabel(categoryPreview)} · Saved key: ${categoryPreview}${formCategories.some(category => category.key === categoryPreview) ? ' · Existing category will be reused.' : ''}`
+                          : 'Use 1–50 English letters or numbers; spaces, hyphens and underscores separate words.'}
+                      </small>
+                    </>}
+                    {!CUSTOM_MENU_CATEGORY_WRITES_ENABLED && <small>{CUSTOM_CATEGORY_SETUP_MESSAGE}</small>}
                   </div>
 
                   <div className="menu-field full">

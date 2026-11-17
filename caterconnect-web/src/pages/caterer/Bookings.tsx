@@ -1,3 +1,6 @@
+import BookingPackageSnapshotCard from '../../components/BookingPackageSnapshotCard';
+import type { PackageSelectionSnapshot } from '../../lib/buildYourOwn';
+import { withPackageSnapshot } from '../../lib/buildYourOwnBackend';
 import { eventTimingLabel, isUrgentEvent, URGENT_CANCELLATION_WARNING } from '../../lib/emergencyCancellation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -41,6 +44,7 @@ import { isMonthlyQuotaRejection, loadMonthlyBookingQuota, type MonthlyQuota } f
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import './Bookings.css';
+import './BookingDetailsPolish.css';
 
 type BookingStatus =
   | 'pending'
@@ -73,6 +77,7 @@ type CustomerProfile = {
 type BookingPackage = {
   name: string | null;
   tier?: string | null;
+  includes?: string[] | null;
 };
 
 type BookingReview = {
@@ -129,6 +134,7 @@ type RefundTransferSubmission = {
 };
 
 type Booking = {
+  package_selection_snapshot?: PackageSelectionSnapshot | null;
   id: string;
   customer_id: string;
   caterer_id: string;
@@ -454,7 +460,8 @@ const BOOKING_DETAIL_SELECT = `
           ),
           packages (
             name,
-            tier
+            tier,
+            includes
           ),
           reviews!reviews_booking_id_fkey (
             id,
@@ -606,7 +613,7 @@ const openClientChatroom = (booking: Booking) => {
     try {
       const { data, error: queryError } = await supabase
         .from('bookings')
-        .select(BOOKING_DETAIL_SELECT)
+        .select(await withPackageSnapshot(BOOKING_DETAIL_SELECT))
         .eq('caterer_id', catererId)
         .order('created_at', { ascending: false });
 
@@ -694,7 +701,7 @@ const openClientChatroom = (booking: Booking) => {
     let active = true;
     const open = async () => {
       try {
-        const result = await supabase.from('bookings').select(BOOKING_DETAIL_SELECT).eq('id', requestedBookingId).eq('caterer_id', catererId).maybeSingle();
+        const result = await supabase.from('bookings').select(await withPackageSnapshot(BOOKING_DETAIL_SELECT)).eq('id', requestedBookingId).eq('caterer_id', catererId).maybeSingle();
         if (!active) return;
         if (result.error || !result.data) throw new Error('The booking is missing or no longer accessible.');
         lastReviewNotification.current = key;
@@ -1824,7 +1831,7 @@ const openClientChatroom = (booking: Booking) => {
               </button>
             </div>
 
-            <div className="booking-modal-body" tabIndex={0} aria-label="Booking details content">
+            <div className="booking-modal-body cc-booking-details-modern" tabIndex={0} aria-label="Booking details content">
 
               <div className="booking-detail-status">
                 <span
@@ -1889,40 +1896,21 @@ const openClientChatroom = (booking: Booking) => {
                 </button>
               </section>
 
-              {/* EVENT INFORMATION */}
-              <section className="booking-detail-section">
-                <h3>
-                  <CalendarDays size={16} /> Event Information
-                </h3>
-
-                <p>
-                  <strong>Event:</strong>{' '}
-                  {selectedBooking.event_type ?? 'Not specified'}
-                </p>
-
-                <p>
-                  <strong>Date:</strong>{' '}
-                  {formatDate(selectedBooking.event_date)}
-                </p>
-
-                <p>
-                  <strong>Time:</strong>{' '}
-                  {formatTime(selectedBooking.event_time)}
-                </p>
-
-                <p>
-                  <strong>Guests:</strong> {selectedBooking.guest_count}
-                </p>
-
-                <p>
-                  <strong>Package:</strong>{' '}
-                  {selectedBooking.packages?.name ?? 'Not available'}
-                </p>
-
-                <p>
-                  <strong>Package tier:</strong>{' '}
-                  {selectedBooking.packages?.tier ?? 'Not specified'}
-                </p>
+              {/* A single read-only package summary for Standard and Build Your Own, at every status. */}
+              <BookingPackageSnapshotCard
+                snapshot={selectedBooking.package_selection_snapshot}
+                tier={selectedBooking.packages?.tier}
+                packageName={selectedBooking.packages?.name}
+                standardIncludes={selectedBooking.packages?.includes}
+              />
+              <section className="booking-detail-section cc-booking-card">
+                <h3><CalendarDays size={16} /> Event Details</h3>
+                <div className="cc-booking-event-grid">
+                  <div className="cc-booking-event-fact"><CalendarRange size={17} aria-hidden="true" /><div><span>Event type</span><strong>{selectedBooking.event_type ?? 'Not specified'}</strong></div></div>
+                  <div className="cc-booking-event-fact"><CalendarDays size={17} aria-hidden="true" /><div><span>Event date</span><strong>{formatDate(selectedBooking.event_date)}</strong></div></div>
+                  <div className="cc-booking-event-fact"><Clock size={17} aria-hidden="true" /><div><span>Event time</span><strong>{formatTime(selectedBooking.event_time)}</strong></div></div>
+                  <div className="cc-booking-event-fact"><Users size={17} aria-hidden="true" /><div><span>Guests</span><strong>{selectedBooking.guest_count}</strong></div></div>
+                </div>
 
                 <div className="booking-venue-box">
                   <p>
@@ -1945,7 +1933,7 @@ const openClientChatroom = (booking: Booking) => {
                   )}
                 </div>
 
-                <p>
+                <p className="cc-booking-request">
                   <strong>Special requests:</strong>{' '}
                   {selectedBooking.special_requests ?? 'None'}
                 </p>
@@ -1953,7 +1941,7 @@ const openClientChatroom = (booking: Booking) => {
                 <div className="booking-customized-items">
                   <h4>
                     <Utensils size={16} />
-                    Customized Items
+                    Paid Add-ons
                   </h4>
 
                   {getCustomizedItems(selectedBooking.customized_items).length >
@@ -2010,7 +1998,7 @@ const openClientChatroom = (booking: Booking) => {
               {/* PAYMENT INFORMATION */}
               <section className="booking-detail-section">
                 <h3>
-                  <CreditCard size={16} /> Payment Information
+                  <CreditCard size={16} /> Pricing & Payment
                 </h3>
 
                 <div className="booking-payment-grid">

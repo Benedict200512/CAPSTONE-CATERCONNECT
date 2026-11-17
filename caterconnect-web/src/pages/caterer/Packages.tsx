@@ -39,9 +39,13 @@ import {
   type PackagePublicationStatus,
 } from '../../lib/packagePublication';
 
+import { BuffetConfigEditor } from '../../components/BuffetChoices';
+import { createBuffetConfig, type BuffetConfig } from '../../lib/buildYourOwn';
+import { validateBuffetCatalog } from '../../lib/buildYourOwnBackend';
 type PackageTier = 'bronze' | 'silver' | 'gold' | 'premium';
 
 type CatererPackage = {
+  build_your_own_config?: BuffetConfig | null;
   id: string;
   tier: PackageTier;
   name: string;
@@ -59,6 +63,7 @@ type CatererPackage = {
 };
 
 type PackageForm = {
+  build_your_own_config: BuffetConfig | null;
   name: string;
   tier: PackageTier;
   description: string;
@@ -75,6 +80,7 @@ type PackageForm = {
 type PackageTab = 'active' | 'archived';
 
 const EMPTY_FORM: PackageForm = {
+  build_your_own_config: null,
   name: '',
   tier: 'bronze',
   description: '',
@@ -183,7 +189,7 @@ export default function CatererPackages() {
       const { data, error: queryError } = await supabase
         .from('packages')
         .select(
-          'id, tier, name, description, price, guest_capacity, min_guests, max_guests, includes, food_inclusions, event_types, image_url, publication_status, created_at'
+          '*'
         )
         .eq('caterer_id', catererId)
         .order('created_at', { ascending: true });
@@ -270,6 +276,26 @@ export default function CatererPackages() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const changePackageType = (buildYourOwn: boolean) => {
+    if (saving || uploading || editing?.publication_status === 'published') return;
+    if (buildYourOwn === Boolean(form.build_your_own_config)) return;
+
+    const discardsFood = form.food_inclusions.length > 0 || foodInput.trim().length > 0;
+    const discardsBuffet = form.build_your_own_config !== null;
+    const message = buildYourOwn
+      ? 'Switch to Build Your Own Package? Standard Food Inclusions will be cleared. Your shared package details will be kept.'
+      : 'Switch to Standard Package? Included Buffet Choices will be cleared. Your shared package details will be kept.';
+    if ((discardsFood || discardsBuffet) && !window.confirm(message)) return;
+
+    setForm((current) => ({
+      ...current,
+      build_your_own_config: buildYourOwn ? createBuffetConfig() : null,
+      food_inclusions: [],
+    }));
+    setFoodInput('');
+    setError('');
+  };
+
   const openCreateModal = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
@@ -296,7 +322,8 @@ export default function CatererPackages() {
       min_guests: String(pkg.min_guests ?? 1),
       max_guests: String(pkg.max_guests),
       includes: pkg.includes ?? [],
-      food_inclusions: pkg.food_inclusions ?? [],
+      food_inclusions: pkg.build_your_own_config ? [] : pkg.food_inclusions ?? [],
+      build_your_own_config: pkg.build_your_own_config ?? null,
       event_types: pkg.event_types ?? [],
       image_url: pkg.image_url ?? '',
     });
@@ -485,11 +512,15 @@ export default function CatererPackages() {
       }
 
       const limits = validateForm();
+      if (form.build_your_own_config || editing?.build_your_own_config) {
+        await validateBuffetCatalog(form.build_your_own_config, catererId, editing?.publication_status === 'published');
+      }
       const uploadedImageUrl = selectedPackagePhoto
         ? await uploadPackageImage(selectedPackagePhoto)
         : form.image_url;
 
       const payload = {
+        ...(form.build_your_own_config || editing?.build_your_own_config ? { build_your_own_config: form.build_your_own_config } : {}),
         caterer_id: catererId,
         name: form.name.trim(),
         tier: form.tier,
@@ -500,7 +531,7 @@ export default function CatererPackages() {
         max_guests: limits.max_guests,
         includes: form.includes.length > 0 ? form.includes : null,
         food_inclusions:
-          form.food_inclusions.length > 0 ? form.food_inclusions : null,
+          !form.build_your_own_config && form.food_inclusions.length > 0 ? form.food_inclusions : null,
         event_types: form.event_types.length > 0 ? form.event_types : null,
         image_url: uploadedImageUrl || null,
       };
@@ -580,6 +611,7 @@ export default function CatererPackages() {
     setSuccess('');
 
     try {
+      if (next === 'published' && pkg.build_your_own_config) await validateBuffetCatalog(pkg.build_your_own_config, catererId);
       await setPackagePublication(
         pkg.id,
         catererId,
@@ -1066,6 +1098,90 @@ export default function CatererPackages() {
           margin: 0 0 14px;
         }
 
+        .package-type-options {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .package-type-card {
+          position: relative;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 16px;
+          min-width: 0;
+          border: 1px solid #CBD5E1;
+          border-radius: 10px;
+          background: white;
+          cursor: pointer;
+        }
+        .package-type-card.selected {
+          border-color: #F97316;
+          background: #FFF7ED;
+        }
+        .package-type-card:focus-within {
+          outline: 2px solid #F97316;
+          outline-offset: 2px;
+        }
+        .package-type-card.disabled {
+          cursor: default;
+          opacity: 0.7;
+        }
+        .package-type-card input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+        }
+        .package-type-card > svg {
+          flex-shrink: 0;
+          color: #F97316;
+          margin-top: 2px;
+        }
+        .package-type-card-copy {
+          flex: 1;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .package-type-card-copy strong {
+          display: block;
+          color: #334155;
+          font-size: 14px;
+          font-weight: 750;
+          margin-bottom: 6px;
+        }
+        .package-type-card-copy small,
+        .package-type-help {
+          color: #64748B;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        .package-type-help { margin: 10px 0 0; }
+        @media (max-width: 560px) {
+          .package-type-options { grid-template-columns: minmax(0, 1fr); }
+        }
+
+        .package-buffet-group {
+          border: 1px solid #E2E8F0;
+          border-radius: 10px;
+          padding: 16px;
+          margin: 16px 0;
+          min-width: 0;
+          display: grid;
+          gap: 12px;
+          font-size: 13px;
+          color: #475569;
+        }
+        .package-buffet-group .package-field label {
+          display: grid;
+          gap: 7px;
+        }
+        .package-buffet-group .package-added-chip {
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          cursor: pointer;
+          gap: 8px;
+        }
         .package-form-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1514,7 +1630,7 @@ export default function CatererPackages() {
 
                     <span>
                       <Utensils size={14} />
-                      {pkg.food_inclusions?.length ?? 0} food items
+                      {pkg.build_your_own_config ? 'Build Your Own Package' : `${pkg.food_inclusions?.length ?? 0} food items`}
                     </span>
                   </div>
 
@@ -1635,6 +1751,29 @@ export default function CatererPackages() {
             </div>
 
             <form className="package-form" onSubmit={savePackage}>
+              <section className="package-form-section" aria-label="Package type">
+                <h3>Package Type</h3>
+                <div className="package-type-options" role="radiogroup" aria-label="Package type">
+                  {[
+                    { buildYourOwn: false, title: 'Standard Package', description: 'A ready-made package with food inclusions you define.', Icon: PackageIcon },
+                    { buildYourOwn: true, title: 'Build Your Own Package', description: 'Customers choose included dishes from your eligible menu.', Icon: Utensils },
+                  ].map(({ buildYourOwn, title, description, Icon }) => {
+                    const selected = buildYourOwn === Boolean(form.build_your_own_config);
+                    const disabled = saving || uploading || editing?.publication_status === 'published';
+                    return (
+                      <label key={title} className={`package-type-card${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}`}>
+                        <input type="radio" name="package-type" value={buildYourOwn ? 'build_your_own' : 'standard'}
+                          checked={selected} disabled={disabled} onChange={() => changePackageType(buildYourOwn)} />
+                        <Icon size={22} aria-hidden="true" />
+                        <span className="package-type-card-copy"><strong>{title}</strong><small>{description}</small></span>
+                        {selected && <CheckCircle2 size={18} aria-hidden="true" />}
+                      </label>
+                    );
+                  })}
+                </div>
+                {editing?.publication_status === 'published' && <p className="package-type-help">Unpublish this package before changing its type.</p>}
+              </section>
+
               {error && (
                 <div className="packages-alert error">
                   <AlertCircle size={17} />
@@ -1845,7 +1984,8 @@ export default function CatererPackages() {
                 )}
               </section>
 
-              <section className="package-form-section">
+              {form.build_your_own_config && <BuffetConfigEditor value={form.build_your_own_config} onChange={value => updateForm('build_your_own_config', value)} catererId={catererId ?? ''} published={editing?.publication_status === 'published'} showTypeSelector={false} />}
+              {!form.build_your_own_config && <section className="package-form-section">
                 <h3>Food Inclusions</h3>
 
                 {form.food_inclusions.length > 0 && (
@@ -1882,7 +2022,7 @@ export default function CatererPackages() {
                     Add Food
                   </button>
                 </div>
-              </section>
+              </section>}
 
               <section className="package-form-section">
                 <h3>Service Inclusions</h3>

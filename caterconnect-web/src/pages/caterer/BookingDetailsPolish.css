@@ -1,0 +1,146 @@
+/* Unified Caterer booking-details presentation, all package types and booking statuses.
+   Scoped to the booking details modal body; no workflow or global CSS changes. */
+.cc-booking-details-modern {
+  --cc-booking-ink: #172033;
+  --cc-booking-muted: #64748b;
+  --cc-booking-border: #e5e7eb;
+  --cc-booking-accent: #f97316;
+  color: var(--cc-booking-ink);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.cc-booking-details-modern *, .cc-booking-details-modern *::before, .cc-booking-details-modern *::after { box-sizing: border-box; }
+.cc-booking-details-modern .booking-detail-section {
+  background: #fff;
+  border: 1px solid var(--cc-booking-border);
+  border-radius: 16px;
+  padding: 19px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, .025);
+  min-width: 0;
+}
+.cc-booking-details-modern .booking-detail-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 15px;
+  color: var(--cc-booking-ink);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+}
+.cc-booking-details-modern .booking-detail-section > h3 svg { flex: 0 0 auto; color: var(--cc-booking-accent); }
+.cc-booking-details-modern .booking-detail-section > p {
+  margin-top: 11px;
+  margin-bottom: 11px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.cc-booking-details-modern .booking-detail-section > p strong { color: #334155; font-weight: 650; }
+.cc-booking-details-modern .booking-customer-details { padding: 0; border: none; background: transparent; }
+.cc-booking-details-modern .booking-customer-info strong { color: var(--cc-booking-ink); font-size: 15px; }
+.cc-booking-details-modern .booking-customer-contact { color: var(--cc-booking-muted); font-size: 13px; }
+.cc-booking-details-modern .booking-customer-contact span { overflow-wrap: anywhere; }
+
+/* Event values are facts, not one long paragraph. */
+.cc-booking-details-modern .cc-booking-event-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+.cc-booking-details-modern .cc-booking-event-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #eaeff5;
+  border-radius: 12px;
+}
+.cc-booking-details-modern .cc-booking-event-fact > svg { color: var(--cc-booking-accent); margin-top: 3px; flex-shrink: 0; }
+.cc-booking-details-modern .cc-booking-event-fact > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cc-booking-details-modern .cc-booking-event-fact span { color: var(--cc-booking-muted); font-size: 12px; line-height: 1.4; }
+.cc-booking-details-modern .cc-booking-event-fact strong { color: var(--cc-booking-ink); font-size: 14px; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+
+/* Venue remains clickable using the pre-existing Google Maps link. */
+.cc-booking-details-modern .booking-venue-box {
+  border: 1px solid #ffedd5;
+  border-radius: 12px;
+  padding: 13px 14px;
+  background: #fffaf5;
+  margin: 4px 0 14px;
+  overflow-wrap: anywhere;
+}
+.cc-booking-details-modern .booking-venue-box p { margin: 0 0 7px; font-size: 13px; line-height: 1.55; }
+.cc-booking-details-modern .booking-venue-box p strong { color: #c2410c; font-size: 12px; }
+.cc-booking-details-modern .booking-venue-box a { margin-top: 8px; font-size: 12px; font-weight: 700; }
+.cc-booking-details-modern .cc-booking-request { overflow-wrap: anywhere; }
+
+/* Paid additions are visually distinct from complimentary buffet selections. */
+.cc-booking-details-modern .booking-customized-items {
+  margin-top: 18px;
+  padding-top: 17px;
+  border-top: 1px solid var(--cc-booking-border);
+}
+.cc-booking-details-modern .booking-customized-items h4 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: inherit;
+  color: var(--cc-booking-ink);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+.cc-booking-details-modern .booking-customized-items h4 svg { color: var(--cc-booking-accent); }
+.cc-booking-details-modern .customized-items-list { display: flex; flex-direction: column; gap: 9px; }
+.cc-booking-details-modern .customized-item-card {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid #eaeff5;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 12px;
+}
+.cc-booking-details-modern .customized-item-icon { color: var(--cc-booking-accent); background: #fff4e9; border-radius: 10px; }
+.cc-booking-details-modern .customized-item-info { min-width: 0; flex: 1; }
+.cc-booking-details-modern .customized-item-info strong { font-size: 14px; font-weight: 700; color: var(--cc-booking-ink); overflow-wrap: anywhere; }
+.cc-booking-details-modern .customized-item-meta { font-size: 12px; color: var(--cc-booking-muted); }
+.cc-booking-details-modern .customized-item-price { color: var(--cc-booking-ink); min-width: 0; }
+.cc-booking-details-modern .customized-item-price small { font-size: 11px; color: var(--cc-booking-muted); }
+.cc-booking-details-modern .customized-item-price strong { font-size: 13px; overflow-wrap: anywhere; }
+.cc-booking-details-modern .customized-items-empty { border: 1px dashed #e2e8f0; background: #f8fafc; border-radius: 12px; padding: 15px; color: var(--cc-booking-muted); font-size: 13px; }
+
+.cc-booking-details-modern .booking-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.cc-booking-details-modern .booking-payment-grid > div {
+  padding: 13px;
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid #eaeff5;
+  background: #f8fafc;
+}
+.cc-booking-details-modern .booking-payment-grid span { color: var(--cc-booking-muted); font-size: 12px; line-height: 1.4; }
+.cc-booking-details-modern .booking-payment-grid strong { font-size: 15px; font-weight: 750; color: var(--cc-booking-ink); overflow-wrap: anywhere; }
+.cc-booking-details-modern .booking-payment-grid > div:first-child { border-color: #ffedd5; background: #fffaf5; }
+.cc-booking-details-modern .booking-payment-grid > div:first-child strong { color: #c2410c; }
+@media (max-width: 640px) {
+  .cc-booking-details-modern .booking-detail-section { padding: 14px; margin-bottom: 13px; border-radius: 14px; }
+  .cc-booking-details-modern .booking-detail-section > h3 { font-size: 16px; }
+  .cc-booking-details-modern .cc-booking-event-grid { grid-template-columns: minmax(0, 1fr); }
+  .cc-booking-details-modern .booking-payment-grid { grid-template-columns: minmax(0, 1fr); }
+  .cc-booking-details-modern .customized-item-card { flex-wrap: wrap; }
+}

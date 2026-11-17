@@ -1376,3 +1376,63 @@
   text-align: center;
   text-decoration: none;
 }
+
+/* Customer booking-details visual polish. Scoped to this detail modal only. */
+.cc-cb-booking-detail {
+  background: #f8fafc;
+  color: #172033;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.cc-cb-booking-detail > h3 {
+  margin: 19px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #172033;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.2px;
+}
+.cc-cb-booking-detail > h3 svg { color: #f97316; flex-shrink: 0; }
+.cc-cb-booking-detail .cc-cb-detail-provider,
+.cc-cb-booking-detail .cc-cb-modern-event-card,
+.cc-cb-booking-detail .cc-cb-modern-addon-card,
+.cc-cb-booking-detail .cc-cb-modern-payment-card,
+.cc-cb-booking-detail .cc-cb-modern-package-description {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 15px;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(17, 24, 39, 0.02);
+}
+.cc-cb-booking-detail .cc-cb-detail-provider { margin-bottom: 15px; }
+.cc-cb-booking-detail .cc-cb-detail-provider strong { font-size: 15px; font-weight: 750; }
+.cc-cb-booking-detail .cc-cb-detail-provider small { font-size: 13px; }
+.cc-cb-booking-detail .cc-snapshot { margin-top: 0; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(17, 24, 39, 0.02); }
+.cc-cb-booking-detail .cc-snapshot h3 { font-size: 18px; margin: 0; }
+.cc-cb-booking-detail .cc-snapshot h4 { font-size: 16px; margin: 0; }
+.cc-cb-booking-detail .cc-cb-modern-package-description { margin-bottom: 12px; }
+.cc-cb-booking-detail .cc-cb-modern-package-description p { margin: 0; color: #475569; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.cc-cb-booking-detail .cc-cb-legacy-inclusions { display: grid; gap: 11px; margin: 0 0 14px; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion { margin: 0; padding: 15px; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion h4 { display: flex; align-items: center; gap: 8px; color: #172033; font-size: 15px; font-weight: 700; margin: 0 0 11px; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion h4 svg { color: #f97316; flex-shrink: 0; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion-list { display: flex; flex-direction: column; gap: 8px; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion-item { min-width: 0; display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px; border-radius: 10px; background: #f8fafc; color: #334155; line-height: 1.45; font-size: 14px; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion-item svg { color: #f97316; flex-shrink: 0; margin-top: 2px; }
+.cc-cb-booking-detail .cc-cb-modern-inclusion-item span { min-width: 0; overflow-wrap: anywhere; }
+.cc-cb-booking-detail .cc-cb-modern-empty { border: 1px dashed #e5e7eb; background: #fff; border-radius: 12px; padding: 15px; }
+.cc-cb-booking-detail .cc-cb-modern-addon-card { padding: 15px; }
+.cc-cb-booking-detail .cc-cb-modern-event-card, .cc-cb-booking-detail .cc-cb-modern-payment-card { gap: 0 16px; }
+.cc-cb-booking-detail .cc-cb-detail-grid dt { font-size: 12px; font-weight: 500; color: #64748b; }
+.cc-cb-booking-detail .cc-cb-detail-grid dd { font-size: 14px; line-height: 1.5; font-weight: 650; color: #172033; }
+.cc-cb-booking-detail .cc-cb-detail-footnote { font-size: 12px; line-height: 1.55; }
+.cc-cb-booking-detail .cc-cb-special-request { margin-top: 14px; border-radius: 14px; background: #fff; border-color: #e5e7eb; }
+@media (max-width: 440px) {
+  .cc-cb-booking-detail { padding: 15px; }
+  .cc-cb-booking-detail > h3 { font-size: 16px; }
+  .cc-cb-booking-detail .cc-cb-detail-provider, .cc-cb-booking-detail .cc-cb-modern-event-card,
+  .cc-cb-booking-detail .cc-cb-modern-addon-card, .cc-cb-booking-detail .cc-cb-modern-payment-card { padding: 13px; }
+}

@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { Receipt } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 
 type PaymentSnapshot = {
@@ -14,8 +15,8 @@ type PaymentSnapshot = {
 };
 
 // Presentation only: no checkout, persistence, or payment-state decisions.
-export default function BookingPaymentSummary({ booking, methodLabel }: {
-  booking: PaymentSnapshot; methodLabel: string;
+export default function BookingPaymentSummary({ booking, methodLabel, title = 'Payment Summary' }: {
+  booking: PaymentSnapshot; methodLabel: string; title?: string;
 }) {
   const money = (value: number) => Number(value).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
   const date = (value: string | null) => value ? new Date(value).toLocaleString('en-PH', {
@@ -34,9 +35,9 @@ export default function BookingPaymentSummary({ booking, methodLabel }: {
   rows.push(['Submitted', date(booking.payment_submitted_at)], ['Verified', date(booking.payment_verified_at)],
     ['Payment deadline', date(booking.downpayment_deadline)]);
   return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.title}>Payment Summary</Text>
-    {rows.map(([label, value]) => <View key={label} style={styles.row}>
-      <Text style={styles.label}>{label}</Text><Text selectable style={styles.value}>{value}</Text>
+    {title === 'Pricing Summary' ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}><Receipt size={18} color={Colors.orange} /><Text accessibilityRole="header" style={[styles.title, { marginBottom: 0, flex: 1, fontWeight: '700' }]}>{title}</Text></View> : <Text accessibilityRole="header" style={styles.title}>{title}</Text>}
+    {rows.map(([label, value], index) => <View key={label} style={[styles.row, title === 'Pricing Summary' && index === 0 && styles.totalRow]}>
+      <Text style={[styles.label, title === 'Pricing Summary' && index === 0 && styles.totalLabel]}>{label}</Text><Text selectable style={[styles.value, title === 'Pricing Summary' && index === 0 && styles.totalValue]}>{value}</Text>
     </View>)}
     <Text style={styles.note}>Balance uses the recorded verified downpayment only. Additional or offline payments are not included.</Text>
   </View>;
@@ -49,4 +50,7 @@ const styles = StyleSheet.create({
   label: { flex: 1, fontSize: 14, lineHeight: 21, color: Colors.textSecondary },
   value: { flex: 1.2, fontSize: 14, lineHeight: 21, fontWeight: '600', color: Colors.textPrimary, textAlign: 'right' },
   note: { fontSize: 12, lineHeight: 18, color: Colors.textSecondary, marginTop: 10 },
+  totalRow: { backgroundColor: Colors.orangeLight, padding: 12, borderRadius: 10, borderBottomWidth: 0 },
+  totalLabel: { color: Colors.black, fontWeight: '700' },
+  totalValue: { color: Colors.black, fontSize: 18, lineHeight: 24, fontWeight: '800' },
 });

@@ -1,3 +1,5 @@
+import BookingPackageSnapshotCard from '../../components/BookingPackageSnapshotCard';
+import type { PackageSelectionSnapshot } from '../../lib/buildYourOwn';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -54,6 +56,7 @@ type CateringPackage = {
   included_items?: unknown;
 };
 type Booking = {
+  package_selection_snapshot?: PackageSelectionSnapshot | null;
   id: string;
   customer_id: string;
   status: string;
@@ -1929,7 +1932,7 @@ export default function CustomerBookings() {
                 <XCircle size={23} />
               </button>
             </header>
-            <div className="cc-cb-detail-content">
+            <div className="cc-cb-detail-content cc-cb-booking-detail">
               <span className={`cc-cb-status cc-cb-status-${selected.status}`}>
                 {bookingStatusLabel(selected.status)}
               </span>
@@ -1974,84 +1977,59 @@ export default function CustomerBookings() {
                 </div>
               </div>
 
-              <h3>
-                <Package size={17} /> Package & Inclusions
-              </h3>
-              <div className="cc-cb-detail-section">
-                <div className="cc-cb-package-heading">
-                  <span className="cc-cb-package-tier">
-                    {label(selectedPackage?.tier)}
-                  </span>
-                  <strong>{selectedPackage?.name ?? "Custom booking"}</strong>
-                  {selectedPackage?.description && (
-                    <p>{selectedPackage.description}</p>
+              <BookingPackageSnapshotCard
+                snapshot={selected.package_selection_snapshot}
+                tier={selectedPackage?.tier}
+                packageName={selectedPackage?.name ?? 'Custom booking'}
+              />
+              {!selected.package_selection_snapshot && selectedPackage?.description && (
+                <div className="cc-cb-modern-package-description">
+                  <p>{selectedPackage.description}</p>
+                </div>
+              )}
+              {!selected.package_selection_snapshot && (
+                <div className="cc-cb-legacy-inclusions">
+                  {([
+                    ['Food Inclusions', selectedPackage?.food_inclusions],
+                    ['Included Services', selectedPackage?.includes ?? selectedPackage?.inclusions],
+                    ['Package Menu', selectedPackage?.menu ?? selectedPackage?.menu_items],
+                    ['Other Inclusions', selectedPackage?.included_items],
+                  ] as [string, unknown][]).map(([heading, source]) => {
+                    const entries = describeIncluded(source);
+                    return entries.length > 0 ? (
+                      <section className="cc-cb-modern-inclusion" key={heading}>
+                        <h4><ListChecks size={16} aria-hidden /> {heading}</h4>
+                        <div className="cc-cb-modern-inclusion-list">
+                          {entries.map((entry, index) => (
+                            <div className="cc-cb-modern-inclusion-item" key={`${heading}-${index}`}>
+                              <CheckCircle2 size={16} aria-hidden />
+                              <span>{entry}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null;
+                  })}
+                  {!([
+                    selectedPackage?.food_inclusions,
+                    selectedPackage?.includes ?? selectedPackage?.inclusions,
+                    selectedPackage?.menu ?? selectedPackage?.menu_items,
+                    selectedPackage?.included_items,
+                  ] as unknown[]).some(value => describeIncluded(value).length > 0) && (
+                    <p className="cc-cb-muted cc-cb-modern-empty">Detailed package inclusions are not recorded for this package.</p>
                   )}
                 </div>
-                {(
-                  [
-                    ["Food Inclusions", selectedPackage?.food_inclusions],
-                    [
-                      "Included Services",
-                      selectedPackage?.includes ?? selectedPackage?.inclusions,
-                    ],
-                    [
-                      "Package Menu",
-                      selectedPackage?.menu ?? selectedPackage?.menu_items,
-                    ],
-                    ["Other Inclusions", selectedPackage?.included_items],
-                  ] as [string, unknown][]
-                ).map(([heading, source]) => {
-                  const entries = describeIncluded(source);
-                  return entries.length ? (
-                    <div key={heading} className="cc-cb-inclusion-block">
-                      <h4>
-                        <ListChecks size={15} /> {heading}
-                      </h4>
-                      <ul>
-                        {entries.map((entry, i) => (
-                          <li key={`${heading}-${i}`}>{entry}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null;
-                })}
-                {!selectedPackage?.food_inclusions &&
-                  !selectedPackage?.includes &&
-                  !selectedPackage?.inclusions &&
-                  !selectedPackage?.menu &&
-                  !selectedPackage?.menu_items &&
-                  !selectedPackage?.included_items && (
-                    <p className="cc-cb-muted">
-                      Detailed package inclusions are not recorded for this
-                      package.
-                    </p>
-                  )}
-              </div>
+              )}
 
               <h3>
-                <CalendarDays size={17} /> Event Information
+                <CalendarDays size={17} /> Event Details
               </h3>
-              <dl className="cc-cb-detail-grid">
-                <div>
-                  <dt>Event Type</dt>
-                  <dd>{selected.event_type || "Not specified"}</dd>
-                </div>
-                <div>
-                  <dt>Event Date</dt>
-                  <dd>{date(selected.event_date)}</dd>
-                </div>
-                <div>
-                  <dt>Event Time</dt>
-                  <dd>{selected.event_time || "Not specified"}</dd>
-                </div>
-                <div>
-                  <dt>Guests</dt>
-                  <dd>{selected.guest_count ?? "—"}</dd>
-                </div>
-                <div className="cc-cb-detail-span">
-                  <dt>Venue</dt>
-                  <dd>{selected.venue || "Not specified"}</dd>
-                </div>
+              <dl className="cc-cb-detail-grid cc-cb-modern-event-card">
+                <div><dt>Event Type</dt><dd>{selected.event_type || 'Not specified'}</dd></div>
+                <div><dt>Event Date</dt><dd>{date(selected.event_date)}</dd></div>
+                <div><dt>Event Time</dt><dd>{selected.event_time || 'Not specified'}</dd></div>
+                <div><dt>Guests</dt><dd>{selected.guest_count ?? '—'}</dd></div>
+                <div className="cc-cb-detail-span"><dt>Venue</dt><dd>{selected.venue || 'Not specified'}</dd></div>
               </dl>
               {selected.special_requests && (
                 <div className="cc-cb-detail-section cc-cb-special-request">
@@ -2061,28 +2039,27 @@ export default function CustomerBookings() {
               )}
 
               <h3>
-                <UtensilsCrossed size={17} /> Selected Menu & Customizations
+                <UtensilsCrossed size={17} /> Paid Add-ons &amp; Customizations
               </h3>
-              <div className="cc-cb-detail-section">
+              <section className="cc-cb-modern-addon-card">
                 {describeIncluded(selected.customized_items).length ? (
-                  <ul className="cc-cb-addon-list">
-                    {describeIncluded(selected.customized_items).map(
-                      (entry, i) => (
-                        <li key={i}>{entry}</li>
-                      ),
-                    )}
-                  </ul>
+                  <div className="cc-cb-modern-inclusion-list">
+                    {describeIncluded(selected.customized_items).map((entry, index) => (
+                      <div className="cc-cb-modern-inclusion-item" key={`${entry}-${index}`}>
+                        <CheckCircle2 size={16} aria-hidden />
+                        <span>{entry}</span>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <p className="cc-cb-muted">
-                    No additional menu customizations were recorded.
-                  </p>
+                  <p className="cc-cb-muted">No additional menu customizations were recorded.</p>
                 )}
-              </div>
+              </section>
 
               <h3>
                 <CreditCard size={17} /> Payment Summary
               </h3>
-              <dl className="cc-cb-detail-grid">
+              <dl className="cc-cb-detail-grid cc-cb-modern-payment-card">
                 <div>
                   <dt>Booking Total</dt>
                   <dd>{peso(selected.total_cost)}</dd>

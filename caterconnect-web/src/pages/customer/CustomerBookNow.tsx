@@ -44,6 +44,9 @@ import CustomerVenueMapPicker from "./CustomerVenueMapPicker";
 import "./CustomerBookNow.css";
 import "./CustomerBookingCustomization.css";
 
+import { BuffetDishPicker, BuffetSelectionReview, BookingDetailRows, IncludedServices, PackageOverview } from '../../components/BuffetChoices';
+import { buffetSelectionInput, validateBuffetSelections, menuCategoryKeys, menuCategoryLabel, type BuffetSelections } from '../../lib/buildYourOwn';
+import { BUFFET_BOOKING_PENDING, getBuffetCapabilities, requireBuffetBackend } from '../../lib/buildYourOwnBackend';
 const EVENTS = [
   "Wedding",
   "Birthday",
@@ -91,6 +94,8 @@ export default function CustomerBookNow() {
   const [venue, setVenue] = useState("");
   const [venueMapOpen, setVenueMapOpen] = useState(false);
   const [requests, setRequests] = useState("");
+  const [buffetBookingEnabled, setBuffetBookingEnabled] = useState(false);
+  const [buffetSelections, setBuffetSelections] = useState<BuffetSelections>({});
   const [customItems, setCustomItems] = useState<CustomSelection[]>([]);
 
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
@@ -115,7 +120,11 @@ export default function CustomerBookNow() {
         throw new Error("This caterer is not available for booking.");
       if (version !== loadVersion.current) return;
       setData(response);
+      const capabilities = await getBuffetCapabilities();
+      if (version !== loadVersion.current) return;
+      setBuffetBookingEnabled(capabilities.booking_enabled);
       setCustomItems([]);
+      setBuffetSelections({});
       const requested = params.get("packageId");
       const preferred = response.packages.find((p) => p.id === requested);
       setSelectedId(preferred?.id ?? "");
@@ -165,6 +174,15 @@ export default function CustomerBookNow() {
     () => data?.packages.find((p) => p.id === selectedId) ?? null,
     [data, selectedId],
   );
+  const isBuildYourOwn = !!selected?.build_your_own_config;
+  const isBuffetStep = isBuildYourOwn && step === 2;
+  const contentStep = isBuildYourOwn && step >= 3 ? step - 1 : step;
+  const bookingSteps = isBuildYourOwn ? ['Package', 'Event Details', 'Included Dishes', 'Add-ons', 'Review'] : steps;
+  const updateBuffetSelections = (next: BuffetSelections) => {
+    setBuffetSelections(next);
+    const includedIds = new Set(Object.values(next).flat());
+    setCustomItems(previous => previous.filter(item => !includedIds.has(item.id)));
+  };
   const guestNumber = /^\d+$/.test(guests) ? Number(guests) : 0;
   // Give immediate guest-count feedback without changing booking/pricing rules.
   const guestCountError = useMemo(() => {
@@ -258,11 +276,17 @@ export default function CustomerBookNow() {
       return;
     }
     if (step === 1) { setStep(2); return; }
-    if (step === 2 && !addOnsValid) {
+    if (isBuffetStep && selected?.build_your_own_config) {
+      const buffetError = validateBuffetSelections(selected.build_your_own_config, buffetSelections);
+      if (buffetError) { setValidationError(buffetError); return; }
+      setStep(3);
+      return;
+    }
+    if (contentStep === 2 && !addOnsValid) {
       setValidationError("One or more selected menu items are no longer available.");
       return;
     }
-    setStep(3);
+    setStep(isBuildYourOwn ? 4 : 3);
   };
 
   const submit = async () => {
@@ -294,11 +318,16 @@ export default function CustomerBookNow() {
       if (authError || auth.user?.id !== userId)
         throw new Error("Your session changed. Please sign in again.");
       await requirePublishedPackage(selected.id, data.caterer.id);
+      if (selected.build_your_own_config) {
+        await requireBuffetBackend(true);
+        const buffetError = validateBuffetSelections(selected.build_your_own_config, buffetSelections);
+        if (buffetError) throw new Error(buffetError);
+      }
       // Fresh server values prevent a stale package price or limits from being submitted.
       const { data: packageRow, error: packageError } = await supabase
         .from("packages")
         .select(
-          "id,price,min_guests,guest_capacity,max_guests,publication_status",
+          "*",
         )
         .eq("id", selected.id)
         .eq("caterer_id", data.caterer.id)
@@ -310,6 +339,8 @@ export default function CustomerBookNow() {
           "This package is no longer published. Refresh and choose another package.",
         );
       packageGuestBounds(packageRow);
+      if (JSON.stringify(packageRow.build_your_own_config ?? null) !== JSON.stringify(selected.build_your_own_config ?? null))
+        throw new Error('The included buffet choices changed. Refresh and choose your dishes again.');
       const { data: catererRow, error: catererError } = await supabase
         .from("caterers")
         .select("id,downpayment_percent,verification_status")
@@ -366,6 +397,7 @@ export default function CustomerBookNow() {
       const { data: created, error: insertError } = await supabase
         .from("bookings")
         .insert({
+          ...(selected.build_your_own_config ? { package_selection_snapshot: buffetSelectionInput(selected.build_your_own_config, buffetSelections) } : {}),
           customer_id: userId,
           caterer_id: data.caterer.id,
           package_id: selected.id,
@@ -469,7 +501,7 @@ export default function CustomerBookNow() {
         ) : (
           <>
             <div className="cc-book-steps">
-              {steps.map((name, i) => (
+              {bookingSteps.map((name, i) => (
                 <div
                   key={name}
                   className={i === step ? "active" : i < step ? "done" : ""}
@@ -497,12 +529,16 @@ export default function CustomerBookNow() {
                             key={pkg.id}
                             className={`cc-book-package ${selectedId === pkg.id ? "selected" : ""}`}
                             onClick={() => {
-                              setSelectedId(pkg.id);
+                              if (selectedId !== pkg.id) {
+                                if (selected?.build_your_own_config || pkg.build_your_own_config) setCustomItems([]);
+                                setBuffetSelections({});
+                                setSelectedId(pkg.id);
+                              }
                               setValidationError("");
                             }}
                           >
                             <span>
-                              <strong>{pkg.name}</strong>
+                              <strong>{pkg.name}</strong><small>{pkg.build_your_own_config ? 'Build Your Own Package' : 'Standard Package'}</small>
                               <small>
                                 {pkg.tier} · {pkg.min_guests ?? 1}–
                                 {pkg.max_guests} guests · Includes{" "}
@@ -647,9 +683,10 @@ export default function CustomerBookNow() {
                     </p>
                   </section>
                 )}
-                {step === 2 && (
+                {isBuffetStep && selected?.build_your_own_config && <BuffetDishPicker config={selected.build_your_own_config} selections={buffetSelections} menu={data.menu} onChange={updateBuffetSelections} />}
+                {contentStep === 2 && !isBuffetStep && (
                   <section className="cc-book-card cc-book-customize">
-                    <h2>Customize Your Menu</h2>
+                    <h2>{isBuildYourOwn ? 'Optional Paid Add-ons' : 'Customize Your Menu'}</h2>
                     <p>Optionally add dishes or drinks to your selected package. Each quantity is charged per guest.</p>
                     {data.menuWarning && <p role="alert" className="cc-book-error-banner">Menu could not be loaded. Refresh this page before choosing add-ons.</p>}
                     {!data.menuWarning && data.menu.length === 0 && <p>No additional menu items are currently offered by this caterer. You can continue without add-ons.</p>}
@@ -659,8 +696,10 @@ export default function CustomerBookNow() {
                         <strong>+{peso(pricing.quote.addOnTotal)}</strong>
                       </div>
                     )}
-                    {MENU_CATEGORIES.map(({ key, label, Icon }) => {
-                      const items = data.menu.filter(item => item.category === key);
+                    {menuCategoryKeys(data.menu).map(key => {
+                      const label = menuCategoryLabel(key);
+                      const Icon = MENU_CATEGORIES.find(category => category.key === key)?.Icon ?? UtensilsCrossed;
+                      const items = data.menu.filter(item => item.category === key && !Object.values(buffetSelections).some(ids => ids.includes(item.id)));
                       if (!items.length) return null;
                       return (
                         <div className="cc-book-menu-category" key={key}>
@@ -690,8 +729,8 @@ export default function CustomerBookNow() {
                     })}
                   </section>
                 )}
-                {step === 3 && selected && (
-                  <section className="cc-book-card cc-book-review-screen">
+                {contentStep === 3 && selected && (
+                  <section className={`cc-book-card cc-book-review-screen${isBuildYourOwn ? ' cc-byo-review' : ''}`}>
                     <h2>Review &amp; Confirm</h2>
                     <p>Please review your booking details before submitting.</p>
 
@@ -711,30 +750,39 @@ export default function CustomerBookNow() {
                     </section>
 
                     <section className="cc-book-review-section" aria-label="Package and inclusions">
-                      <h3><PackageIcon size={18} /> Package &amp; Inclusions</h3>
+                      <h3><PackageIcon size={18} /> {isBuildYourOwn ? 'Package Overview' : 'Package & Inclusions'}</h3>
                       <div className="cc-book-review-panel">
-                        <span className="cc-book-review-tier">{selected.tier}</span>
-                        <h4>{selected.name}</h4>
+                        {isBuildYourOwn ? <PackageOverview name={selected.name} tier={selected.tier} showHeading={false} /> : <>
+                          <span className="cc-book-review-tier">{selected.tier}</span>
+                          <h4>{selected.name}</h4><p>Standard Package</p>
+                        </>}
+                        <BuffetSelectionReview config={selected.build_your_own_config} selections={buffetSelections} menu={data.menu} />
                         {selected.description && <p>{selected.description}</p>}
-                        {selected.food_inclusions && selected.food_inclusions.length > 0 && (
+                        {!selected.build_your_own_config && selected.food_inclusions && selected.food_inclusions.length > 0 && (
                           <div className="cc-book-review-inclusions">
                             <b>FOOD INCLUSIONS</b>
                             {selected.food_inclusions.map((item, index) => <span key={index}><UtensilsCrossed size={14} /> {item}</span>)}
                           </div>
                         )}
-                        {selected.includes && selected.includes.length > 0 && (
+                        {selected.includes && selected.includes.length > 0 && (isBuildYourOwn ? <IncludedServices items={selected.includes} /> : (
                           <div className="cc-book-review-inclusions">
                             <b>PACKAGE INCLUSIONS</b>
                             {selected.includes.map((item, index) => <span key={index}><CheckCircle2 size={14} /> {item}</span>)}
                           </div>
-                        )}
+                        ))}
                       </div>
                     </section>
 
                     <section className="cc-book-review-section" aria-label="Event details">
                       <h3><ClipboardCheck size={18} /> Event Details</h3>
                       <div className="cc-book-review-panel cc-book-review-table">
-                        {[
+                        {isBuildYourOwn ? <><BookingDetailRows rows={[
+                          { label: 'Date', value: eventDate, icon: 'date' },
+                          { label: 'Time', value: eventTime, icon: 'time' },
+                          { label: 'Guests', value: `${guestNumber} guests`, icon: 'guests' },
+                          { label: 'Event Type', value: eventLabel, icon: 'event' },
+                          { label: 'Venue', value: venue, icon: 'venue' },
+                        ]} />{requests.trim() && <div className="cc-byo-request"><strong>Special Requests</strong><p>{requests.trim()}</p></div>}</> : [
                           { label: "Date", value: eventDate },
                           { label: "Time", value: eventTime },
                           { label: "Guests", value: `${guestNumber} guests` },
@@ -764,7 +812,7 @@ export default function CustomerBookNow() {
                     )}
 
                     <section className="cc-book-review-section" aria-label="Cost breakdown">
-                      <h3><CreditCard size={18} /> Cost Breakdown</h3>
+                      <h3><CreditCard size={18} /> {isBuildYourOwn ? 'Pricing Summary' : 'Cost Breakdown'}</h3>
                       <div className="cc-book-review-panel cc-book-review-table">
                         <div className="cc-book-review-row"><span>Fixed package price</span><strong>{peso(pricing.quote?.fixedPrice ?? 0)}</strong></div>
                         {(pricing.quote?.extraGuests ?? 0) > 0 && (
@@ -790,6 +838,7 @@ export default function CustomerBookNow() {
                     {validationError}
                   </div>
                 )}
+                {isBuildYourOwn && !buffetBookingEnabled && <p role="status" className="cc-book-hint">{BUFFET_BOOKING_PENDING}</p>}
                 <div className="cc-book-navigation">
                   {step > 0 && (
                     <button
@@ -808,13 +857,13 @@ export default function CustomerBookNow() {
                     type="button"
                     className="cc-book-primary-button"
                     disabled={
-                      submitting || (step === 0 && data.packages.length === 0)
+                      submitting || (step === 0 && data.packages.length === 0) || (contentStep === 3 && isBuildYourOwn && !buffetBookingEnabled)
                     }
-                    onClick={step === 3 ? () => void submit() : advance}
+                    onClick={contentStep === 3 ? () => void submit() : advance}
                   >
                     {submitting
                       ? "Submitting..."
-                      : step === 3
+                      : contentStep === 3
                         ? "Submit Booking Request"
                         : "Continue"}{" "}
                     {submitting ? (

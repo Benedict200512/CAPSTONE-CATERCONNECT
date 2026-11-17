@@ -1,3 +1,6 @@
+import { BuffetDishPicker, BuffetSelectionReview, BookingDetailRows, IncludedServices, PackageOverview } from '../../../components/BuffetChoices';
+import { buffetSelectionInput, validateBuffetSelections, menuCategoryKeys, menuCategoryLabel, type BuffetConfig, type BuffetSelections } from '../../../lib/buildYourOwn';
+import { BUFFET_BOOKING_PENDING, getBuffetCapabilities, requireBuffetBackend } from '../../../lib/buildYourOwnBackend';
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   ActivityIndicator, Alert, Image, Platform,
@@ -49,6 +52,7 @@ import {
 const { width, height } = Dimensions.get('window');
 
 type Package = {
+  build_your_own_config?: BuffetConfig | null;
   publication_status: PackagePublicationStatus;
   id: string; name: string; tier: string; description: string | null;
   price: number; min_guests: number | null; guest_capacity: number; max_guests: number; image_url: string | null;
@@ -88,10 +92,13 @@ const CATEGORY_CONFIG: Record<string, { icon: any; color: string }> = {
   drink:       { icon: Wine,      color: '#3B82F6' },
 };
 
-const categoryOrder = ['main_course', 'appetizer', 'dessert', 'drink'];
+function menuCategoryConfig(category: string) {
+  return Object.prototype.hasOwnProperty.call(CATEGORY_CONFIG, category)
+    ? CATEGORY_CONFIG[category] : { icon: UtensilsCrossed, color: Colors.orange };
+}
 
-function StepBar({ step }: { step: number }) {
-  const steps = ['Package', 'Details', 'Customize', 'Review'];
+function StepBar({ step, buildYourOwn }: { step: number; buildYourOwn: boolean }) {
+  const steps = buildYourOwn ? ['Package', 'Details', 'Dishes', 'Add-ons', 'Review'] : ['Package', 'Details', 'Customize', 'Review'];
   return (
     <View style={sb.wrap}>
       {steps.map((label, i) => {
@@ -194,12 +201,14 @@ export default function BookingWizard() {
     longitude: 123.7547,
   });
 
+  const [buffetBookingEnabled, setBuffetBookingEnabled] = useState(false);
+  const [buffetSelections, setBuffetSelections] = useState<BuffetSelections>({});
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const [catererRes, packagesRes, menuRes] = await Promise.all([
+      const [catererRes, packagesRes, menuRes, capabilities] = await Promise.all([
         supabase.from('caterers')
           .select('id, business_name, business_description, logo_url, cover_photo_url, city, contact_phone, downpayment_percent')
           .eq('id', catererId)
@@ -213,9 +222,11 @@ export default function BookingWizard() {
           .select('*')
           .eq('caterer_id', catererId)
           .order('category'),
+        getBuffetCapabilities(),
       ]);
 
       if (!active) return;
+      setBuffetBookingEnabled(capabilities.booking_enabled);
       if (catererRes.data) setCaterer(catererRes.data);
       if (packagesRes.data) setPackages(packagesRes.data as any);
       if (menuRes.data) setMenuItems(menuRes.data);
@@ -235,6 +246,20 @@ export default function BookingWizard() {
     }
   }, [packages, preSelectedPackageId]);
 
+  const isBuildYourOwn = !!selectedPkg?.build_your_own_config;
+  const isBuffetStep = isBuildYourOwn && step === 2;
+  const contentStep = isBuildYourOwn && step >= 3 ? step - 1 : step;
+  const selectPackage = (pkg: Package) => {
+    if (selectedPkg?.id === pkg.id) return;
+    if (selectedPkg?.build_your_own_config || pkg.build_your_own_config) setCustomItems([]);
+    setSelectedPkg(pkg);
+    setBuffetSelections({});
+  };
+  const updateBuffetSelections = (next: BuffetSelections) => {
+    setBuffetSelections(next);
+    const includedIds = new Set(Object.values(next).flat());
+    setCustomItems(previous => previous.filter(item => !includedIds.has(item.menuItem.id)));
+  };
   const guests = /^\d+$/.test(guestCount) ? Number(guestCount) : 0;
   const pricing = useMemo(() => {
     if (!selectedPkg || !caterer) return { quote: null, error: null };
@@ -273,6 +298,10 @@ export default function BookingWizard() {
   const formattedTimeString = eventTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const validateStep = (): boolean => {
+    if (step === 2 && selectedPkg?.build_your_own_config) {
+      const error = validateBuffetSelections(selectedPkg.build_your_own_config, buffetSelections);
+      if (error) { Alert.alert('Included Buffet Choices', error); return false; }
+    }
     if (step === 0 && !selectedPkg) {
       Alert.alert('Select a Package', 'Please choose a catering package to continue.'); return false;
     }
@@ -402,6 +431,16 @@ export default function BookingWizard() {
     setSubmitting(true);
     try {
       await requirePublishedPackage(selectedPkg.id, caterer.id);
+      if (selectedPkg.build_your_own_config) {
+        await requireBuffetBackend(true);
+        const error = validateBuffetSelections(selectedPkg.build_your_own_config, buffetSelections);
+        if (error) throw new Error(error);
+      }
+      const { data: latestPackage, error: packageError } = await supabase.from('packages').select('*')
+        .eq('id', selectedPkg.id).eq('caterer_id', caterer.id).eq('publication_status', 'published').single();
+      if (packageError) throw packageError;
+      if (JSON.stringify(latestPackage.build_your_own_config ?? null) !== JSON.stringify(selectedPkg.build_your_own_config ?? null))
+        throw new Error('The included buffet choices changed. Reopen the booking wizard and choose your dishes again.');
       if (formattedDateString < manilaToday()) throw new Error('Choose today or a future event date.');
       let normalizedDates: string[];
       try { normalizedDates = await fetchUnavailableDates(caterer.id); }
@@ -423,6 +462,7 @@ export default function BookingWizard() {
 
       const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
       const { data: booking, error } = await supabase.from('bookings').insert({
+        ...(selectedPkg.build_your_own_config ? { package_selection_snapshot: buffetSelectionInput(selectedPkg.build_your_own_config, buffetSelections) } : {}),
         customer_id: session.user.id,
         caterer_id: caterer.id,
         package_id: selectedPkg.id,
@@ -528,7 +568,7 @@ export default function BookingWizard() {
         <View style={{ width: 36 }} />
       </View>
 
-      <StepBar step={step} />
+      <StepBar step={step} buildYourOwn={isBuildYourOwn} />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingBottom: 140 }}>
 
@@ -555,7 +595,7 @@ export default function BookingWizard() {
                   <TouchableOpacity
                     key={pkg.id}
                     style={[styles.pkgCard, isSelected && styles.pkgCardSelected]}
-                    onPress={() => setSelectedPkg(pkg)}
+                    onPress={() => selectPackage(pkg)}
                     activeOpacity={0.85}
                   >
                     {pkg.image_url ? (
@@ -580,7 +620,7 @@ export default function BookingWizard() {
                         )}
                       </View>
 
-                      <Text style={styles.pkgName}>{pkg.name}</Text>
+                      <Text style={styles.pkgName}>{pkg.name}</Text><Text style={styles.stepSub}>{pkg.build_your_own_config ? 'Build Your Own Package' : 'Standard Package'}</Text>
                       {pkg.description && (
                         <Text style={styles.pkgDesc}>{pkg.description}</Text>
                       )}
@@ -622,7 +662,7 @@ export default function BookingWizard() {
 
                       <TouchableOpacity
                         style={[styles.selectPkgBtn, isSelected && styles.selectPkgBtnSelected]}
-                        onPress={() => setSelectedPkg(pkg)}
+                        onPress={() => selectPackage(pkg)}
                       >
                         {isSelected && (
                           <Check size={14} color={Colors.white} strokeWidth={3} />
@@ -839,9 +879,10 @@ export default function BookingWizard() {
           </View>
         )}
 
-        {step === 2 && (
+        {isBuffetStep && selectedPkg?.build_your_own_config && <View style={styles.stepPad}><BuffetDishPicker config={selectedPkg.build_your_own_config} selections={buffetSelections} menu={menuItems} onChange={updateBuffetSelections} /></View>}
+        {contentStep === 2 && !isBuffetStep && (
           <View style={styles.stepPad}>
-            <Text style={styles.stepHeading}>Customize Your Menu</Text>
+            <Text style={styles.stepHeading}>{isBuildYourOwn ? 'Optional Paid Add-ons' : 'Customize Your Menu'}</Text>
             <Text style={styles.stepSub}>Add extra dishes to your package (optional)</Text>
 
             {menuItems.length === 0 ? (
@@ -861,22 +902,22 @@ export default function BookingWizard() {
                   </View>
                 )}
 
-                {categoryOrder.map(cat => {
-                  const items = menuItems.filter(m => m.category === cat);
+                {menuCategoryKeys(menuItems).map(cat => {
+                  const items = menuItems.filter(m => m.category === cat && !Object.values(buffetSelections).some(ids => ids.includes(m.id)));
                   if (items.length === 0) return null;
-                  const catCfg = CATEGORY_CONFIG[cat];
+                  const catCfg = menuCategoryConfig(cat);
                   const CatIcon = catCfg.icon;
                   return (
                     <View key={cat}>
                       <View style={styles.catHeader}>
                         <CatIcon size={18} color={catCfg.color} />
                         <Text style={styles.catLabel}>
-                          {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {menuCategoryLabel(cat)}
                         </Text>
                       </View>
                       {items.map(item => {
                         const qty = getQty(item.id);
-                        const itemCfg = CATEGORY_CONFIG[item.category] ?? CATEGORY_CONFIG.main_course;
+                        const itemCfg = menuCategoryConfig(item.category);
                         const ItemIcon = itemCfg.icon;
                         return (
                           <View key={item.id} style={styles.menuItemCard}>
@@ -930,7 +971,7 @@ export default function BookingWizard() {
           </View>
         )}
 
-        {step === 3 && selectedPkg && (
+        {contentStep === 3 && selectedPkg && (
           <View style={styles.stepPad}>
             <Text style={styles.stepHeading}>Review & Confirm</Text>
             <Text style={styles.stepSub}>Please review your booking details before submitting</Text>
@@ -961,19 +1002,22 @@ export default function BookingWizard() {
             <View style={styles.reviewSection}>
               <View style={styles.reviewSectionTitleRow}>
                 <PackageIcon size={16} color={Colors.black} />
-                <Text style={styles.reviewSectionTitle}>Package & Inclusions</Text>
+                <Text style={styles.reviewSectionTitle}>{isBuildYourOwn ? 'Package Overview' : 'Package & Inclusions'}</Text>
               </View>
-              <View style={styles.reviewCard}>
-                <View style={[styles.tierBadge, { backgroundColor: TIER_CONFIG[selectedPkg.tier]?.bg, marginBottom: 8 }]}>
+              <View style={[styles.reviewCard, isBuildYourOwn && { gap: 14, minWidth: 0 }]}>
+                {isBuildYourOwn ? <PackageOverview name={selectedPkg.name} tier={selectedPkg.tier} showHeading={false} /> : <><View style={[styles.tierBadge, { backgroundColor: TIER_CONFIG[selectedPkg.tier]?.bg, marginBottom: 8 }]}>
                   <Medal size={13} color={TIER_CONFIG[selectedPkg.tier]?.color} />
                   <Text style={[styles.tierBadgeText, { color: TIER_CONFIG[selectedPkg.tier]?.color }]}>
                     {TIER_CONFIG[selectedPkg.tier]?.label}
                   </Text>
                 </View>
                 <Text style={styles.reviewPkgName}>{selectedPkg.name}</Text>
+                </>}
                 {selectedPkg.description && <Text style={styles.reviewPkgDesc}>{selectedPkg.description}</Text>}
 
-                {selectedPkg.food_inclusions && selectedPkg.food_inclusions.length > 0 && (
+                {!isBuildYourOwn && <Text style={styles.stepSub}>Standard Package</Text>}
+                <BuffetSelectionReview config={selectedPkg.build_your_own_config} selections={buffetSelections} menu={menuItems} />
+                {!selectedPkg.build_your_own_config && selectedPkg.food_inclusions && selectedPkg.food_inclusions.length > 0 && (
                   <View style={[styles.includesWrap, { marginTop: 12, marginBottom: selectedPkg.includes && selectedPkg.includes.length > 0 ? 12 : 0 }]}>
                     <Text style={styles.includesLabel}>FOOD INCLUSIONS</Text>
                     {selectedPkg.food_inclusions.map((food, i) => (
@@ -985,7 +1029,7 @@ export default function BookingWizard() {
                   </View>
                 )}
 
-                {selectedPkg.includes && selectedPkg.includes.length > 0 && (
+                {selectedPkg.includes && selectedPkg.includes.length > 0 && (isBuildYourOwn ? <IncludedServices items={selectedPkg.includes} /> : (
                   <View style={[styles.includesWrap, { marginBottom: 0 }]}>
                     <Text style={styles.includesLabel}>PACKAGE INCLUSIONS</Text>
                     {selectedPkg.includes.map((inc, i) => (
@@ -995,7 +1039,7 @@ export default function BookingWizard() {
                       </View>
                     ))}
                   </View>
-                )}
+                ))}
               </View>
             </View>
 
@@ -1005,7 +1049,13 @@ export default function BookingWizard() {
                 <Text style={styles.reviewSectionTitle}>Event Details</Text>
               </View>
               <View style={styles.reviewCard}>
-                {[
+                {isBuildYourOwn ? <><BookingDetailRows rows={[
+                  { label: 'Date', value: formattedDateString, icon: 'date' },
+                  { label: 'Time', value: formattedTimeString, icon: 'time' },
+                  { label: 'Guests', value: `${guests} guests`, icon: 'guests' },
+                  { label: 'Event Type', value: resolvedEventType, icon: 'event' },
+                  { label: 'Venue', value: venue, icon: 'venue' },
+                ]} />{specialReqs ? <View style={{ padding: 12, borderRadius: 10, backgroundColor: Colors.bgInput, marginTop: 12 }}><Text style={{ fontSize: 13, lineHeight: 20, color: Colors.textSecondary }}>Special Requests</Text><Text style={{ fontSize: 14, lineHeight: 21, color: Colors.textSecondary }}>{specialReqs}</Text></View> : null}</> : [
                   { label: 'Date',      value: formattedDateString },
                   { label: 'Time',      value: formattedTimeString },
                   { label: 'Guests',    value: `${guests} guests` },
@@ -1029,7 +1079,7 @@ export default function BookingWizard() {
                 </View>
                 <View style={styles.reviewCard}>
                   {customItems.map(c => {
-                    const itemCfg = CATEGORY_CONFIG[c.menuItem.category] ?? CATEGORY_CONFIG.main_course;
+                    const itemCfg = menuCategoryConfig(c.menuItem.category);
                     const ItemIcon = itemCfg.icon;
                     return (
                       <View key={c.menuItem.id} style={styles.reviewRow}>
@@ -1050,7 +1100,7 @@ export default function BookingWizard() {
             <View style={styles.reviewSection}>
               <View style={styles.reviewSectionTitleRow}>
                 <CreditCard size={16} color={Colors.black} />
-                <Text style={styles.reviewSectionTitle}>Cost Breakdown</Text>
+                <Text style={styles.reviewSectionTitle}>{isBuildYourOwn ? 'Pricing Summary' : 'Cost Breakdown'}</Text>
               </View>
               <View style={styles.reviewCard}>
                 <View style={styles.reviewRow}>
@@ -1147,6 +1197,7 @@ export default function BookingWizard() {
       </View>
       </Modal>
 
+      {isBuildYourOwn && !buffetBookingEnabled && <Text style={[styles.stepSub, { paddingHorizontal: 20 }]}>{BUFFET_BOOKING_PENDING}</Text>}
       <View style={styles.bottomBar}>
         {step > 0 && (
           <TouchableOpacity style={styles.prevBtn} onPress={prevStep}>
@@ -1155,11 +1206,11 @@ export default function BookingWizard() {
           </TouchableOpacity>
         )}
 
-        {step < 3 ? (
+        {contentStep < 3 ? (
           <TouchableOpacity style={[styles.nextBtn, step === 0 && { flex: 1 }]} onPress={nextStep}>
             <Text style={styles.nextBtnText}>
               {step === 0 ? 'Continue to Details' :
-               step === 1 ? 'Continue to Menu' :
+               step === 1 ? 'Continue to Menu' : isBuffetStep ? 'Continue to Add-ons' :
                'Review Booking'}
             </Text>
           </TouchableOpacity>
@@ -1167,7 +1218,7 @@ export default function BookingWizard() {
           <TouchableOpacity
             style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
             onPress={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || (isBuildYourOwn && !buffetBookingEnabled)}
         >
             {submitting ? (
               <ActivityIndicator color={Colors.white} />
